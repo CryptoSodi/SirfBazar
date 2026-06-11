@@ -1,0 +1,623 @@
+// SirfBazar database schema (spec section 28).
+// SQLite in development; switch provider to "postgresql" for production.
+// SQLite has no native enums, so status/role fields are strings constrained
+// by the constants in src/common/constants.ts.
+// All money fields are integers in paisa (100 paisa = 1 PKR).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  fullName        String?
+  phoneNumber     String?   @unique
+  email           String?   @unique
+  passwordHash    String?
+  role            String // CUSTOMER | MERCHANT_OWNER | MERCHANT_STAFF | RIDER | ADMIN | SUPER_ADMIN | SUPPORT_AGENT | FINANCE_ADMIN
+  profileImageUrl String?
+  isPhoneVerified Boolean   @default(false)
+  isEmailVerified Boolean   @default(false)
+  googleId        String?   @unique
+  status          String    @default("ACTIVE") // ACTIVE | SUSPENDED | DELETED
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+
+  customer      Customer?
+  merchant      Merchant?
+  rider         Rider?
+  staffOf       MerchantStaff[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model OtpCode {
+  id          String    @id @default(cuid())
+  phoneNumber String
+  codeHash    String
+  purpose     String    @default("LOGIN")
+  attempts    Int       @default(0)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([phoneNumber, purpose])
+}
+
+model Customer {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  defaultAddressId  String?
+  walletBalancePaisa Int     @default(0)
+  loyaltyPoints     Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses CustomerAddress[]
+  carts     Cart[]
+  orders    Order[]
+  payments  Payment[]
+  refunds   Refund[]
+  reviews   Review[]
+  coupons   CouponUsage[]
+  tickets   SupportTicket[]
+}
+
+model GuestSession {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  deviceId     String?
+  cartId       String?
+  latitude     Float?
+  longitude    Float?
+  city         String?
+  area         String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  carts Cart[]
+}
+
+model CustomerAddress {
+  id           String   @id @default(cuid())
+  customerId   String
+  label        String   @default("Home")
+  fullAddress  String
+  street       String?
+  area         String?
+  city         String
+  province     String?
+  country      String   @default("Pakistan")
+  latitude     Float?
+  longitude    Float?
+  contactName  String?
+  contactPhone String?
+  instructions String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  @@index([customerId])
+}
+
+model Merchant {
+  id                        String   @id @default(cuid())
+  userId                    String   @unique
+  shopName                  String
+  shopType                  String // GROCERY | GENERAL | PHARMACY | FRUITS_VEGETABLES | BAKERY | STATIONERY | MOBILE_ACCESSORIES | ELECTRONICS | PET | HOUSEHOLD | COSMETICS | ORGANIC | OTHER
+  description               String?
+  phoneNumber               String
+  email                     String?
+  address                   String
+  city                      String
+  area                      String?
+  latitude                  Float
+  longitude                 Float
+  serviceRadiusKm           Float    @default(5)
+  logoUrl                   String?
+  bannerUrl                 String?
+  openingTime               String   @default("09:00")
+  closingTime               String   @default("21:00")
+  isOnline                  Boolean  @default(false)
+  isOpen                    Boolean  @default(true)
+  approvalStatus            String   @default("SUBMITTED") // DRAFT | SUBMITTED | UNDER_REVIEW | APPROVED | REJECTED | SUSPENDED | INACTIVE | TEMPORARILY_CLOSED
+  commissionType            String   @default("PERCENTAGE") // PERCENTAGE | FIXED
+  commissionValue           Float    @default(10) // percent, or paisa when FIXED
+  minimumOrderValuePaisa    Int      @default(0)
+  averagePreparationMinutes Int      @default(20)
+  ratingAverage             Float    @default(0)
+  ratingCount               Int      @default(0)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staff      MerchantStaff[]
+  documents  MerchantDocument[]
+  riders     Rider[]
+  products   MerchantProduct[]
+  orders     Order[]
+  reviews    Review[]
+  settlements Settlement[]
+  tickets    SupportTicket[]
+
+  @@index([city, approvalStatus])
+  @@index([latitude, longitude])
+}
+
+model MerchantStaff {
+  id          String   @id @default(cuid())
+  merchantId  String
+  userId      String
+  roleName    String // ORDER_MANAGER | INVENTORY_MANAGER | RIDER_MANAGER | FINANCE_VIEWER | STORE_MANAGER | PROMOTION_MANAGER
+  permissions String   @default("[]") // JSON array of permission keys
+  status      String   @default("ACTIVE") // ACTIVE | DISABLED
+  createdAt   DateTime @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, userId])
+}
+
+model MerchantDocument {
+  id                 String   @id @default(cuid())
+  merchantId         String
+  documentType       String // BUSINESS_REGISTRATION | IDENTITY | BANK_DETAILS | OTHER
+  documentUrl        String
+  verificationStatus String   @default("PENDING") // PENDING | VERIFIED | REJECTED
+  adminNotes         String?
+  createdAt          DateTime @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+}
+
+model Rider {
+  id              String   @id @default(cuid())
+  merchantId      String
+  userId          String   @unique
+  fullName        String
+  phoneNumber     String
+  vehicleType     String   @default("MOTORBIKE") // MOTORBIKE | BICYCLE | CAR | ON_FOOT
+  vehicleNumber   String?
+  profileImageUrl String?
+  latitude        Float?
+  longitude       Float?
+  isOnline        Boolean  @default(false)
+  currentStatus   String   @default("IDLE") // IDLE | ASSIGNED | PICKING_UP | DELIVERING
+  isActive        Boolean  @default(true)
+  approvalStatus  String   @default("APPROVED") // APPROVED | SUSPENDED
+  currentOrderId  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  merchant        Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders          Order[]
+  locationUpdates RiderLocationUpdate[]
+  reviews         Review[]
+
+  @@index([merchantId])
+}
+
+model Category {
+  id               String   @id @default(cuid())
+  parentCategoryId String?
+  name             String
+  slug             String   @unique
+  iconUrl          String?
+  bannerUrl        String?
+  sortOrder        Int      @default(0)
+  isActive         Boolean  @default(true)
+  isRestricted     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  parent   Category?  @relation("CategoryTree", fields: [parentCategoryId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+}
+
+model Product {
+  id                   String   @id @default(cuid())
+  name                 String
+  slug                 String   @unique
+  brand                String?
+  description          String?
+  categoryId           String
+  imageUrl             String?
+  unit                 String   @default("piece") // piece | kg | g | litre | ml | pack | dozen
+  size                 String?
+  barcode              String?
+  isRestricted         Boolean  @default(false)
+  requiresPrescription Boolean  @default(false)
+  approvalStatus       String   @default("APPROVED") // PENDING | APPROVED | REJECTED | DISABLED
+  createdByMerchantId  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  category         Category          @relation(fields: [categoryId], references: [id])
+  merchantProducts MerchantProduct[]
+  reviews          Review[]
+
+  @@index([categoryId, approvalStatus])
+  @@index([name])
+}
+
+model MerchantProduct {
+  id                String   @id @default(cuid())
+  merchantId        String
+  productId         String
+  pricePaisa        Int
+  discountPricePaisa Int?
+  stockQuantity     Int      @default(0)
+  lowStockThreshold Int      @default(5)
+  isAvailable       Boolean  @default(true)
+  merchantSku       String?
+  preparationNotes  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, productId])
+  @@index([productId])
+  @@index([merchantId, isAvailable])
+}
+
+model Cart {
+  id             String   @id @default(cuid())
+  customerId     String?
+  guestSessionId String?
+  status         String   @default("ACTIVE") // ACTIVE | CHECKED_OUT | MERGED | ABANDONED
+  couponCode     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  customer     Customer?     @relation(fields: [customerId], references: [id])
+  guestSession GuestSession? @relation(fields: [guestSessionId], references: [id])
+  items        CartItem[]
+
+  @@index([customerId, status])
+  @@index([guestSessionId, status])
+}
+
+model CartItem {
+  id                String   @id @default(cuid())
+  cartId            String
+  merchantId        String
+  productId         String
+  merchantProductId String
+  quantity          Int
+  unitPricePaisa    Int
+  createdAt         DateTime @default(now())
+
+  cart Cart @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, merchantProductId])
+  @@index([cartId])
+}
+
+model Order {
+  id                        String    @id @default(cuid())
+  parentOrderId             String?
+  isParent                  Boolean   @default(false)
+  orderNumber               String    @unique
+  customerId                String
+  merchantId                String? // null on multi-merchant parent rows
+  riderId                   String?
+  deliveryAddressId         String?
+  status                    String    @default("CREATED")
+  paymentStatus             String    @default("PENDING")
+  paymentMethod             String    @default("COD") // COD | WALLET | CARD | JAZZCASH | EASYPAISA | BANK_TRANSFER
+  subtotalPaisa             Int       @default(0)
+  deliveryFeePaisa          Int       @default(0)
+  serviceFeePaisa           Int       @default(0)
+  smallOrderFeePaisa        Int       @default(0)
+  discountAmountPaisa       Int       @default(0)
+  commissionAmountPaisa     Int       @default(0)
+  totalAmountPaisa          Int       @default(0)
+  merchantEarningPaisa      Int       @default(0)
+  couponCode                String?
+  customerNote              String?
+  merchantNote              String?
+  cancellationReason        String?
+  deliveryOtp               String?
+  estimatedDeliveryMinutes  Int?
+  settlementId              String?
+  createdAt                 DateTime  @default(now())
+  acceptedAt                DateTime?
+  readyForPickupAt          DateTime?
+  riderAssignedAt           DateTime?
+  pickedUpAt                DateTime?
+  deliveredAt               DateTime?
+  cancelledAt               DateTime?
+
+  parent          Order?               @relation("OrderChildren", fields: [parentOrderId], references: [id])
+  children        Order[]              @relation("OrderChildren")
+  customer        Customer             @relation(fields: [customerId], references: [id])
+  merchant        Merchant?            @relation(fields: [merchantId], references: [id])
+  rider           Rider?               @relation(fields: [riderId], references: [id])
+  deliveryAddress CustomerAddress?     @relation(fields: [deliveryAddressId], references: [id])
+  settlement      Settlement?          @relation(fields: [settlementId], references: [id])
+  items           OrderItem[]
+  timeline        OrderTimelineEntry[]
+  payments        Payment[]
+  refunds         Refund[]
+  reviews         Review[]
+  tickets         SupportTicket[]
+  couponUsages    CouponUsage[]
+  locationUpdates RiderLocationUpdate[]
+
+  @@index([customerId, status])
+  @@index([merchantId, status])
+  @@index([riderId, status])
+  @@index([parentOrderId])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id                   String   @id @default(cuid())
+  orderId              String
+  productId            String
+  merchantProductId    String
+  productNameSnapshot  String
+  productImageSnapshot String?
+  unitSnapshot         String?
+  quantity             Int
+  unitPricePaisa       Int
+  totalPricePaisa      Int
+  itemStatus           String   @default("CONFIRMED") // CONFIRMED | UNAVAILABLE | REPLACEMENT_SUGGESTED | REPLACED | REMOVED
+  replacementForItemId String?
+  createdAt            DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model OrderTimelineEntry {
+  id              String   @id @default(cuid())
+  orderId         String
+  status          String
+  changedByUserId String?
+  changedByRole   String?
+  notes           String?
+  latitude        Float?
+  longitude       Float?
+  createdAt       DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model RiderLocationUpdate {
+  id        String   @id @default(cuid())
+  riderId   String
+  orderId   String?
+  latitude  Float
+  longitude Float
+  speed     Float?
+  heading   Float?
+  createdAt DateTime @default(now())
+
+  rider Rider  @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@index([riderId, createdAt])
+}
+
+model Payment {
+  id                    String   @id @default(cuid())
+  orderId               String
+  customerId            String
+  amountPaisa           Int
+  paymentMethod         String
+  paymentProvider       String?
+  providerTransactionId String?
+  status                String   @default("PENDING") // PENDING | PAID | FAILED | CASH_PENDING | CASH_COLLECTED | REFUND_PENDING | REFUNDED | PARTIALLY_REFUNDED
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([orderId])
+}
+
+model Refund {
+  id               String    @id @default(cuid())
+  orderId          String
+  customerId       String
+  amountPaisa      Int
+  reason           String
+  status           String    @default("REQUESTED") // REQUESTED | UNDER_REVIEW | APPROVED | REJECTED | PROCESSING | COMPLETED | FAILED
+  paymentReference String?
+  adminNotes       String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  order    Order    @relation(fields: [orderId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model Coupon {
+  id                    String   @id @default(cuid())
+  code                  String   @unique
+  title                 String
+  description           String?
+  discountType          String // PERCENTAGE | FIXED | FREE_DELIVERY
+  discountValue         Float // percent, or paisa when FIXED
+  maxDiscountAmountPaisa Int?
+  minimumOrderAmountPaisa Int    @default(0)
+  startDate             DateTime
+  endDate               DateTime
+  usageLimitTotal       Int?
+  usageLimitPerCustomer Int      @default(1)
+  newUsersOnly          Boolean  @default(false)
+  applicableMerchantId  String?
+  applicableCategoryId  String?
+  applicableCity        String?
+  paymentMethodRestriction String?
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+
+  usages CouponUsage[]
+}
+
+model CouponUsage {
+  id                  String   @id @default(cuid())
+  couponId            String
+  customerId          String
+  orderId             String
+  discountAmountPaisa Int
+  usedAt              DateTime @default(now())
+
+  coupon   Coupon   @relation(fields: [couponId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  order    Order    @relation(fields: [orderId], references: [id])
+
+  @@index([couponId, customerId])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  orderId    String
+  customerId String
+  merchantId String?
+  riderId    String?
+  productId  String?
+  rating     Int
+  reviewText String?
+  reviewType String // MERCHANT | RIDER | PRODUCT | ORDER
+  createdAt  DateTime @default(now())
+
+  order    Order     @relation(fields: [orderId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  merchant Merchant? @relation(fields: [merchantId], references: [id])
+  rider    Rider?    @relation(fields: [riderId], references: [id])
+  product  Product?  @relation(fields: [productId], references: [id])
+
+  @@unique([orderId, reviewType, productId])
+  @@index([merchantId])
+}
+
+model SupportTicket {
+  id                String    @id @default(cuid())
+  orderId           String?
+  customerId        String?
+  merchantId        String?
+  riderId           String?
+  createdByUserId   String
+  issueCategory     String // MISSING_ITEM | WRONG_ITEM | DAMAGED_ITEM | POOR_QUALITY | LATE_DELIVERY | PAYMENT_ISSUE | REFUND_ISSUE | RIDER_ISSUE | MERCHANT_ISSUE | APP_ISSUE | ACCOUNT_ISSUE
+  title             String
+  description       String
+  imagesJson        String    @default("[]")
+  status            String    @default("OPEN") // OPEN | IN_REVIEW | WAITING_CUSTOMER | WAITING_MERCHANT | WAITING_RIDER | RESOLVED | REJECTED | ESCALATED
+  priority          String    @default("NORMAL") // LOW | NORMAL | HIGH | URGENT
+  assignedToAdminId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  resolvedAt        DateTime?
+
+  order    Order?    @relation(fields: [orderId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+  merchant Merchant? @relation(fields: [merchantId], references: [id])
+  messages SupportTicketMessage[]
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model SupportTicketMessage {
+  id           String   @id @default(cuid())
+  ticketId     String
+  senderUserId String
+  senderRole   String
+  message      String
+  createdAt    DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+model Settlement {
+  id               String    @id @default(cuid())
+  settlementType   String    @default("MERCHANT_PAYOUT")
+  merchantId       String
+  amountPaisa      Int
+  status           String    @default("PENDING") // PENDING | PROCESSING | PAID | ON_HOLD | FAILED | ADJUSTED
+  startDate        DateTime
+  endDate          DateTime
+  paidAt           DateTime?
+  paymentReference String?
+  adminNotes       String?
+  createdAt        DateTime  @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+  orders   Order[]
+
+  @@index([merchantId, status])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  body        String
+  type        String
+  referenceId String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  role       String?
+  action     String
+  entityType String
+  entityId   String?
+  oldValue   String?
+  newValue   String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

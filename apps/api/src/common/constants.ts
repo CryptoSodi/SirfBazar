@@ -1,0 +1,205 @@
+// Central status/role vocabulary. The DB stores these as plain strings
+// (SQLite has no enums), so every write must go through these constants.
+
+export const UserRole = {
+  CUSTOMER: 'CUSTOMER',
+  MERCHANT_OWNER: 'MERCHANT_OWNER',
+  MERCHANT_STAFF: 'MERCHANT_STAFF',
+  RIDER: 'RIDER',
+  ADMIN: 'ADMIN',
+  SUPER_ADMIN: 'SUPER_ADMIN',
+  SUPPORT_AGENT: 'SUPPORT_AGENT',
+  FINANCE_ADMIN: 'FINANCE_ADMIN',
+} as const;
+export type UserRole = (typeof UserRole)[keyof typeof UserRole];
+
+export const ADMIN_ROLES: UserRole[] = [
+  UserRole.ADMIN,
+  UserRole.SUPER_ADMIN,
+  UserRole.SUPPORT_AGENT,
+  UserRole.FINANCE_ADMIN,
+];
+
+export const MERCHANT_ROLES: UserRole[] = [UserRole.MERCHANT_OWNER, UserRole.MERCHANT_STAFF];
+
+export const OrderStatus = {
+  CREATED: 'CREATED',
+  PAYMENT_PENDING: 'PAYMENT_PENDING',
+  PAYMENT_CONFIRMED: 'PAYMENT_CONFIRMED',
+  SENT_TO_MERCHANT: 'SENT_TO_MERCHANT',
+  MERCHANT_ACCEPTED: 'MERCHANT_ACCEPTED',
+  MERCHANT_REJECTED: 'MERCHANT_REJECTED',
+  PREPARING: 'PREPARING',
+  READY_FOR_PICKUP: 'READY_FOR_PICKUP',
+  RIDER_ASSIGNED: 'RIDER_ASSIGNED',
+  RIDER_ARRIVED_AT_SHOP: 'RIDER_ARRIVED_AT_SHOP',
+  PICKED_UP: 'PICKED_UP',
+  ON_THE_WAY: 'ON_THE_WAY',
+  RIDER_ARRIVED_AT_CUSTOMER: 'RIDER_ARRIVED_AT_CUSTOMER',
+  DELIVERED: 'DELIVERED',
+  CANCELLED_BY_CUSTOMER: 'CANCELLED_BY_CUSTOMER',
+  CANCELLED_BY_MERCHANT: 'CANCELLED_BY_MERCHANT',
+  CANCELLED_BY_ADMIN: 'CANCELLED_BY_ADMIN',
+  FAILED_DELIVERY: 'FAILED_DELIVERY',
+} as const;
+export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
+
+export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
+  OrderStatus.CREATED,
+  OrderStatus.PAYMENT_PENDING,
+  OrderStatus.PAYMENT_CONFIRMED,
+  OrderStatus.SENT_TO_MERCHANT,
+  OrderStatus.MERCHANT_ACCEPTED,
+  OrderStatus.PREPARING,
+  OrderStatus.READY_FOR_PICKUP,
+  OrderStatus.RIDER_ASSIGNED,
+  OrderStatus.RIDER_ARRIVED_AT_SHOP,
+  OrderStatus.PICKED_UP,
+  OrderStatus.ON_THE_WAY,
+  OrderStatus.RIDER_ARRIVED_AT_CUSTOMER,
+];
+
+export const CANCELLED_ORDER_STATUSES: OrderStatus[] = [
+  OrderStatus.MERCHANT_REJECTED,
+  OrderStatus.CANCELLED_BY_CUSTOMER,
+  OrderStatus.CANCELLED_BY_MERCHANT,
+  OrderStatus.CANCELLED_BY_ADMIN,
+  OrderStatus.FAILED_DELIVERY,
+];
+
+export const PaymentStatus = {
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  FAILED: 'FAILED',
+  CASH_PENDING: 'CASH_PENDING',
+  CASH_COLLECTED: 'CASH_COLLECTED',
+  REFUND_PENDING: 'REFUND_PENDING',
+  REFUNDED: 'REFUNDED',
+  PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED',
+} as const;
+export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
+
+export const PaymentMethod = {
+  COD: 'COD',
+  WALLET: 'WALLET',
+  CARD: 'CARD',
+  JAZZCASH: 'JAZZCASH',
+  EASYPAISA: 'EASYPAISA',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+} as const;
+export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
+
+export const ONLINE_PAYMENT_METHODS: PaymentMethod[] = [
+  PaymentMethod.WALLET,
+  PaymentMethod.CARD,
+  PaymentMethod.JAZZCASH,
+  PaymentMethod.EASYPAISA,
+  PaymentMethod.BANK_TRANSFER,
+];
+
+export const MerchantApprovalStatus = {
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  SUSPENDED: 'SUSPENDED',
+  INACTIVE: 'INACTIVE',
+  TEMPORARILY_CLOSED: 'TEMPORARILY_CLOSED',
+} as const;
+export type MerchantApprovalStatus =
+  (typeof MerchantApprovalStatus)[keyof typeof MerchantApprovalStatus];
+
+export const RefundStatus = {
+  REQUESTED: 'REQUESTED',
+  UNDER_REVIEW: 'UNDER_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+} as const;
+export type RefundStatus = (typeof RefundStatus)[keyof typeof RefundStatus];
+
+export const SettlementStatus = {
+  PENDING: 'PENDING',
+  PROCESSING: 'PROCESSING',
+  PAID: 'PAID',
+  ON_HOLD: 'ON_HOLD',
+  FAILED: 'FAILED',
+  ADJUSTED: 'ADJUSTED',
+} as const;
+
+export const TicketStatus = {
+  OPEN: 'OPEN',
+  IN_REVIEW: 'IN_REVIEW',
+  WAITING_CUSTOMER: 'WAITING_CUSTOMER',
+  WAITING_MERCHANT: 'WAITING_MERCHANT',
+  WAITING_RIDER: 'WAITING_RIDER',
+  RESOLVED: 'RESOLVED',
+  REJECTED: 'REJECTED',
+  ESCALATED: 'ESCALATED',
+} as const;
+
+export const RiderStatus = {
+  IDLE: 'IDLE',
+  ASSIGNED: 'ASSIGNED',
+  PICKING_UP: 'PICKING_UP',
+  DELIVERING: 'DELIVERING',
+} as const;
+
+export const NotificationType = {
+  OTP: 'OTP',
+  ORDER_PLACED: 'ORDER_PLACED',
+  ORDER_ACCEPTED: 'ORDER_ACCEPTED',
+  ORDER_REJECTED: 'ORDER_REJECTED',
+  REPLACEMENT_REQUESTED: 'REPLACEMENT_REQUESTED',
+  RIDER_ASSIGNED: 'RIDER_ASSIGNED',
+  ORDER_PICKED_UP: 'ORDER_PICKED_UP',
+  RIDER_NEARBY: 'RIDER_NEARBY',
+  ORDER_DELIVERED: 'ORDER_DELIVERED',
+  ORDER_CANCELLED: 'ORDER_CANCELLED',
+  REFUND_UPDATE: 'REFUND_UPDATE',
+  COUPON: 'COUPON',
+  PROMOTION: 'PROMOTION',
+  SUPPORT_REPLY: 'SUPPORT_REPLY',
+  NEW_ORDER: 'NEW_ORDER',
+  ORDER_TIMEOUT: 'ORDER_TIMEOUT',
+  SETTLEMENT_UPDATE: 'SETTLEMENT_UPDATE',
+  PRODUCT_APPROVED: 'PRODUCT_APPROVED',
+  PRODUCT_REJECTED: 'PRODUCT_REJECTED',
+  SYSTEM: 'SYSTEM',
+} as const;
+
+export const ProductApprovalStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  DISABLED: 'DISABLED',
+} as const;
+
+export const ShopType = {
+  GROCERY: 'GROCERY',
+  GENERAL: 'GENERAL',
+  PHARMACY: 'PHARMACY',
+  FRUITS_VEGETABLES: 'FRUITS_VEGETABLES',
+  BAKERY: 'BAKERY',
+  STATIONERY: 'STATIONERY',
+  MOBILE_ACCESSORIES: 'MOBILE_ACCESSORIES',
+  ELECTRONICS: 'ELECTRONICS',
+  PET: 'PET',
+  HOUSEHOLD: 'HOUSEHOLD',
+  COSMETICS: 'COSMETICS',
+  ORGANIC: 'ORGANIC',
+  OTHER: 'OTHER',
+} as const;
+
+export const StaffPermission = {
+  ORDERS: 'ORDERS',
+  INVENTORY: 'INVENTORY',
+  RIDERS: 'RIDERS',
+  FINANCE: 'FINANCE',
+  STORE: 'STORE',
+  PROMOTIONS: 'PROMOTIONS',
+} as const;
+export type StaffPermission = (typeof StaffPermission)[keyof typeof StaffPermission];
