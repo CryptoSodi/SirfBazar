@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "SirfBazar",
+    "slug": "sirfbazar-customer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "sirfbazar",
+    "splash": {
+      "backgroundColor": "#059669",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SirfBazar uses your location to show shops and products near you."
+      }
+    },
+    "android": {
+      "package": "pk.sirfbazar.customer",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SirfBazar uses your location to show shops and products near you."
+        }
+      ]
+    ]
+  }
+}
