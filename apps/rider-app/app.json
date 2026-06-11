@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "SirfBazar Rider",
+    "slug": "sirfbazar-rider",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "sirfbazar-rider",
+    "splash": { "backgroundColor": "#059669", "resizeMode": "contain" },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SirfBazar Rider shares your location with the customer during active deliveries."
+      }
+    },
+    "android": {
+      "package": "pk.sirfbazar.rider",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SirfBazar Rider shares your location with the customer during active deliveries."
+        }
+      ]
+    ]
+  }
+}

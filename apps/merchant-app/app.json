@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "SirfBazar Merchant",
+    "slug": "sirfbazar-merchant",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "sirfbazar-merchant",
+    "splash": { "backgroundColor": "#0f172a", "resizeMode": "contain" },
+    "ios": { "supportsTablet": true },
+    "android": { "package": "pk.sirfbazar.merchant" }
+  }
+}
