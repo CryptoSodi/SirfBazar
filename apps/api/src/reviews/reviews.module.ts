@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import { ReviewsService } from './reviews.service';
 
-// Shell module - implementation in progress.
-@Module({})
+@Module({
+  providers: [ReviewsService],
+  exports: [ReviewsService],
+})
 export class ReviewsModule {}

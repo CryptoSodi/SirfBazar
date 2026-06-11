@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import { SettlementsService } from './settlements.service';
 
-// Shell module - implementation in progress.
-@Module({})
+@Module({
+  providers: [SettlementsService],
+  exports: [SettlementsService],
+})
 export class SettlementsModule {}

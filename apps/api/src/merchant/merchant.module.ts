@@ -1,5 +1,13 @@
 import { Module } from '@nestjs/common';
+import { MerchantService } from './merchant.service';
+import { MerchantProductsService } from './merchant-products.service';
+import { MerchantPeopleService } from './merchant-people.service';
+import { MerchantController, MerchantOnboardController } from './merchant.controller';
+import { AuthModule } from '../auth/auth.module';
 
-// Shell module - implementation in progress.
-@Module({})
+@Module({
+  imports: [AuthModule],
+  controllers: [MerchantOnboardController, MerchantController],
+  providers: [MerchantService, MerchantProductsService, MerchantPeopleService],
+})
 export class MerchantModule {}
