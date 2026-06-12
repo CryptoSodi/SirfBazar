@@ -1,95 +1,127 @@
-# SirfBazar — production deployment (Render)
+# SirfBazar — production deployment
 
-Everything runs on Render, provisioned from a single blueprint ([render.yaml](../render.yaml)).
-DNS stays on Cloudflare for the `sirfbazar.com` domain.
+Hybrid topology: frontends on Render, backend + database on your own machine.
 
-| Piece | Render service | URL |
+| Piece | Where | URL |
 |---|---|---|
-| Backend API (`apps/api`) | Web Service `sirfbazar-api` | `https://sirfbazar-api.onrender.com` → optionally `api.sirfbazar.com` |
-| Customer website (`apps/web`) | Web Service `sirfbazar-web` | `https://sirfbazar.com` (+ `www`) |
-| Admin dashboard (`apps/admin`) | Static Site `sirfbazar-admin` | `https://admin.sirfbazar.com` |
-| Database | Render PostgreSQL `sirfbazar-db` | internal |
+| Customer website (`apps/web`) | Render web service `sirfbazar-web` | `https://sirfbazar.com` (+ `www`) |
+| Admin dashboard (`apps/admin`) | Render static site `sirfbazar-admin` | `https://admin.sirfbazar.com` |
+| Backend API (`apps/api`) | **Your machine**, exposed via Cloudflare Tunnel | `https://api.sirfbazar.com` |
+| Database | **Your machine** — native PostgreSQL | local only |
+| DNS / TLS | Cloudflare (`sirfbazar.com` zone) | — |
 
-## 1. Deploy with the blueprint
+Both frontends are built with `https://api.sirfbazar.com/api` baked in
+(`render.yaml` env vars). **Until the tunnel is up, the deployed site loads but
+shows no data** — that's expected, not broken.
 
-1. [dashboard.render.com](https://dashboard.render.com) → **New → Blueprint**.
-2. Connect GitHub and select `CryptoSodi/SirfBazar`. Render reads `render.yaml` and shows the 4 resources.
-3. Click **Apply**. First build takes a few minutes; the API runs
-   `prisma db push` + the (idempotent) demo seed automatically on every boot.
-4. Verify: `https://sirfbazar-api.onrender.com/api/products/categories` returns JSON,
-   and the website service URL shows products.
+---
 
-Every `git push` to `master` redeploys all three services automatically.
+## Step 1 — Frontends on Render (do this first)
 
-> If Render says a service name is taken and appends a suffix (e.g.
-> `sirfbazar-api-x7k2.onrender.com`), update `NEXT_PUBLIC_API_URL` on
-> `sirfbazar-web` and `VITE_API_URL` on `sirfbazar-admin` to the real API URL
-> (Environment tab), then redeploy those two.
+1. [dashboard.render.com](https://dashboard.render.com) → **New → Blueprint** → select `CryptoSodi/SirfBazar` → **Apply**.
+   Render reads `render.yaml` and creates `sirfbazar-web` + `sirfbazar-admin` (no database, no API service — those are local).
+2. Every `git push` to `master` redeploys both automatically.
+3. Custom domains — on each service, **Settings → Custom Domains**:
+   - `sirfbazar-web`: add `sirfbazar.com` and `www.sirfbazar.com`
+   - `sirfbazar-admin`: add `admin.sirfbazar.com`
+4. In Cloudflare DNS add the records Render shows you (standard form):
 
-## 2. Custom domains (Cloudflare DNS)
+   | Type | Name | Target | Proxy |
+   |---|---|---|---|
+   | CNAME | `@` | `sirfbazar-web.onrender.com` | DNS only (grey) |
+   | CNAME | `www` | `sirfbazar-web.onrender.com` | DNS only (grey) |
+   | CNAME | `admin` | `sirfbazar-admin.onrender.com` | DNS only (grey) |
 
-On each Render service → **Settings → Custom Domains**, add:
+   Keep them grey-cloud until Render shows *Certificate Issued*.
 
-- `sirfbazar-web`: `sirfbazar.com` and `www.sirfbazar.com`
-- `sirfbazar-admin`: `admin.sirfbazar.com`
-- `sirfbazar-api`: `api.sirfbazar.com` *(optional — frontends work fine against the onrender URL)*
+---
 
-Render shows the exact DNS target for each. In Cloudflare DNS add:
+## Step 2 — PostgreSQL on your machine (native)
 
-| Type | Name | Target | Proxy |
-|---|---|---|---|
-| CNAME | `@` | `sirfbazar-web.onrender.com` | DNS only (grey) |
-| CNAME | `www` | `sirfbazar-web.onrender.com` | DNS only (grey) |
-| CNAME | `admin` | `sirfbazar-admin.onrender.com` | DNS only (grey) |
-| CNAME | `api` | `sirfbazar-api.onrender.com` | DNS only (grey) |
+1. Install from [postgresql.org/download/windows](https://www.postgresql.org/download/windows/) (version 16+). During setup you choose a password for the `postgres` superuser — remember it. Keep port 5432.
+2. Create the database (pgAdmin, or in a terminal):
+   ```powershell
+   & "C:\Program Files\PostgreSQL\16\bin\createdb.exe" -U postgres sirfbazar
+   ```
+3. Put your password into `apps/api/.env`:
+   ```
+   DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/sirfbazar"
+   ```
+4. Create schema + demo data, then verify:
+   ```powershell
+   cd C:\repos\SirfBazar\apps\api
+   npx prisma db push
+   npm run seed
+   npm run dev        # then: npm run smoke (in a second terminal) → 44 checks green
+   ```
 
-Keep records **grey-cloud (DNS only)** while Render issues its certificates (it
-uses HTTP validation). Once each domain shows *Certificate Issued* on Render you
-may flip records to proxied (orange) if you want Cloudflare's CDN/WAF — set
-Cloudflare SSL/TLS mode to **Full (strict)** if you do.
-
-If you attach `api.sirfbazar.com`, update the two frontend env vars to
-`https://api.sirfbazar.com/api` (CORS for all domains is pre-configured).
-
-## 3. Database
-
-- The blueprint wires `DATABASE_URL` from the managed Postgres into the API automatically.
-- **Render's free Postgres EXPIRES** (~30 days under current policy — the
-  database page in the dashboard shows the exact date). Before then either
-  upgrade the database (services can stay free), or switch to a free-forever
-  Postgres like Neon (neon.tech): create a project, paste its connection string
-  as `DATABASE_URL` on `sirfbazar-api`, redeploy — schema + seed apply on boot.
-- Backups: free tier has no automated backups; `pg_dump` with the external
-  connection string when you care about the data.
-
-## 4. Free-tier behaviour
-
-Free web services spin down after ~15 min idle; the first request then takes
-~30–60s while the API and/or website wake. Upgrading just `sirfbazar-api` to
-Starter removes most of the pain (the website can stay free).
-
-## 5. Local development
-
-Local dev now uses Postgres too. Either:
+## Step 3 — Run the API permanently
 
 ```powershell
-docker compose up -d          # local postgres matching apps/api/.env
-cd apps\api
-npx prisma db push
-npm run seed
-npm run dev
+cd C:\repos\SirfBazar\apps\api
+npm run build
+npm run start:prod        # http://localhost:3001
 ```
 
-…or paste your Render database's **External** connection string into
-`apps/api/.env` as `DATABASE_URL` and skip Docker.
+Keep it alive across reboots with pm2:
 
-## 6. Go-live checklist
+```powershell
+npm install -g pm2
+pm2 start dist/main.js --name sirfbazar-api
+pm2 save
+```
 
-- [ ] Blueprint applied; all 3 services + DB live
-- [ ] `https://sirfbazar-api.onrender.com/api/products/categories` returns JSON
-- [ ] Website shows shops/products; place a test order end-to-end
-- [ ] Custom domains attached + Cloudflare CNAMEs created (grey-cloud)
-- [ ] Frontend env vars point at the final API URL
-- [ ] When the real OTP provider arrives: `OTP_PROVIDER=external` + `OTP_PROVIDER_BASE_URL`/`OTP_PROVIDER_API_KEY` on `sirfbazar-api` (until then anyone can log in with master code **123456** — fine for demo, not for launch)
+(or a Task Scheduler job: trigger *At startup*, action `node dist\main.js`, start-in `apps\api`.)
+Also disable Windows sleep — this machine is now the production server.
+
+## Step 4 — Cloudflare Tunnel → api.sirfbazar.com
+
+```powershell
+winget install Cloudflare.cloudflared
+cloudflared tunnel login                                      # pick the sirfbazar.com zone
+cloudflared tunnel create sirfbazar-api                       # prints the tunnel UUID
+cloudflared tunnel route dns sirfbazar-api api.sirfbazar.com  # creates the DNS record
+```
+
+Create `%USERPROFILE%\.cloudflared\config.yml`:
+
+```yaml
+tunnel: sirfbazar-api
+credentials-file: C:\Users\<you>\.cloudflared\<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: api.sirfbazar.com
+    service: http://localhost:3001
+  - service: http_status:404
+```
+
+Test, then install as a Windows service:
+
+```powershell
+cloudflared tunnel run sirfbazar-api    # test: https://api.sirfbazar.com/docs should load
+cloudflared service install             # permanent, survives reboots
+```
+
+No port-forwarding or certificates needed — Cloudflare terminates TLS, and
+WebSockets (live tracking) work through the tunnel out of the box.
+
+---
+
+## Mobile apps against production
+
+```powershell
+$env:EXPO_PUBLIC_API_URL = "https://api.sirfbazar.com/api"
+npx expo start
+```
+
+## Go-live checklist
+
+- [ ] Blueprint applied on Render; both frontends build green
+- [ ] Custom domains attached + Cloudflare CNAMEs (grey-cloud)
+- [ ] PostgreSQL installed, `DATABASE_URL` set, `db push` + `seed` done, smoke test green
+- [ ] API running under pm2/Task Scheduler; PC sleep disabled
+- [ ] Tunnel running as a service; `https://api.sirfbazar.com/api/products/categories` returns JSON
+- [ ] Place a test order on `https://sirfbazar.com` end-to-end
+- [ ] Real OTP provider: `OTP_PROVIDER=external` + provider keys (until then master code **123456** logs anyone in)
 - [ ] Real Google login: `GOOGLE_AUTH_PROVIDER=google` + `GOOGLE_CLIENT_ID`
-- [ ] Calendar reminder: free Render Postgres expires (check dashboard for date) — upgrade or move to Neon before then
+- [ ] Back up the local database periodically: `pg_dump -U postgres sirfbazar > backup.sql`

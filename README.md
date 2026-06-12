@@ -80,13 +80,11 @@ Delivery completion OTP also accepts **123456** in dev.
 
 ## Deployment
 
-Everything deploys to **Render** from a single blueprint ([render.yaml](render.yaml)) — see [docs/deployment.md](docs/deployment.md):
-- `sirfbazar.com` + `www` — customer website (Next.js web service)
-- `admin.sirfbazar.com` — admin dashboard (static site)
-- `api.sirfbazar.com` / `sirfbazar-api.onrender.com` — backend API (Node web service)
-- Managed **Render PostgreSQL**; DNS on **Cloudflare**
-
-Render dashboard → New → Blueprint → pick this repo → Apply. The API pushes the schema and seeds demo data automatically on boot.
+Hybrid topology — see [docs/deployment.md](docs/deployment.md) for the full guide:
+- `sirfbazar.com` + `www` — customer website on **Render** (blueprint: [render.yaml](render.yaml))
+- `admin.sirfbazar.com` — admin dashboard on **Render** (same blueprint)
+- `api.sirfbazar.com` — backend API **self-hosted** (pm2 + Cloudflare Tunnel)
+- Database — **native PostgreSQL on the same machine**; DNS on **Cloudflare**
 
 ## Production notes
 
