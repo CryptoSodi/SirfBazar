@@ -1,7 +1,6 @@
 // SirfBazar database schema (spec section 28).
-// SQLite in development; switch provider to "postgresql" for production.
-// SQLite has no native enums, so status/role fields are strings constrained
-// by the constants in src/common/constants.ts.
+// PostgreSQL everywhere (Render in production; local/Docker/Render-external in dev).
+// Status/role fields are strings constrained by src/common/constants.ts.
 // All money fields are integers in paisa (100 paisa = 1 PKR).
 
 generator client {
@@ -9,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

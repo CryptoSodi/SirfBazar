@@ -209,10 +209,12 @@ export class MerchantService {
       this.salesAggregate(merchantId, startOfToday),
       this.salesAggregate(merchantId, weekAgo),
       this.salesAggregate(merchantId, monthAgo),
-      this.prisma.$queryRaw`
-        SELECT COUNT(*) as cnt FROM MerchantProduct
-        WHERE merchantId = ${merchantId} AND stockQuantity <= lowStockThreshold
-      ` as Promise<Array<{ cnt: number | bigint }>>,
+      this.prisma.merchantProduct.count({
+        where: {
+          merchantId,
+          stockQuantity: { lte: this.prisma.merchantProduct.fields.lowStockThreshold },
+        },
+      }),
     ]);
 
     return {
@@ -228,7 +230,7 @@ export class MerchantService {
       monthSalesPaisa: monthAgg.sales,
       commissionPaisa: monthAgg.commission,
       netEarningsPaisa: monthAgg.earnings,
-      lowStockProducts: Number(lowStockProducts[0]?.cnt ?? 0),
+      lowStockProducts,
       ratingAverage: merchant?.ratingAverage ?? 0,
       ratingCount: merchant?.ratingCount ?? 0,
       isOnline: merchant?.isOnline ?? false,

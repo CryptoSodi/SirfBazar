@@ -1,0 +1,17 @@
+# Local development database (optional — you can also point apps/api/.env
+# at your Render Postgres external connection string instead).
+#   docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: sirfbazar
+    ports:
+      - '5432:5432'
+    volumes:
+      - sirfbazar-pgdata:/var/lib/postgresql/data
+
+volumes:
+  sirfbazar-pgdata:

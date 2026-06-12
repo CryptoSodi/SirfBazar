@@ -1,133 +1,92 @@
-# SirfBazar — production deployment
+# SirfBazar — production deployment (Render)
 
-Live topology:
+Everything runs on Render, provisioned from a single blueprint ([render.yaml](../render.yaml)).
+DNS stays on Cloudflare for the `sirfbazar.com` domain.
 
-| Piece | Where | URL |
+| Piece | Render service | URL |
 |---|---|---|
-| Customer website (`apps/web`) | Vercel | `https://sirfbazar.com` (+ `www`) |
-| Admin dashboard (`apps/admin`) | Vercel | `https://admin.sirfbazar.com` |
-| Backend API (`apps/api`) | Self-hosted (your machine) behind a Cloudflare Tunnel | `https://api.sirfbazar.com` |
-| DNS / TLS | Cloudflare | `sirfbazar.com` zone |
-| Repo | GitHub | `https://github.com/CryptoSodi/SirfBazar` |
+| Backend API (`apps/api`) | Web Service `sirfbazar-api` | `https://sirfbazar-api.onrender.com` → optionally `api.sirfbazar.com` |
+| Customer website (`apps/web`) | Web Service `sirfbazar-web` | `https://sirfbazar.com` (+ `www`) |
+| Admin dashboard (`apps/admin`) | Static Site `sirfbazar-admin` | `https://admin.sirfbazar.com` |
+| Database | Render PostgreSQL `sirfbazar-db` | internal |
 
-The frontends already default to the production API: `apps/web/.env.production` and
-`apps/admin/.env.production` both point at `https://api.sirfbazar.com/api` (a Vercel
-dashboard env var overrides them if you ever need to).
+## 1. Deploy with the blueprint
 
----
+1. [dashboard.render.com](https://dashboard.render.com) → **New → Blueprint**.
+2. Connect GitHub and select `CryptoSodi/SirfBazar`. Render reads `render.yaml` and shows the 4 resources.
+3. Click **Apply**. First build takes a few minutes; the API runs
+   `prisma db push` + the (idempotent) demo seed automatically on every boot.
+4. Verify: `https://sirfbazar-api.onrender.com/api/products/categories` returns JSON,
+   and the website service URL shows products.
 
-## 1. API on your machine + Cloudflare Tunnel
+Every `git push` to `master` redeploys all three services automatically.
 
-### 1a. Run the API as a persistent process
+> If Render says a service name is taken and appends a suffix (e.g.
+> `sirfbazar-api-x7k2.onrender.com`), update `NEXT_PUBLIC_API_URL` on
+> `sirfbazar-web` and `VITE_API_URL` on `sirfbazar-admin` to the real API URL
+> (Environment tab), then redeploy those two.
 
-```powershell
-cd C:\repos\SirfBazar\apps\api
-npm run build
-npm run start:prod        # listens on http://localhost:3001
-```
+## 2. Custom domains (Cloudflare DNS)
 
-To keep it alive across reboots, either use **pm2**:
+On each Render service → **Settings → Custom Domains**, add:
 
-```powershell
-npm install -g pm2
-pm2 start dist/main.js --name sirfbazar-api
-pm2 save
-```
+- `sirfbazar-web`: `sirfbazar.com` and `www.sirfbazar.com`
+- `sirfbazar-admin`: `admin.sirfbazar.com`
+- `sirfbazar-api`: `api.sirfbazar.com` *(optional — frontends work fine against the onrender URL)*
 
-…or create a Windows **Task Scheduler** task: trigger *At startup*, action
-`node C:\repos\SirfBazar\apps\api\dist\main.js`, start in `C:\repos\SirfBazar\apps\api`.
-
-Make sure `apps/api/.env` has:
-- a strong `JWT_SECRET` (already rotated — do not commit `.env`),
-- `CORS_ORIGINS=https://sirfbazar.com,https://www.sirfbazar.com,https://admin.sirfbazar.com,http://localhost:3000,http://localhost:5173`
-
-### 1b. Cloudflare Tunnel → api.sirfbazar.com
-
-Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) (e.g. `winget install Cloudflare.cloudflared`), then:
-
-```powershell
-cloudflared tunnel login                       # opens browser; pick the sirfbazar.com zone
-cloudflared tunnel create sirfbazar-api        # note the tunnel UUID it prints
-cloudflared tunnel route dns sirfbazar-api api.sirfbazar.com   # creates the CNAME in Cloudflare DNS
-```
-
-Create `%USERPROFILE%\.cloudflared\config.yml`:
-
-```yaml
-tunnel: sirfbazar-api
-credentials-file: C:\Users\<you>\.cloudflared\<TUNNEL-UUID>.json
-
-ingress:
-  - hostname: api.sirfbazar.com
-    service: http://localhost:3001
-  - service: http_status:404
-```
-
-Test it, then install it as a Windows service so it survives reboots:
-
-```powershell
-cloudflared tunnel run sirfbazar-api    # test — https://api.sirfbazar.com/docs should load
-cloudflared service install             # run permanently as a service
-```
-
-Notes:
-- The tunnel terminates TLS at Cloudflare — no certificates or port-forwarding needed on your machine.
-- WebSockets (Socket.IO live tracking) work through Cloudflare tunnels out of the box.
-- Verify: `https://api.sirfbazar.com/api/products/categories` should return JSON.
-
----
-
-## 2. Website on Vercel → sirfbazar.com
-
-1. [vercel.com](https://vercel.com) → sign in with GitHub → **Add New → Project** → import `CryptoSodi/SirfBazar`.
-2. **Root Directory:** `apps/web` (Edit → select the folder). Framework auto-detects as Next.js; leave build settings default.
-3. Deploy. You get `https://<project>.vercel.app` — sanity-check it loads products (your tunnel must be up).
-4. **Project → Settings → Domains:** add `sirfbazar.com` and `www.sirfbazar.com`.
-
-## 3. Admin on Vercel → admin.sirfbazar.com
-
-1. **Add New → Project** → import the SAME repo again.
-2. **Root Directory:** `apps/admin`. Framework: Vite (auto-detected). `apps/admin/vercel.json` already handles SPA routing.
-3. Deploy, then **Settings → Domains:** add `admin.sirfbazar.com`.
-
-Both projects redeploy automatically on every `git push` to `master`.
-
----
-
-## 4. Cloudflare DNS records
-
-In the Cloudflare dashboard for `sirfbazar.com` (Vercel's Domains page shows the exact targets; these are the standard ones):
+Render shows the exact DNS target for each. In Cloudflare DNS add:
 
 | Type | Name | Target | Proxy |
 |---|---|---|---|
-| A | `@` | `76.76.21.21` (Vercel) | **DNS only (grey cloud)** |
-| CNAME | `www` | `cname.vercel-dns.com` | **DNS only (grey cloud)** |
-| CNAME | `admin` | `cname.vercel-dns.com` | **DNS only (grey cloud)** |
-| CNAME | `api` | `<TUNNEL-UUID>.cfargotunnel.com` | **Proxied (orange)** — created automatically by `tunnel route dns` |
+| CNAME | `@` | `sirfbazar-web.onrender.com` | DNS only (grey) |
+| CNAME | `www` | `sirfbazar-web.onrender.com` | DNS only (grey) |
+| CNAME | `admin` | `sirfbazar-admin.onrender.com` | DNS only (grey) |
+| CNAME | `api` | `sirfbazar-api.onrender.com` | DNS only (grey) |
 
-Important: keep the Vercel records **grey-cloud (DNS only)**. Vercel issues its own certificates and proxying them through Cloudflare causes redirect loops / cert issues. The `api` record stays orange — that *is* the tunnel.
+Keep records **grey-cloud (DNS only)** while Render issues its certificates (it
+uses HTTP validation). Once each domain shows *Certificate Issued* on Render you
+may flip records to proxied (orange) if you want Cloudflare's CDN/WAF — set
+Cloudflare SSL/TLS mode to **Full (strict)** if you do.
 
-If you ever grey-cloud everything and use Cloudflare SSL settings: set SSL/TLS mode to **Full (strict)**.
+If you attach `api.sirfbazar.com`, update the two frontend env vars to
+`https://api.sirfbazar.com/api` (CORS for all domains is pre-configured).
 
----
+## 3. Database
 
-## 5. Mobile apps against production
+- The blueprint wires `DATABASE_URL` from the managed Postgres into the API automatically.
+- **Render's free Postgres expires after 90 days** — upgrade the database (the
+  services can stay free) or migrate before then. Render emails warnings.
+- Backups: free tier has no automated backups; `pg_dump` with the external
+  connection string when you care about the data.
+
+## 4. Free-tier behaviour
+
+Free web services spin down after ~15 min idle; the first request then takes
+~30–60s while the API and/or website wake. Upgrading just `sirfbazar-api` to
+Starter removes most of the pain (the website can stay free).
+
+## 5. Local development
+
+Local dev now uses Postgres too. Either:
 
 ```powershell
-$env:EXPO_PUBLIC_API_URL = "https://api.sirfbazar.com/api"
-npx expo start
+docker compose up -d          # local postgres matching apps/api/.env
+cd apps\api
+npx prisma db push
+npm run seed
+npm run dev
 ```
 
----
+…or paste your Render database's **External** connection string into
+`apps/api/.env` as `DATABASE_URL` and skip Docker.
 
 ## 6. Go-live checklist
 
-- [ ] `apps/api/.env`: strong `JWT_SECRET`, production `CORS_ORIGINS` (done)
-- [ ] API running (pm2/Task Scheduler) + `cloudflared` service installed
-- [ ] `https://api.sirfbazar.com/api/products/categories` returns JSON
-- [ ] Both Vercel projects deployed with correct root directories
-- [ ] Domains attached + DNS records grey-cloud for Vercel, orange for `api`
-- [ ] Place a test order on `https://sirfbazar.com` end-to-end
-- [ ] When the real OTP provider arrives: set `OTP_PROVIDER=external` + provider keys (mock OTP `123456` works until then — remember every visitor can log in with it)
-- [ ] When real Google login is wanted: `GOOGLE_AUTH_PROVIDER=google` + `GOOGLE_CLIENT_ID`
-- [ ] Back up `apps/api/prisma/dev.db` regularly (it is the production database on this setup), or migrate to PostgreSQL (`datasource provider = "postgresql"` + `DATABASE_URL`)
+- [ ] Blueprint applied; all 3 services + DB live
+- [ ] `https://sirfbazar-api.onrender.com/api/products/categories` returns JSON
+- [ ] Website shows shops/products; place a test order end-to-end
+- [ ] Custom domains attached + Cloudflare CNAMEs created (grey-cloud)
+- [ ] Frontend env vars point at the final API URL
+- [ ] When the real OTP provider arrives: `OTP_PROVIDER=external` + `OTP_PROVIDER_BASE_URL`/`OTP_PROVIDER_API_KEY` on `sirfbazar-api` (until then anyone can log in with master code **123456** — fine for demo, not for launch)
+- [ ] Real Google login: `GOOGLE_AUTH_PROVIDER=google` + `GOOGLE_CLIENT_ID`
+- [ ] Calendar reminder: free Postgres expires after 90 days

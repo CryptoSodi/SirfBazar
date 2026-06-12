@@ -24,7 +24,7 @@ export class MerchantProductsService {
     const { page, pageSize, skip, take } = parsePage(query);
 
     const where: any = { merchantId: ctx.merchantId };
-    if (query.q) where.product = { name: { contains: query.q } };
+    if (query.q) where.product = { name: { contains: query.q, mode: 'insensitive' } };
     if (query.categoryId) {
       where.product = { ...(where.product ?? {}), categoryId: query.categoryId };
     }

@@ -8,7 +8,7 @@ Unlike dark-store models, SirfBazar **owns no inventory and no warehouses** — 
 
 | App | Path | Stack | Port |
 |---|---|---|---|
-| Backend API | `apps/api` | NestJS 10 · Prisma 6 · SQLite (dev) / PostgreSQL (prod) · Socket.IO | 3001 |
+| Backend API | `apps/api` | NestJS 10 · Prisma 6 · PostgreSQL · Socket.IO | 3001 |
 | Customer website | `apps/web` | Next.js · Tailwind | 3000 |
 | Admin dashboard | `apps/admin` | Vite · React · Tailwind | 5173 |
 | Customer mobile app | `apps/customer-app` | Expo (React Native) | — |
@@ -21,11 +21,15 @@ Unlike dark-store models, SirfBazar **owns no inventory and no warehouses** — 
 Prereqs: Node.js 20+, npm.
 
 ```powershell
+# 0. Database (PostgreSQL) — either Docker:
+docker compose up -d        # postgres on localhost:5432
+# …or paste your Render Postgres EXTERNAL connection string into apps/api/.env
+
 # 1. Backend API
 cd apps/api
 npm install
 copy .env.example .env
-npx prisma db push          # creates SQLite dev.db
+npx prisma db push          # creates the schema
 npm run seed                # demo data: Lahore shops, products, riders, coupons
 npm run dev                 # http://localhost:3001  (Swagger: /docs)
 
@@ -76,15 +80,16 @@ Delivery completion OTP also accepts **123456** in dev.
 
 ## Deployment
 
-Production topology (see [docs/deployment.md](docs/deployment.md) for the full step-by-step):
-- `sirfbazar.com` + `www` — customer website on **Vercel** (root dir `apps/web`)
-- `admin.sirfbazar.com` — admin dashboard on **Vercel** (root dir `apps/admin`)
-- `api.sirfbazar.com` — backend API self-hosted behind a **Cloudflare Tunnel**
-- DNS on **Cloudflare** (Vercel records grey-cloud, tunnel record orange)
+Everything deploys to **Render** from a single blueprint ([render.yaml](render.yaml)) — see [docs/deployment.md](docs/deployment.md):
+- `sirfbazar.com` + `www` — customer website (Next.js web service)
+- `admin.sirfbazar.com` — admin dashboard (static site)
+- `api.sirfbazar.com` / `sirfbazar-api.onrender.com` — backend API (Node web service)
+- Managed **Render PostgreSQL**; DNS on **Cloudflare**
+
+Render dashboard → New → Blueprint → pick this repo → Apply. The API pushes the schema and seeds demo data automatically on boot.
 
 ## Production notes
 
-- Switch Prisma datasource to `postgresql` and set `DATABASE_URL`; the schema is portable (status strings instead of enums by design).
-- Set strong `JWT_SECRET`, real `GOOGLE_CLIENT_ID` (`GOOGLE_AUTH_PROVIDER=google`), and OTP provider credentials.
+- Set strong `JWT_SECRET` (the Render blueprint generates one), real `GOOGLE_CLIENT_ID` (`GOOGLE_AUTH_PROVIDER=google`), and OTP provider credentials.
 - Object storage (S3-compatible), FCM push, and real payment gateways (JazzCash/EasyPaisa/cards) integrate behind the existing payment `initiate/confirm` flow.
 - See `docs/architecture.md` and `docs/api-contract.md`.

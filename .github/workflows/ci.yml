@@ -11,6 +11,25 @@ jobs:
     defaults:
       run:
         working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sirfbazar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sirfbazar
+      JWT_SECRET: ci-only-secret
+      OTP_PROVIDER: mock
+      GOOGLE_AUTH_PROVIDER: mock
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,14 +41,17 @@ jobs:
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run build
-      - name: Seed + boot + smoke test
+      - name: Push schema + seed
         run: |
-          cp .env.example .env
-          npx prisma db push
+          npx prisma db push --skip-generate
           npm run seed
-          npm run start:prod &
-          npx wait-on -t 60000 http://localhost:3001/api/products/categories || true
-          sleep 5
+      - name: Boot API + run e2e smoke test (44 checks)
+        run: |
+          node dist/main &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3001/api/products/categories > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
           npm run smoke
 
   web:
@@ -42,6 +64,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
       - run: npm run build
 
@@ -55,5 +79,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
       - run: npm ci
       - run: npm run build

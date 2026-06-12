@@ -39,8 +39,8 @@ export class AdminMarketplaceService {
     if (query.status) where.approvalStatus = query.status;
     if (query.q) {
       where.OR = [
-        { shopName: { contains: query.q } },
-        { city: { contains: query.q } },
+        { shopName: { contains: query.q, mode: 'insensitive' } },
+        { city: { contains: query.q, mode: 'insensitive' } },
         { phoneNumber: { contains: query.q } },
       ];
     }
@@ -318,7 +318,7 @@ export class AdminMarketplaceService {
     const { page, pageSize, skip, take } = parsePage(query);
     const where: any = {};
     if (query.approvalStatus) where.approvalStatus = query.approvalStatus;
-    if (query.q) where.name = { contains: query.q };
+    if (query.q) where.name = { contains: query.q, mode: 'insensitive' };
     const [rows, total] = await Promise.all([
       this.prisma.product.findMany({
         where,

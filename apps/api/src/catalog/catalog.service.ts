@@ -266,14 +266,13 @@ export class CatalogService {
 
     const productWhere: Prisma.ProductWhereInput = {};
     if (query.categoryId) productWhere.categoryId = query.categoryId;
-    if (query.brand) productWhere.brand = { contains: query.brand };
+    if (query.brand) productWhere.brand = { contains: query.brand, mode: 'insensitive' };
     if (query.q?.trim()) {
       const q = query.q.trim();
-      // SQLite `contains` is already case-insensitive for ASCII; `mode` is unsupported.
       productWhere.OR = [
-        { name: { contains: q } },
-        { brand: { contains: q } },
-        { category: { name: { contains: q } } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { brand: { contains: q, mode: 'insensitive' } },
+        { category: { name: { contains: q, mode: 'insensitive' } } },
       ];
     }
 
@@ -553,8 +552,8 @@ export class CatalogService {
         ...(query.q?.trim()
           ? {
               OR: [
-                { name: { contains: query.q.trim() } },
-                { brand: { contains: query.q.trim() } },
+                { name: { contains: query.q.trim(), mode: 'insensitive' as const } },
+                { brand: { contains: query.q.trim(), mode: 'insensitive' as const } },
               ],
             }
           : {}),

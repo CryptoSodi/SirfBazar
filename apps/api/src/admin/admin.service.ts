@@ -183,9 +183,9 @@ export class AdminService {
       ...(query.q
         ? {
             OR: [
-              { fullName: { contains: query.q } },
+              { fullName: { contains: query.q, mode: 'insensitive' as const } },
               { phoneNumber: { contains: query.q } },
-              { email: { contains: query.q } },
+              { email: { contains: query.q, mode: 'insensitive' as const } },
             ],
           }
         : {}),

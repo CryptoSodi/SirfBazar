@@ -89,8 +89,7 @@ export class LocationService {
       by: ['city', 'area'],
       where: {
         approvalStatus: MerchantApprovalStatus.APPROVED,
-        // SQLite `contains` is case-insensitive for ASCII — forgiving city match.
-        ...(city?.trim() ? { city: { contains: city.trim() } } : {}),
+        ...(city?.trim() ? { city: { contains: city.trim(), mode: 'insensitive' as const } } : {}),
       },
       orderBy: [{ city: 'asc' }, { area: 'asc' }],
     });
