@@ -74,6 +74,14 @@ Delivery completion OTP also accepts **123456** in dev.
 - **OTP-verified delivery** — the customer's 4-digit code (revealed in tracking after pickup) is required to complete delivery.
 - **Provider-agnostic OTP/SMS** — `IOtpService` with a dev mock; the real provider plugs in via env (`OTP_PROVIDER=external`) without code changes elsewhere.
 
+## Deployment
+
+Production topology (see [docs/deployment.md](docs/deployment.md) for the full step-by-step):
+- `sirfbazar.com` + `www` — customer website on **Vercel** (root dir `apps/web`)
+- `admin.sirfbazar.com` — admin dashboard on **Vercel** (root dir `apps/admin`)
+- `api.sirfbazar.com` — backend API self-hosted behind a **Cloudflare Tunnel**
+- DNS on **Cloudflare** (Vercel records grey-cloud, tunnel record orange)
+
 ## Production notes
 
 - Switch Prisma datasource to `postgresql` and set `DATABASE_URL`; the schema is portable (status strings instead of enums by design).
