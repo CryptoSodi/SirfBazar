@@ -54,8 +54,11 @@ If you attach `api.sirfbazar.com`, update the two frontend env vars to
 ## 3. Database
 
 - The blueprint wires `DATABASE_URL` from the managed Postgres into the API automatically.
-- **Render's free Postgres expires after 90 days** — upgrade the database (the
-  services can stay free) or migrate before then. Render emails warnings.
+- **Render's free Postgres EXPIRES** (~30 days under current policy — the
+  database page in the dashboard shows the exact date). Before then either
+  upgrade the database (services can stay free), or switch to a free-forever
+  Postgres like Neon (neon.tech): create a project, paste its connection string
+  as `DATABASE_URL` on `sirfbazar-api`, redeploy — schema + seed apply on boot.
 - Backups: free tier has no automated backups; `pg_dump` with the external
   connection string when you care about the data.
 
@@ -89,4 +92,4 @@ npm run dev
 - [ ] Frontend env vars point at the final API URL
 - [ ] When the real OTP provider arrives: `OTP_PROVIDER=external` + `OTP_PROVIDER_BASE_URL`/`OTP_PROVIDER_API_KEY` on `sirfbazar-api` (until then anyone can log in with master code **123456** — fine for demo, not for launch)
 - [ ] Real Google login: `GOOGLE_AUTH_PROVIDER=google` + `GOOGLE_CLIENT_ID`
-- [ ] Calendar reminder: free Postgres expires after 90 days
+- [ ] Calendar reminder: free Render Postgres expires (check dashboard for date) — upgrade or move to Neon before then
