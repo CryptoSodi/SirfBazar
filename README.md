@@ -81,8 +81,8 @@ Delivery completion OTP also accepts **123456** in dev.
 ## Deployment
 
 Hybrid topology — see [docs/deployment.md](docs/deployment.md) for the full guide:
-- `sirfbazar.com` + `www` — customer website on **Render** (blueprint: [render.yaml](render.yaml))
-- `admin.sirfbazar.com` — admin dashboard on **Render** (same blueprint)
+- `sirfbazar.com` + `www` — customer website on **Vercel** (root dir `apps/web`)
+- `admin.sirfbazar.com` — admin dashboard on **Vercel** (root dir `apps/admin`)
 - `api.sirfbazar.com` — backend API **self-hosted** (pm2 + Cloudflare Tunnel)
 - Database — **native PostgreSQL on the same machine**; DNS on **Cloudflare**
 
