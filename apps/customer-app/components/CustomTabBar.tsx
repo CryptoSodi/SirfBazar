@@ -20,10 +20,10 @@ const TABS = [
   { name: 'ProfileTab', icon: '👤', label: 'Account' },
 ] as const;
 
-const SVG_H = 48; // background height (≈ half the old bar)
+const SVG_H = 56; // background height
 const TOP = 14; // y of the flat top edge
-const DEPTH = 26; // how far the top edge dips DOWN at the active tab (concave notch)
-const BW = 44; // half-width of the notch
+const DEPTH = 38; // how far the top edge dips DOWN at the active tab (deeper = more curve)
+const BW = 46; // half-width of the notch
 const BLOB = 52; // selector blob (bigger)
 
 function bgPath(cx: number, w: number) {
