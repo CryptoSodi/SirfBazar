@@ -22,34 +22,28 @@ const TABS = [
 
 const SVG_H = 56; // background height
 const TOP = 14; // y of the flat top edge
-const DEPTH = 38; // how far the top edge dips DOWN at the active tab (deeper = more curve)
-const BW = 46; // half-width of the notch
+const DEPTH = 38; // how far the top edge dips DOWN at the active tab
+const BW = 60; // half-width of the notch (wider = more rounded, gentler curve)
 const BLOB = 52; // selector blob (bigger)
 
-function bgPath(cx: number, w: number) {
-  // Filled background: flat top at y=TOP, curving DOWN into a notch at the
-  // active center so the blob sits cradled in the dip.
+// Shared top edge: flat at y=TOP, curving DOWN into a smooth rounded notch at
+// the active center. Symmetric bezier handles keep the scoop nicely rounded.
+function topEdge(cx: number, w: number) {
   return [
     `M0 ${TOP}`,
     `H ${cx - BW}`,
-    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} ${TOP + DEPTH}, ${cx} ${TOP + DEPTH}`,
-    `C ${cx + BW * 0.55} ${TOP + DEPTH}, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
+    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.5} ${TOP + DEPTH}, ${cx} ${TOP + DEPTH}`,
+    `C ${cx + BW * 0.5} ${TOP + DEPTH}, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
     `H ${w}`,
-    `V ${SVG_H}`,
-    `H 0`,
-    'Z',
   ].join(' ');
 }
 
+function bgPath(cx: number, w: number) {
+  return `${topEdge(cx, w)} V ${SVG_H} H 0 Z`;
+}
+
 function topEdgePath(cx: number, w: number) {
-  // Just the curved (dipping) top edge, for a crisp border line.
-  return [
-    `M0 ${TOP}`,
-    `H ${cx - BW}`,
-    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} ${TOP + DEPTH}, ${cx} ${TOP + DEPTH}`,
-    `C ${cx + BW * 0.55} ${TOP + DEPTH}, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
-    `H ${w}`,
-  ].join(' ');
+  return topEdge(cx, w);
 }
 
 function Badge({ count }: { count: number }) {
