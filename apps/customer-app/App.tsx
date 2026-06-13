@@ -3,7 +3,6 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { Text } from 'react-native';
 import { colors } from './lib/theme';
 import HomeScreen from './screens/HomeScreen';
 import SearchScreen from './screens/SearchScreen';
@@ -16,10 +15,16 @@ import ShopScreen from './screens/ShopScreen';
 import CheckoutScreen from './screens/CheckoutScreen';
 import OrderDetailScreen from './screens/OrderDetailScreen';
 import { ToastHost } from './components/Toast';
-import { refreshBadges, useBadges } from './lib/badges';
+import { CustomTabBar } from './components/CustomTabBar';
+import { refreshBadges } from './lib/badges';
 
+/** Screens reachable across the app (a single combined param list keeps the
+ *  per-screen navigation typing simple; each tab registers the subset it owns). */
 export type RootStackParamList = {
-  Tabs: undefined;
+  Home: undefined;
+  Cart: undefined;
+  Orders: undefined;
+  Profile: undefined;
   Search: { q?: string } | undefined;
   Category: { categoryId: string; name: string };
   Product: { productId: string };
@@ -31,49 +36,48 @@ export type RootStackParamList = {
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const TABS = [
-  ['Home', HomeScreen, '🏠'],
-  ['Cart', CartScreen, '🛒'],
-  ['Orders', OrdersScreen, '📦'],
-  ['Profile', ProfileScreen, '👤'],
-] as const;
+const stackOptions = { headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' as const } };
 
-function Tabs() {
-  const badges = useBadges();
-  useEffect(() => {
-    refreshBadges();
-  }, []);
-
-  const badgeFor = (name: string) =>
-    name === 'Cart' ? badges.cart : name === 'Orders' ? badges.orders : 0;
-
+// Each tab is a stack of its own screens, so the bottom bar stays visible while
+// browsing into product/shop/checkout/order details.
+function HomeStack() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.faint,
-      }}
-      screenListeners={{ tabPress: () => refreshBadges() }}
-    >
-      {TABS.map(([name, Screen, icon]) => {
-        const count = badgeFor(name);
-        return (
-          <Tab.Screen
-            key={name}
-            name={name}
-            component={Screen}
-            options={{
-              tabBarIcon: ({ focused }) => (
-                <Text style={{ fontSize: 18, opacity: focused ? 1 : 0.55 }}>{icon}</Text>
-              ),
-              tabBarBadge: count > 0 ? count : undefined,
-              tabBarBadgeStyle: { backgroundColor: colors.primary, fontSize: 10 },
-            }}
-          />
-        );
-      })}
-    </Tab.Navigator>
+    <Stack.Navigator screenOptions={stackOptions}>
+      <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
+      <Stack.Screen name="Category" component={CategoryScreen} options={{ title: 'Category' }} />
+      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
+      <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
+    </Stack.Navigator>
+  );
+}
+
+function CartStack() {
+  return (
+    <Stack.Navigator screenOptions={stackOptions}>
+      <Stack.Screen name="Cart" component={CartScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
+      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
+      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
+    </Stack.Navigator>
+  );
+}
+
+function OrdersStack() {
+  return (
+    <Stack.Navigator screenOptions={stackOptions}>
+      <Stack.Screen name="Orders" component={OrdersScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
+      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
+    </Stack.Navigator>
+  );
+}
+
+function ProfileStack() {
+  return (
+    <Stack.Navigator screenOptions={stackOptions}>
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+    </Stack.Navigator>
   );
 }
 
@@ -83,20 +87,23 @@ const theme = {
 };
 
 export default function App() {
+  useEffect(() => {
+    refreshBadges();
+  }, []);
+
   return (
     <NavigationContainer theme={theme}>
       <StatusBar style="dark" />
-      <Stack.Navigator
-        screenOptions={{ headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' } }}
+      <Tab.Navigator
+        tabBar={(props) => <CustomTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+        screenListeners={{ tabPress: () => refreshBadges() }}
       >
-        <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
-        <Stack.Screen name="Category" component={CategoryScreen} options={{ title: 'Category' }} />
-        <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
-        <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
-        <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
-        <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
-      </Stack.Navigator>
+        <Tab.Screen name="HomeTab" component={HomeStack} />
+        <Tab.Screen name="CartTab" component={CartStack} />
+        <Tab.Screen name="OrdersTab" component={OrdersStack} />
+        <Tab.Screen name="ProfileTab" component={ProfileStack} />
+      </Tab.Navigator>
       <ToastHost />
     </NavigationContainer>
   );
