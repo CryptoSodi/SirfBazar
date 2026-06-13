@@ -1,15 +1,15 @@
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import { FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, getLocation, isLoggedIn, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [q, setQ] = useState('');
+  const route = useRoute<RouteProp<RootStackParamList, 'Search'>>();
+  const [q, setQ] = useState(route.params?.q ?? '');
   const [items, setItems] = useState<any[]>([]);
   const [searched, setSearched] = useState(false);
 
@@ -43,15 +43,15 @@ export default function SearchScreen() {
   };
 
   return (
-    <SafeAreaView style={s.screen} edges={['top']}>
-      <View style={s.pad}>
-        <Text style={s.h1}>Search</Text>
+    <View style={s.screen}>
+      <View style={[s.pad, { paddingBottom: 8 }]}>
         <TextInput
-          style={[s.input, { marginTop: 10 }]}
+          style={s.input}
           placeholder="Search milk, bread, medicine…"
           value={q}
           onChangeText={setQ}
-          autoFocus
+          autoFocus={!route.params?.q}
+          returnKeyType="search"
         />
       </View>
       <FlatList
@@ -89,6 +89,6 @@ export default function SearchScreen() {
           </TouchableOpacity>
         )}
       />
-    </SafeAreaView>
+    </View>
   );
 }

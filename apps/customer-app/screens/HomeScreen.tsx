@@ -2,17 +2,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  FlatList,
-  RefreshControl,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, API_URL, getLocation, pkr, setLocation, SbLocation } from '../lib/api';
+import { api, API_URL, getLocation, setLocation, SbLocation } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function HomeScreen() {
@@ -20,30 +13,24 @@ export default function HomeScreen() {
   const [loc, setLoc] = useState<SbLocation | null>(null);
   const [categories, setCategories] = useState<any[]>([]);
   const [shops, setShops] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
     const location = await getLocation();
     setLoc(location);
     const lq = `latitude=${location.latitude}&longitude=${location.longitude}`;
-    const [c, sh, p] = await Promise.allSettled([
+    const [c, sh] = await Promise.allSettled([
       api.get('/products/categories'),
       api.get(`/merchants/nearby?${lq}`),
-      api.get(`/products/nearby?${lq}&pageSize=20`),
     ]);
     if (c.status === 'fulfilled') setCategories(c.value ?? []);
     if (sh.status === 'fulfilled') setShops(sh.value.items ?? []);
-    if (p.status === 'fulfilled') setProducts(p.value.items ?? []);
 
-    // Surface connectivity problems instead of silently showing empty sections.
-    const firstError = [c, sh, p].find((r) => r.status === 'rejected') as
-      | PromiseRejectedResult
-      | undefined;
     if (c.status === 'rejected') {
-      setError(`Can't reach the server at ${API_URL} — ${firstError?.reason?.message ?? 'network error'}`);
-      console.warn('Home load failed:', firstError?.reason);
+      setError(`Can't reach the server at ${API_URL} — ${(c.reason as any)?.message ?? 'network error'}`);
+      console.warn('Home load failed:', (c as PromiseRejectedResult).reason);
     } else {
       setError(null);
     }
@@ -51,7 +38,6 @@ export default function HomeScreen() {
 
   useEffect(() => {
     load();
-    // Quietly upgrade to GPS if the user grants permission (no blocking prompt flow).
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -78,114 +64,94 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const addToCart = async (merchantProductId: string) => {
-    try {
-      const loggedIn = await import('../lib/api').then((m) => m.isLoggedIn());
-      await api.post(`${loggedIn ? '/cart' : '/guest/cart'}/items`, { merchantProductId, quantity: 1 });
-    } catch (e: any) {
-      alert(e.message);
-    }
+  const submitSearch = () => {
+    const q = query.trim();
+    navigation.navigate('Search', q ? { q } : undefined);
   };
 
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
-      <ScrollView
-        contentContainerStyle={s.pad}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        {/* Location + brand */}
+      {/* Fixed header: brand, location, and search */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
         <View style={s.spread}>
-          <View>
-            <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 20 }}>SirfBazar</Text>
-            <Text style={s.muted}>📍 {loc?.label ?? 'Detecting…'}</Text>
-          </View>
+          <Text style={{ color: colors.primary, fontWeight: '900', fontSize: 20 }}>SirfBazar</Text>
+          <Text style={s.muted} numberOfLines={1}>📍 {loc?.label ?? 'Detecting…'}</Text>
         </View>
+        <View style={[s.row, { marginTop: 10, gap: 8 }]}>
+          <TextInput
+            style={[s.input, { flex: 1 }]}
+            placeholder="Search milk, bread, medicine…"
+            value={query}
+            onChangeText={setQuery}
+            returnKeyType="search"
+            onSubmitEditing={submitSearch}
+          />
+          <TouchableOpacity style={[s.btn, { paddingHorizontal: 16 }]} onPress={submitSearch}>
+            <Text style={s.btnText}>🔍</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        {/* Connectivity error banner (so a blank screen is never a mystery) */}
-        {error && (
-          <View style={[s.card, { marginTop: 12, borderColor: colors.danger, backgroundColor: '#fef2f2' }]}>
-            <Text style={{ color: colors.danger, fontWeight: '700' }}>Couldn’t load content</Text>
-            <Text style={[s.faint, { color: colors.danger, marginTop: 2 }]}>{error}</Text>
-            <Text style={[s.faint, { marginTop: 6 }]}>Pull down to retry.</Text>
+      {/* Scrollable area: shops strip (horizontal) + category grid (vertical, full width) */}
+      <FlatList
+        data={categories}
+        numColumns={3}
+        keyExtractor={(c) => c.id}
+        columnWrapperStyle={{ gap: 10 }}
+        contentContainerStyle={{ padding: 16, gap: 10, paddingBottom: 32 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        ListHeaderComponent={
+          <View style={{ marginBottom: 6 }}>
+            {error && (
+              <View style={[s.card, { marginBottom: 12, borderColor: colors.danger, backgroundColor: '#fef2f2' }]}>
+                <Text style={{ color: colors.danger, fontWeight: '700' }}>Couldn’t load content</Text>
+                <Text style={[s.faint, { color: colors.danger, marginTop: 2 }]}>{error}</Text>
+                <Text style={[s.faint, { marginTop: 6 }]}>Pull down to retry.</Text>
+              </View>
+            )}
+
+            {shops.length > 0 && (
+              <>
+                <Text style={[s.h2, { marginBottom: 8 }]}>Shops near you</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -2 }}>
+                  {shops.map((shop) => (
+                    <TouchableOpacity
+                      key={shop.id}
+                      style={[s.card, { marginRight: 8, width: 180 }]}
+                      onPress={() => navigation.navigate('Shop', { merchantId: shop.id })}
+                    >
+                      <Text style={{ fontSize: 22 }}>🏪</Text>
+                      <Text style={[s.body, { fontWeight: '700', marginTop: 4 }]} numberOfLines={1}>
+                        {shop.shopName}
+                      </Text>
+                      <Text style={s.faint}>
+                        ⭐ {shop.ratingAverage?.toFixed?.(1) ?? '–'} ·{' '}
+                        {shop.distanceKm != null ? `${shop.distanceKm} km` : shop.city}
+                      </Text>
+                      <Text style={[s.faint, { color: shop.isOnline && shop.isOpen ? colors.primary : colors.faint }]}>
+                        {shop.isOnline && shop.isOpen ? '● Open now' : 'Closed'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            <Text style={[s.h2, { marginTop: shops.length > 0 ? 18 : 0, marginBottom: 4 }]}>Shop by category</Text>
           </View>
+        }
+        renderItem={({ item: c }) => (
+          <TouchableOpacity
+            style={[s.card, { flex: 1, alignItems: 'center', paddingVertical: 16 }]}
+            onPress={() => navigation.navigate('Search', { q: c.name })}
+          >
+            <Text style={{ fontSize: 30 }}>{c.iconUrl || '🛍️'}</Text>
+            <Text style={[s.faint, { textAlign: 'center', marginTop: 6 }]} numberOfLines={2}>
+              {c.name}
+            </Text>
+          </TouchableOpacity>
         )}
-
-        {/* Categories */}
-        <Text style={[s.h2, { marginTop: 16, marginBottom: 8 }]}>Categories</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {categories.map((c) => (
-            <TouchableOpacity
-              key={c.id}
-              style={[s.card, { marginRight: 8, alignItems: 'center', width: 84, padding: 10 }]}
-              onPress={() => navigation.navigate('Search' as never)}
-            >
-              <Text style={{ fontSize: 22 }}>{c.iconUrl || '🛍️'}</Text>
-              <Text style={[s.faint, { textAlign: 'center', marginTop: 4 }]} numberOfLines={2}>
-                {c.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Shops */}
-        <Text style={[s.h2, { marginTop: 16, marginBottom: 8 }]}>Shops near you</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {shops.map((shop) => (
-            <TouchableOpacity
-              key={shop.id}
-              style={[s.card, { marginRight: 8, width: 180 }]}
-              onPress={() => navigation.navigate('Shop', { merchantId: shop.id })}
-            >
-              <Text style={{ fontSize: 22 }}>🏪</Text>
-              <Text style={[s.body, { fontWeight: '700', marginTop: 4 }]} numberOfLines={1}>
-                {shop.shopName}
-              </Text>
-              <Text style={s.faint}>
-                ⭐ {shop.ratingAverage?.toFixed?.(1) ?? '–'} · {shop.distanceKm != null ? `${shop.distanceKm} km` : shop.city}
-              </Text>
-              <Text style={[s.faint, { color: shop.isOnline && shop.isOpen ? colors.primary : colors.faint }]}>
-                {shop.isOnline && shop.isOpen ? '● Open now' : 'Closed'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Products */}
-        <Text style={[s.h2, { marginTop: 16, marginBottom: 8 }]}>Popular near you</Text>
-        <FlatList
-          data={products}
-          numColumns={2}
-          scrollEnabled={false}
-          keyExtractor={(p) => p.merchantProductId}
-          columnWrapperStyle={{ gap: 8 }}
-          contentContainerStyle={{ gap: 8 }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[s.card, { flex: 1 }]}
-              onPress={() => navigation.navigate('Product', { productId: item.productId })}
-            >
-              <View style={{ height: 64, borderRadius: 10, backgroundColor: colors.emeraldBg, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 26 }}>🛍️</Text>
-              </View>
-              <Text style={[s.body, { fontWeight: '600', marginTop: 6 }]} numberOfLines={2}>
-                {item.name}
-              </Text>
-              <Text style={s.faint} numberOfLines={1}>{item.merchant?.shopName}</Text>
-              <View style={[s.spread, { marginTop: 6 }]}>
-                <Text style={{ fontWeight: '800', color: colors.text }}>
-                  {pkr(item.discountPricePaisa ?? item.pricePaisa)}
-                </Text>
-                <TouchableOpacity
-                  style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}
-                  onPress={() => addToCart(item.merchantProductId)}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>+ Add</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          )}
-        />
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 }

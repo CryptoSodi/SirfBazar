@@ -16,6 +16,7 @@ import OrderDetailScreen from './screens/OrderDetailScreen';
 
 export type RootStackParamList = {
   Tabs: undefined;
+  Search: { q?: string } | undefined;
   Product: { productId: string };
   Shop: { merchantId: string };
   Checkout: undefined;
@@ -27,7 +28,6 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const TABS = [
   ['Home', HomeScreen, '🏠'],
-  ['Search', SearchScreen, '🔍'],
   ['Cart', CartScreen, '🛒'],
   ['Orders', OrdersScreen, '📦'],
   ['Profile', ProfileScreen, '👤'],
@@ -71,6 +71,7 @@ export default function App() {
         screenOptions={{ headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' } }}
       >
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
         <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
         <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
