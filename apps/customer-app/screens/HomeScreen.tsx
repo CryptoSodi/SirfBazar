@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, getLocation, pkr, setLocation, SbLocation } from '../lib/api';
+import { api, API_URL, getLocation, pkr, setLocation, SbLocation } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function HomeScreen() {
@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const [shops, setShops] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const location = await getLocation();
@@ -35,6 +36,17 @@ export default function HomeScreen() {
     if (c.status === 'fulfilled') setCategories(c.value ?? []);
     if (sh.status === 'fulfilled') setShops(sh.value.items ?? []);
     if (p.status === 'fulfilled') setProducts(p.value.items ?? []);
+
+    // Surface connectivity problems instead of silently showing empty sections.
+    const firstError = [c, sh, p].find((r) => r.status === 'rejected') as
+      | PromiseRejectedResult
+      | undefined;
+    if (c.status === 'rejected') {
+      setError(`Can't reach the server at ${API_URL} — ${firstError?.reason?.message ?? 'network error'}`);
+      console.warn('Home load failed:', firstError?.reason);
+    } else {
+      setError(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -88,6 +100,15 @@ export default function HomeScreen() {
             <Text style={s.muted}>📍 {loc?.label ?? 'Detecting…'}</Text>
           </View>
         </View>
+
+        {/* Connectivity error banner (so a blank screen is never a mystery) */}
+        {error && (
+          <View style={[s.card, { marginTop: 12, borderColor: colors.danger, backgroundColor: '#fef2f2' }]}>
+            <Text style={{ color: colors.danger, fontWeight: '700' }}>Couldn’t load content</Text>
+            <Text style={[s.faint, { color: colors.danger, marginTop: 2 }]}>{error}</Text>
+            <Text style={[s.faint, { marginTop: 6 }]}>Pull down to retry.</Text>
+          </View>
+        )}
 
         {/* Categories */}
         <Text style={[s.h2, { marginTop: 16, marginBottom: 8 }]}>Categories</Text>
