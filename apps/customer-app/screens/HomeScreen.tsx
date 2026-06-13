@@ -21,7 +21,7 @@ export default function HomeScreen() {
   const fetchFor = async (location: SbLocation) => {
     const lq = `latitude=${location.latitude}&longitude=${location.longitude}`;
     const [c, sh, p] = await Promise.allSettled([
-      api.get('/products/categories'),
+      api.get(`/products/categories?${lq}`),
       api.get(`/merchants/nearby?${lq}`),
       api.get(`/products/nearby?${lq}&pageSize=20`),
     ]);

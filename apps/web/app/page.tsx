@@ -20,7 +20,7 @@ export default function HomePage() {
     const lq = locationQuery(location);
     setLoading(true);
     Promise.allSettled([
-      api.get('/products/categories'),
+      api.get(`/products/categories?${lq}`),
       api.get(`/merchants/nearby?${lq}`),
       api.get(`/products/nearby?${lq}&pageSize=24`),
       api.get('/coupons'),

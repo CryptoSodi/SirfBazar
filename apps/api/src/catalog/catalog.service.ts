@@ -106,7 +106,12 @@ export class CatalogService {
 
   // ── Categories ──────────────────────────────────────────────────────────────
 
-  async categoriesTree() {
+  /**
+   * Category tree. When a location is given, only categories that have at least
+   * one in-stock product from an approved, open shop within range are returned
+   * (dynamic, hyperlocal). Without a location, all active categories are shown.
+   */
+  async categoriesTree(location?: { latitude?: number; longitude?: number; radiusKm?: number }) {
     const categories = await this.prisma.category.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -119,6 +124,29 @@ export class CatalogService {
         sortOrder: true,
       },
     });
+
+    // Dynamic filter: keep only categories actually available from nearby shops.
+    let availableCatIds: Set<string> | null = null;
+    if (location?.latitude != null && location?.longitude != null) {
+      const inRange = await this.merchantsInRange(location.latitude, location.longitude, location.radiusKm, {
+        isOnline: true,
+        isOpen: true,
+      });
+      const merchantIds = inRange.map((m) => m.merchant.id);
+      availableCatIds = new Set();
+      if (merchantIds.length > 0) {
+        const rows = await this.prisma.merchantProduct.findMany({
+          where: {
+            merchantId: { in: merchantIds },
+            isAvailable: true,
+            stockQuantity: { gt: 0 },
+            product: { approvalStatus: ProductApprovalStatus.APPROVED },
+          },
+          select: { product: { select: { categoryId: true } } },
+        });
+        for (const r of rows) availableCatIds.add(r.product.categoryId);
+      }
+    }
 
     type Node = {
       id: string;
@@ -146,7 +174,16 @@ export class CatalogService {
       if (parent) parent.children.push(node);
       else roots.push(node);
     }
-    return roots;
+
+    if (!availableCatIds) return roots;
+
+    // Prune to categories (or parents of categories) with nearby availability.
+    const ids = availableCatIds;
+    const keep = (node: Node): boolean => {
+      node.children = node.children.filter(keep);
+      return ids.has(node.id) || node.children.length > 0;
+    };
+    return roots.filter(keep);
   }
 
   // ── Nearby merchant resolution ──────────────────────────────────────────────

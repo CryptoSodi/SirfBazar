@@ -23,8 +23,8 @@ export class ProductsController {
   constructor(private readonly catalog: CatalogService) {}
 
   @Get('categories')
-  categories() {
-    return this.catalog.categoriesTree();
+  categories(@Query() query: LocationQuery) {
+    return this.catalog.categoriesTree(query);
   }
 
   @Get('search')
