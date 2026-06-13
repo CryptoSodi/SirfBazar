@@ -1,6 +1,6 @@
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { FlatList, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, getLocation, isLoggedIn, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
@@ -49,9 +49,26 @@ export default function ShopScreen() {
         </View>
       }
       renderItem={({ item: mp }) => (
-        <View style={[s.card, s.spread]}>
+        <View style={[s.card, s.row, { gap: 12 }]}>
+          <View
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 10,
+              backgroundColor: colors.emeraldBg,
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
+            {mp.product.imageUrl ? (
+              <Image source={{ uri: mp.product.imageUrl }} style={{ width: '100%', height: '100%' }} />
+            ) : (
+              <Text style={{ fontSize: 22 }}>🛍️</Text>
+            )}
+          </View>
           <View style={{ flex: 1 }}>
-            <Text style={[s.body, { fontWeight: '600' }]} numberOfLines={1}>{mp.product.name}</Text>
+            <Text style={[s.body, { fontWeight: '600' }]} numberOfLines={2}>{mp.product.name}</Text>
             <Text style={s.faint}>{[mp.product.brand, mp.product.size ?? mp.product.unit].filter(Boolean).join(' · ')}</Text>
             <Text style={{ fontWeight: '800', marginTop: 2 }}>{pkr(mp.discountPricePaisa ?? mp.pricePaisa)}</Text>
           </View>

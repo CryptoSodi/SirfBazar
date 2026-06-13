@@ -1,6 +1,6 @@
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, getLocation, isLoggedIn, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
@@ -34,8 +34,12 @@ export default function ProductScreen() {
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.pad}>
-      <View style={{ height: 140, borderRadius: 16, backgroundColor: colors.emeraldBg, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 52 }}>🛍️</Text>
+      <View style={{ height: 200, borderRadius: 16, backgroundColor: colors.emeraldBg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {product.imageUrl ? (
+          <Image source={{ uri: product.imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+        ) : (
+          <Text style={{ fontSize: 52 }}>🛍️</Text>
+        )}
       </View>
       <Text style={[s.h1, { marginTop: 12 }]}>{product.name}</Text>
       <Text style={s.muted}>{[product.brand, product.size ?? product.unit].filter(Boolean).join(' · ')}</Text>
