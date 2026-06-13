@@ -1,50 +1,49 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useEffect, useRef } from 'react';
-import { Animated, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../lib/theme';
 import { useBadges } from '../lib/badges';
 
 /**
- * Custom animated bottom navigation bar with a raised Cart FAB.
- * Rendered by the Tab.Navigator, so it stays visible on every screen
- * (including nested detail screens) and reserves layout space for them.
- *
- * Layout:  [Home] [Orders]   (●Cart FAB)   [Profile]
+ * Animated bottom navigation bar: a colored highlight pill glides under the
+ * selected tab while the active icon lifts onto it (the style of the linked
+ * package), built with React Native's Animated — no native modules.
  */
-const SIDE = [
+const TABS = [
   { name: 'HomeTab', icon: '🏠', label: 'Home' },
+  { name: 'CartTab', icon: '🛒', label: 'Cart' },
   { name: 'OrdersTab', icon: '📦', label: 'Orders' },
   { name: 'ProfileTab', icon: '👤', label: 'Account' },
 ] as const;
 
-function Badge({ count, floating }: { count: number; floating?: boolean }) {
+const CIRCLE = 46;
+
+function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <View
       style={{
         position: 'absolute',
-        top: floating ? -4 : -6,
-        right: floating ? -6 : -12,
+        top: -4,
+        right: -12,
         minWidth: 16,
         height: 16,
         paddingHorizontal: 3,
         borderRadius: 8,
-        backgroundColor: floating ? '#fff' : colors.primary,
+        backgroundColor: colors.danger,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: floating ? 1.5 : 0,
-        borderColor: colors.primary,
+        borderWidth: 1.5,
+        borderColor: colors.card,
       }}
     >
-      <Text style={{ color: floating ? colors.primary : '#fff', fontSize: 9, fontWeight: '800' }}>
-        {count > 99 ? '99+' : count}
-      </Text>
+      <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>{count > 99 ? '99+' : count}</Text>
     </View>
   );
 }
 
-function SideItem({
+function TabItem({
   icon,
   label,
   focused,
@@ -59,21 +58,21 @@ function SideItem({
 }) {
   const a = useRef(new Animated.Value(focused ? 1 : 0)).current;
   useEffect(() => {
-    Animated.spring(a, { toValue: focused ? 1 : 0, useNativeDriver: true, friction: 6 }).start();
+    Animated.spring(a, { toValue: focused ? 1 : 0, useNativeDriver: true, friction: 7 }).start();
   }, [focused, a]);
-  const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
-  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -2] });
+  const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
+  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
 
   return (
-    <TouchableOpacity activeOpacity={0.7} onPress={onPress} style={{ flex: 1, alignItems: 'center', paddingTop: 8 }}>
-      <Animated.View style={{ transform: [{ scale }, { translateY }] }}>
-        <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.5 }}>{icon}</Text>
+    <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={{ flex: 1, alignItems: 'center', paddingTop: 9 }}>
+      <View style={{ height: CIRCLE, justifyContent: 'center' }}>
+        <Animated.Text style={{ fontSize: 20, transform: [{ scale }, { translateY }] }}>{icon}</Animated.Text>
         <Badge count={badge} />
-      </Animated.View>
+      </View>
       <Text
         style={{
           fontSize: 10,
-          marginTop: 2,
+          marginTop: -1,
           fontWeight: focused ? '800' : '500',
           color: focused ? colors.primary : colors.faint,
         }}
@@ -84,46 +83,31 @@ function SideItem({
   );
 }
 
-function CartFab({ focused, badge, onPress }: { focused: boolean; badge: number; onPress: () => void }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  return (
-    <View style={{ position: 'absolute', left: 0, right: 0, top: -26, alignItems: 'center' }}>
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={onPress}
-          onPressIn={() => Animated.spring(scale, { toValue: 0.9, useNativeDriver: true }).start()}
-          onPressOut={() =>
-            Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 3, tension: 120 }).start()
-          }
-          style={{
-            width: 62,
-            height: 62,
-            borderRadius: 31,
-            backgroundColor: focused ? colors.primaryDark : colors.primary,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 4,
-            borderColor: colors.bg,
-            elevation: 8,
-            shadowColor: colors.primary,
-            shadowOpacity: 0.4,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 4 },
-          }}
-        >
-          <Text style={{ fontSize: 24 }}>🛒</Text>
-          <Badge count={badge} floating />
-        </TouchableOpacity>
-      </Animated.View>
-    </View>
-  );
-}
-
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const badges = useBadges();
+  const { width } = useWindowDimensions();
+  const itemWidth = width / TABS.length;
+
   const activeName = state.routes[state.index]?.name;
+  const activeIndex = Math.max(
+    0,
+    TABS.findIndex((t) => t.name === activeName),
+  );
+
+  const pos = useRef(new Animated.Value(activeIndex)).current;
+  useEffect(() => {
+    Animated.spring(pos, { toValue: activeIndex, useNativeDriver: true, friction: 8, tension: 70 }).start();
+  }, [activeIndex, pos]);
+
+  // Linear slide between evenly-spaced tab centers.
+  const translateX = pos.interpolate({
+    inputRange: [0, TABS.length - 1],
+    outputRange: [
+      itemWidth / 2 - CIRCLE / 2,
+      (TABS.length - 1) * itemWidth + itemWidth / 2 - CIRCLE / 2,
+    ],
+  });
 
   const navigate = (name: string) => {
     const route = state.routes.find((r) => r.name === name);
@@ -133,8 +117,6 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     if (!focused && !event.defaultPrevented) navigation.navigate(name as never);
   };
 
-  const side = (name: string) => SIDE.find((s) => s.name === name)!;
-
   return (
     <View
       style={{
@@ -143,7 +125,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         borderTopWidth: 1,
         borderTopColor: colors.border,
         paddingBottom: insets.bottom,
-        height: 60 + insets.bottom,
+        height: 62 + insets.bottom,
         elevation: 12,
         shadowColor: '#000',
         shadowOpacity: 0.06,
@@ -151,39 +133,31 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         shadowOffset: { width: 0, height: -2 },
       }}
     >
-      {/* Left group: Home, Orders */}
-      <View style={{ flex: 1, flexDirection: 'row' }}>
-        {['HomeTab', 'OrdersTab'].map((n) => {
-          const item = side(n);
-          return (
-            <SideItem
-              key={n}
-              icon={item.icon}
-              label={item.label}
-              focused={activeName === n}
-              badge={n === 'OrdersTab' ? badges.orders : 0}
-              onPress={() => navigate(n)}
-            />
-          );
-        })}
-      </View>
-
-      {/* Center spacer reserving room for the FAB */}
-      <View style={{ width: 64 }} />
-
-      {/* Right group: Profile */}
-      <View style={{ flex: 1, flexDirection: 'row' }}>
-        <SideItem
-          icon={side('ProfileTab').icon}
-          label={side('ProfileTab').label}
-          focused={activeName === 'ProfileTab'}
-          badge={0}
-          onPress={() => navigate('ProfileTab')}
+      {/* Sliding highlight under the active tab */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 9,
+          left: 0,
+          width: CIRCLE,
+          height: CIRCLE,
+          borderRadius: CIRCLE / 2,
+          backgroundColor: colors.emeraldBg,
+          borderWidth: 1.5,
+          borderColor: colors.primary,
+          transform: [{ translateX }],
+        }}
+      />
+      {TABS.map((t, i) => (
+        <TabItem
+          key={t.name}
+          icon={t.icon}
+          label={t.label}
+          focused={activeIndex === i}
+          badge={t.name === 'CartTab' ? badges.cart : t.name === 'OrdersTab' ? badges.orders : 0}
+          onPress={() => navigate(t.name)}
         />
-      </View>
-
-      {/* Raised Cart FAB (centered) */}
-      <CartFab focused={activeName === 'CartTab'} badge={badges.cart} onPress={() => navigate('CartTab')} />
+      ))}
     </View>
   );
 }
