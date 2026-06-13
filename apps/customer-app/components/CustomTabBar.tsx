@@ -21,17 +21,19 @@ const TABS = [
 ] as const;
 
 const SVG_H = 48; // background height (≈ half the old bar)
-const TOP = 18; // y of the flat top edge
-const BW = 46; // half-width of the bump
-const BLOB = 40;
+const TOP = 14; // y of the flat top edge
+const DEPTH = 26; // how far the top edge dips DOWN at the active tab (concave notch)
+const BW = 44; // half-width of the notch
+const BLOB = 52; // selector blob (bigger)
 
 function bgPath(cx: number, w: number) {
-  // Filled background: flat top at y=TOP, curving up to y=0 at the active center.
+  // Filled background: flat top at y=TOP, curving DOWN into a notch at the
+  // active center so the blob sits cradled in the dip.
   return [
     `M0 ${TOP}`,
     `H ${cx - BW}`,
-    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} 0, ${cx} 0`,
-    `C ${cx + BW * 0.55} 0, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
+    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} ${TOP + DEPTH}, ${cx} ${TOP + DEPTH}`,
+    `C ${cx + BW * 0.55} ${TOP + DEPTH}, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
     `H ${w}`,
     `V ${SVG_H}`,
     `H 0`,
@@ -40,12 +42,12 @@ function bgPath(cx: number, w: number) {
 }
 
 function topEdgePath(cx: number, w: number) {
-  // Just the curved top edge, for a crisp border line.
+  // Just the curved (dipping) top edge, for a crisp border line.
   return [
     `M0 ${TOP}`,
     `H ${cx - BW}`,
-    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} 0, ${cx} 0`,
-    `C ${cx + BW * 0.55} 0, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
+    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} ${TOP + DEPTH}, ${cx} ${TOP + DEPTH}`,
+    `C ${cx + BW * 0.55} ${TOP + DEPTH}, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
     `H ${w}`,
   ].join(' ');
 }
@@ -91,14 +93,14 @@ function TabItem({
   useEffect(() => {
     Animated.spring(a, { toValue: focused ? 1 : 0, useNativeDriver: true, friction: 7 }).start();
   }, [focused, a]);
-  const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }); // active icon noticeably bigger
-  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }); // lifted onto the bump
+  const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 1.55] }); // active icon noticeably bigger
+  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }); // settle into the notch/blob
   const labelOpacity = a.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }); // hide label when active
 
   return (
     <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={{ flex: 1, alignItems: 'center', paddingTop: 10 }}>
-      <View style={{ height: 26, justifyContent: 'center' }}>
-        <Animated.Text style={{ fontSize: 19, transform: [{ scale }, { translateY }] }}>{icon}</Animated.Text>
+      <View style={{ height: 28, justifyContent: 'center' }}>
+        <Animated.Text style={{ fontSize: 22, transform: [{ scale }, { translateY }] }}>{icon}</Animated.Text>
         <Badge count={badge} />
       </View>
       <Animated.Text
@@ -157,7 +159,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   };
 
   return (
-    <View style={{ height: SVG_H + insets.bottom + 6, backgroundColor: 'transparent' }}>
+    <View style={{ height: SVG_H + insets.bottom + 14, backgroundColor: 'transparent' }}>
       {/* Curved background */}
       <Svg width={width} height={SVG_H} style={{ position: 'absolute', bottom: insets.bottom, left: 0 }}>
         <Path d={bgPath(bumpX, width)} fill={colors.card} />
