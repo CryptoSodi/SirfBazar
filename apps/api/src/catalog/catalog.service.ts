@@ -49,6 +49,61 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // ── Catalog browse (global, merchant-independent) ────────────────────────────
+
+  /**
+   * The full SirfBazar catalog for discovery/browsing — every APPROVED product,
+   * regardless of whether a nearby merchant stocks it. Customers browse this in
+   * category pages; ordering still flows through merchant shops shown on the
+   * product detail page (offers).
+   */
+  async catalogProducts(query: SearchProductsQuery) {
+    const { page, pageSize, skip, take } = parsePage(query);
+    const where: Prisma.ProductWhereInput = { approvalStatus: ProductApprovalStatus.APPROVED };
+    if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.q?.trim()) {
+      const q = query.q.trim();
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { brand: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        skip,
+        take,
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          brand: true,
+          imageUrl: true,
+          unit: true,
+          size: true,
+          categoryId: true,
+          category: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    const items = rows.map((p) => ({
+      productId: p.id,
+      name: p.name,
+      slug: p.slug,
+      brand: p.brand,
+      imageUrl: p.imageUrl,
+      unit: p.unit,
+      size: p.size,
+      categoryId: p.categoryId,
+      category: p.category,
+    }));
+    return paged(items, total, page, pageSize);
+  }
+
   // ── Categories ──────────────────────────────────────────────────────────────
 
   async categoriesTree() {

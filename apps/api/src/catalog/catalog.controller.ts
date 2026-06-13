@@ -32,6 +32,12 @@ export class ProductsController {
     return this.catalog.search(query);
   }
 
+  /** Full global catalog for browsing/discovery (not merchant- or location-filtered). */
+  @Get('catalog')
+  catalogBrowse(@Query() query: SearchProductsQuery) {
+    return this.catalog.catalogProducts(query);
+  }
+
   @Get('nearby')
   nearby(@Query() query: NearbyProductsQuery) {
     return this.catalog.nearbyProducts(query);
