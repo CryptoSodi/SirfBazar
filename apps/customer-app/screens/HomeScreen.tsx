@@ -2,10 +2,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, API_URL, getLocation, setLocation, SbLocation } from '../lib/api';
+import { api, API_URL, getLocation, isLoggedIn, pkr, setLocation, SbLocation } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function HomeScreen() {
@@ -13,6 +13,7 @@ export default function HomeScreen() {
   const [loc, setLoc] = useState<SbLocation | null>(null);
   const [categories, setCategories] = useState<any[]>([]);
   const [shops, setShops] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -21,12 +22,14 @@ export default function HomeScreen() {
     const location = await getLocation();
     setLoc(location);
     const lq = `latitude=${location.latitude}&longitude=${location.longitude}`;
-    const [c, sh] = await Promise.allSettled([
+    const [c, sh, p] = await Promise.allSettled([
       api.get('/products/categories'),
       api.get(`/merchants/nearby?${lq}`),
+      api.get(`/products/nearby?${lq}&pageSize=20`),
     ]);
     if (c.status === 'fulfilled') setCategories(c.value ?? []);
     if (sh.status === 'fulfilled') setShops(sh.value.items ?? []);
+    if (p.status === 'fulfilled') setProducts(p.value.items ?? []);
 
     if (c.status === 'rejected') {
       setError(`Can't reach the server at ${API_URL} — ${(c.reason as any)?.message ?? 'network error'}`);
@@ -67,6 +70,15 @@ export default function HomeScreen() {
   const submitSearch = () => {
     const q = query.trim();
     navigation.navigate('Search', q ? { q } : undefined);
+  };
+
+  const addToCart = async (merchantProductId: string) => {
+    try {
+      const base = (await isLoggedIn()) ? '/cart' : '/guest/cart';
+      await api.post(`${base}/items`, { merchantProductId, quantity: 1 });
+    } catch (e: any) {
+      alert(e.message);
+    }
   };
 
   return (
@@ -137,7 +149,59 @@ export default function HomeScreen() {
               </>
             )}
 
-            <Text style={[s.h2, { marginTop: shops.length > 0 ? 18 : 0, marginBottom: 4 }]}>Shop by category</Text>
+            {products.length > 0 && (
+              <>
+                <Text style={[s.h2, { marginTop: shops.length > 0 ? 18 : 0, marginBottom: 8 }]}>Popular near you</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -2 }}>
+                  {products.map((item) => (
+                    <TouchableOpacity
+                      key={item.merchantProductId}
+                      style={[s.card, { marginRight: 8, width: 150 }]}
+                      onPress={() => navigation.navigate('Product', { productId: item.productId })}
+                    >
+                      <View
+                        style={{
+                          height: 56,
+                          borderRadius: 10,
+                          backgroundColor: colors.emeraldBg,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginBottom: 6,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {item.imageUrl ? (
+                          <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: '100%' }} />
+                        ) : (
+                          <Text style={{ fontSize: 24 }}>🛍️</Text>
+                        )}
+                      </View>
+                      <Text style={[s.body, { fontWeight: '600' }]} numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      <Text style={s.faint} numberOfLines={1}>
+                        {item.merchant?.shopName}
+                      </Text>
+                      <View style={[s.spread, { marginTop: 6 }]}>
+                        <Text style={{ fontWeight: '800', color: colors.text }}>
+                          {pkr(item.discountPricePaisa ?? item.pricePaisa)}
+                        </Text>
+                        <TouchableOpacity
+                          style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}
+                          onPress={() => addToCart(item.merchantProductId)}
+                        >
+                          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>+ Add</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            <Text style={[s.h2, { marginTop: shops.length > 0 || products.length > 0 ? 18 : 0, marginBottom: 4 }]}>
+              Shop by category
+            </Text>
           </View>
         }
         renderItem={({ item: c }) => (
