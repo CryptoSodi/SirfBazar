@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Image, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, API_URL, getLocation, isLoggedIn, pkr, setLocation, SbLocation } from '../lib/api';
+import { api, API_URL, FALLBACK_LOCATION, getLocation, isLoggedIn, pkr, setLocation, SbLocation } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function HomeScreen() {
@@ -18,22 +18,43 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
-  const load = useCallback(async () => {
-    const location = await getLocation();
-    setLoc(location);
+  const fetchFor = async (location: SbLocation) => {
     const lq = `latitude=${location.latitude}&longitude=${location.longitude}`;
     const [c, sh, p] = await Promise.allSettled([
       api.get('/products/categories'),
       api.get(`/merchants/nearby?${lq}`),
       api.get(`/products/nearby?${lq}&pageSize=20`),
     ]);
-    if (c.status === 'fulfilled') setCategories(c.value ?? []);
-    if (sh.status === 'fulfilled') setShops(sh.value.items ?? []);
-    if (p.status === 'fulfilled') setProducts(p.value.items ?? []);
+    return {
+      categories: c.status === 'fulfilled' ? c.value ?? [] : null,
+      shops: sh.status === 'fulfilled' ? sh.value.items ?? [] : [],
+      products: p.status === 'fulfilled' ? p.value.items ?? [] : [],
+      categoriesFailed: c.status === 'rejected' ? (c as PromiseRejectedResult).reason : null,
+    };
+  };
 
-    if (c.status === 'rejected') {
-      setError(`Can't reach the server at ${API_URL} — ${(c.reason as any)?.message ?? 'network error'}`);
-      console.warn('Home load failed:', (c as PromiseRejectedResult).reason);
+  const load = useCallback(async () => {
+    let location = await getLocation();
+    let res = await fetchFor(location);
+
+    // Demo fallback: if the active location has no nearby shops/products, show the
+    // seeded demo area (Lahore) so the home screen is never empty during testing.
+    const isFallback =
+      location.latitude === FALLBACK_LOCATION.latitude &&
+      location.longitude === FALLBACK_LOCATION.longitude;
+    if (!res.categoriesFailed && res.shops.length === 0 && res.products.length === 0 && !isFallback) {
+      location = FALLBACK_LOCATION;
+      await setLocation(location);
+      res = await fetchFor(location);
+    }
+
+    setLoc(location);
+    if (res.categories) setCategories(res.categories);
+    setShops(res.shops);
+    setProducts(res.products);
+    if (res.categoriesFailed) {
+      setError(`Can't reach the server at ${API_URL} — ${(res.categoriesFailed as any)?.message ?? 'network error'}`);
+      console.warn('Home load failed:', res.categoriesFailed);
     } else {
       setError(null);
     }
@@ -46,6 +67,11 @@ export default function HomeScreen() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') return;
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const lq = `latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}`;
+        // Only adopt the real GPS location if it actually has nearby shops —
+        // otherwise keep showing the demo area instead of an empty screen.
+        const nearby = await api.get(`/merchants/nearby?${lq}`).catch(() => null);
+        if (!nearby || (nearby.items ?? []).length === 0) return;
         const detected = await api
           .post('/location/detect', { latitude: pos.coords.latitude, longitude: pos.coords.longitude })
           .catch(() => null);
