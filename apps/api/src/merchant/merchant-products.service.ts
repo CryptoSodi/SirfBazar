@@ -47,6 +47,56 @@ export class MerchantProductsService {
     return paged(rows, total, page, pageSize);
   }
 
+  /**
+   * Browse the shared global catalog (APPROVED products) so a merchant can build
+   * their store without uploading images. Flags which products the merchant has
+   * already listed so the app can show "Added" vs an add button.
+   */
+  async browseCatalog(
+    userId: string,
+    query: PageQuery & { q?: string; categoryId?: string; unlistedOnly?: string },
+  ) {
+    const ctx = await this.access.merchantContext(userId);
+    const { page, pageSize, skip, take } = parsePage(query);
+
+    const where: any = { approvalStatus: ProductApprovalStatus.APPROVED };
+    if (query.q) where.name = { contains: query.q, mode: 'insensitive' };
+    if (query.categoryId) where.categoryId = query.categoryId;
+
+    // Products this merchant already lists (to flag / optionally exclude).
+    const listed = await this.prisma.merchantProduct.findMany({
+      where: { merchantId: ctx.merchantId },
+      select: { productId: true },
+    });
+    const listedSet = new Set(listed.map((l) => l.productId));
+    if (query.unlistedOnly === 'true' && listedSet.size > 0) {
+      where.id = { notIn: [...listedSet] };
+    }
+
+    const [rows, total] = await Promise.all([
+      this.prisma.product.findMany({
+        where,
+        include: { category: { select: { id: true, name: true } } },
+        orderBy: { name: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    const items = rows.map((p) => ({
+      productId: p.id,
+      name: p.name,
+      brand: p.brand,
+      imageUrl: p.imageUrl,
+      unit: p.unit,
+      size: p.size,
+      category: p.category,
+      alreadyListed: listedSet.has(p.id),
+    }));
+    return paged(items, total, page, pageSize);
+  }
+
   async add(userId: string, dto: AddMerchantProductDto) {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.INVENTORY);

@@ -1,0 +1,13 @@
+{
+  "name": "grocerapp-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "scrape": "node scrape.js",
+    "probe": "node probe.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

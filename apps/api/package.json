@@ -12,6 +12,7 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "ts-node prisma/seed.ts",
+    "import:catalog": "ts-node prisma/import-catalog.ts",
     "smoke": "ts-node test/smoke.ts"
   },
   "dependencies": {

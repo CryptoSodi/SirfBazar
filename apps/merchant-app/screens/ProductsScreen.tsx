@@ -1,11 +1,14 @@
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
 import { FlatList, Modal, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { RootStackParamList } from '../App';
 import { api, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function ProductsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<any[]>([]);
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<any>(null);
@@ -57,7 +60,12 @@ export default function ProductsScreen() {
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
       <View style={[s.pad, { paddingBottom: 8 }]}>
-        <Text style={s.h1}>Products & stock</Text>
+        <View style={s.spread}>
+          <Text style={s.h1}>Products & stock</Text>
+          <TouchableOpacity style={s.btn} onPress={() => navigation.navigate('Catalog')}>
+            <Text style={s.btnText}>+ Add from catalog</Text>
+          </TouchableOpacity>
+        </View>
         <TextInput
           style={[s.input, { marginTop: 10 }]}
           placeholder="Search your products…"

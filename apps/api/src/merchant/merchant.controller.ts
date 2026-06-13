@@ -99,6 +99,12 @@ export class MerchantController {
     return this.products.list(user.userId, query);
   }
 
+  /** Shared global catalog the merchant can add products from (no image upload needed). */
+  @Get('catalog')
+  browseCatalog(@CurrentUser() user: AuthUser, @Query() query: any) {
+    return this.products.browseCatalog(user.userId, query);
+  }
+
   @Post('products')
   addProduct(@CurrentUser() user: AuthUser, @Body() dto: AddMerchantProductDto) {
     return this.products.add(user.userId, dto);

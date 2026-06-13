@@ -11,6 +11,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import OrdersScreen from './screens/OrdersScreen';
 import OrderDetailScreen from './screens/OrderDetailScreen';
 import ProductsScreen from './screens/ProductsScreen';
+import CatalogScreen from './screens/CatalogScreen';
 import RidersScreen from './screens/RidersScreen';
 import MoreScreen from './screens/MoreScreen';
 
@@ -18,6 +19,7 @@ export type RootStackParamList = {
   Login: undefined;
   Tabs: undefined;
   OrderDetail: { orderId: string };
+  Catalog: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -84,6 +86,7 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
+        <Stack.Screen name="Catalog" component={CatalogScreen} options={{ title: 'Add from catalog' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
