@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * On a real device, localhost points at the phone — set your machine's LAN IP:
+ * Defaults to the live production API (reachable from any device).
+ * For local backend work, override with your machine's LAN IP:
  *   EXPO_PUBLIC_API_URL=http://192.168.x.x:3001/api npx expo start
  */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.sirfbazar.com/api';
 
 const KEYS = {
   guest: 'sb.guestToken',

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-/** On a real device set EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:3001/api */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3001/api';
+/** Defaults to the live production API. Local backend: EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:3001/api */
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.sirfbazar.com/api';
 
 const KEYS = { access: 'sbm.accessToken', refresh: 'sbm.refreshToken', user: 'sbm.user' };
 
