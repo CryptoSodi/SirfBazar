@@ -13,6 +13,7 @@
     "prisma:push": "prisma db push",
     "seed": "ts-node prisma/seed.ts",
     "import:catalog": "ts-node prisma/import-catalog.ts",
+    "stock:demo": "ts-node prisma/stock-demo-shops.ts",
     "smoke": "ts-node test/smoke.ts"
   },
   "dependencies": {
