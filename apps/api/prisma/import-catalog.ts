@@ -12,6 +12,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import { CATEGORY_BY_ANY_SLUG } from './category-map';
 
 const prisma = new PrismaClient();
 
@@ -49,17 +50,29 @@ async function main() {
 
   fs.mkdirSync(IMAGE_DEST_DIR, { recursive: true });
 
-  // Resolve/create categories once.
+  // Resolve/create categories once, normalizing through the canonical map so
+  // scraped categories merge into the right icon-bearing SirfBazar category.
   const categoryCache = new Map<string, string>();
   const ensureCategory = async (name: string, slug: string): Promise<string> => {
-    const key = slug || slugify(name);
-    if (categoryCache.has(key)) return categoryCache.get(key)!;
+    const scrapedSlug = slug || slugify(name);
+    const canonical = CATEGORY_BY_ANY_SLUG.get(scrapedSlug);
+    const target = canonical
+      ? { slug: canonical.slug, name: canonical.name, icon: canonical.icon, sortOrder: canonical.sortOrder }
+      : { slug: scrapedSlug, name, icon: null as string | null, sortOrder: 100 };
+
+    if (categoryCache.has(target.slug)) return categoryCache.get(target.slug)!;
     const cat = await prisma.category.upsert({
-      where: { slug: key },
-      update: {},
-      create: { name, slug: key, isActive: true, sortOrder: 100 },
+      where: { slug: target.slug },
+      update: { ...(target.icon ? { iconUrl: target.icon, name: target.name, sortOrder: target.sortOrder } : {}) },
+      create: {
+        name: target.name,
+        slug: target.slug,
+        iconUrl: target.icon,
+        isActive: true,
+        sortOrder: target.sortOrder,
+      },
     });
-    categoryCache.set(key, cat.id);
+    categoryCache.set(target.slug, cat.id);
     return cat.id;
   };
 
