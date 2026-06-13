@@ -1,10 +1,11 @@
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { FlatList, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
-import { api, getLocation, isLoggedIn, pkr } from '../lib/api';
+import { api, getLocation, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { AddButton } from '../components/AddButton';
 
 export default function SearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -34,14 +35,6 @@ export default function SearchScreen() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const add = async (merchantProductId: string) => {
-    try {
-      await api.post(`${(await isLoggedIn()) ? '/cart' : '/guest/cart'}/items`, { merchantProductId, quantity: 1 });
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
-
   return (
     <View style={s.screen}>
       <View style={[s.pad, { paddingBottom: 8 }]}>
@@ -70,8 +63,12 @@ export default function SearchScreen() {
             style={[s.card, s.row, { gap: 12 }]}
             onPress={() => navigation.navigate('Product', { productId: item.productId })}
           >
-            <View style={{ width: 48, height: 48, borderRadius: 10, backgroundColor: colors.emeraldBg, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 20 }}>🛍️</Text>
+            <View style={{ width: 48, height: 48, borderRadius: 10, backgroundColor: colors.emeraldBg, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+              {item.imageUrl ? (
+                <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: '100%' }} />
+              ) : (
+                <Text style={{ fontSize: 20 }}>🛍️</Text>
+              )}
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.body, { fontWeight: '600' }]} numberOfLines={1}>{item.name}</Text>
@@ -80,12 +77,10 @@ export default function SearchScreen() {
               </Text>
               <Text style={{ fontWeight: '800', marginTop: 2 }}>{pkr(item.discountPricePaisa ?? item.pricePaisa)}</Text>
             </View>
-            <TouchableOpacity
-              style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}
-              onPress={() => add(item.merchantProductId)}
-            >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>+ Add</Text>
-            </TouchableOpacity>
+            <AddButton
+              merchantProductId={item.merchantProductId}
+              outOfStock={!item.isAvailable || item.stockQuantity === 0}
+            />
           </TouchableOpacity>
         )}
       />

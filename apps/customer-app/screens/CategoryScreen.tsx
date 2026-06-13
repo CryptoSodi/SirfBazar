@@ -3,8 +3,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
-import { api, getLocation, isLoggedIn, pkr } from '../lib/api';
+import { api, getLocation, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { AddButton } from '../components/AddButton';
 
 /** Products in a category, from shops near the user (dynamic/hyperlocal) — mirrors
  *  the website's category page. Tap a product to view it; quick-add to cart. */
@@ -34,15 +35,6 @@ export default function CategoryScreen() {
       }
     })();
   }, [route.params.categoryId]);
-
-  const add = async (merchantProductId: string) => {
-    try {
-      const base = (await isLoggedIn()) ? '/cart' : '/guest/cart';
-      await api.post(`${base}/items`, { merchantProductId, quantity: 1 });
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
 
   if (loading) {
     return (
@@ -96,12 +88,10 @@ export default function CategoryScreen() {
             <Text style={{ fontWeight: '800', color: colors.text }}>
               {pkr(item.discountPricePaisa ?? item.pricePaisa)}
             </Text>
-            <TouchableOpacity
-              style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}
-              onPress={() => add(item.merchantProductId)}
-            >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>+ Add</Text>
-            </TouchableOpacity>
+            <AddButton
+              merchantProductId={item.merchantProductId}
+              outOfStock={!item.isAvailable || item.stockQuantity === 0}
+            />
           </View>
         </TouchableOpacity>
       )}

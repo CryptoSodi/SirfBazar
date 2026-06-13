@@ -4,6 +4,7 @@ import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, pkr, statusLabel } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { toast } from '../components/Toast';
 
 export default function OrderDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'OrderDetail'>>();
@@ -27,16 +28,16 @@ export default function OrderDetailScreen() {
       await api.post(`/orders/${route.params.orderId}/cancel`, { reason: 'Changed my mind' });
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message);
     }
   };
 
   const rate = async (stars: number) => {
     try {
       await api.post(`/orders/${route.params.orderId}/rate`, { merchantRating: stars, riderRating: stars });
-      alert('Thanks for rating!');
+      toast('Thanks for your rating!');
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message);
     }
   };
 

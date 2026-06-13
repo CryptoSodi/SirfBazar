@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, cartBase, fetchCart, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { toast } from '../components/Toast';
 
 export default function CartScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -22,7 +23,7 @@ export default function CartScreen() {
     try {
       setCart(await api.put(`${await cartBase()}/items/${itemId}`, { quantity }));
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message);
     }
   };
 
@@ -31,7 +32,7 @@ export default function CartScreen() {
     try {
       setCart(await api.post(`${await cartBase()}/apply-coupon`, { code: coupon.trim() }));
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message);
     }
   };
 

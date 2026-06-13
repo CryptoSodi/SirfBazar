@@ -1,9 +1,10 @@
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, Text, View } from 'react-native';
 import type { RootStackParamList } from '../App';
-import { api, getLocation, isLoggedIn, pkr } from '../lib/api';
+import { api, getLocation, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { AddButton } from '../components/AddButton';
 
 export default function ProductScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Product'>>();
@@ -19,15 +20,6 @@ export default function ProductScreen() {
         .catch((e) => setError(e.message));
     })();
   }, [route.params.productId]);
-
-  const add = async (merchantProductId: string) => {
-    try {
-      await api.post(`${(await isLoggedIn()) ? '/cart' : '/guest/cart'}/items`, { merchantProductId, quantity: 1 });
-      alert('Added to cart');
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
 
   if (error) return <Text style={[s.muted, s.pad]}>{error}</Text>;
   if (!product) return <Text style={[s.muted, s.pad]}>Loading…</Text>;
@@ -58,15 +50,10 @@ export default function ProductScreen() {
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
             <Text style={{ fontWeight: '800' }}>{pkr(o.discountPricePaisa ?? o.pricePaisa)}</Text>
-            <TouchableOpacity
-              style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
-              onPress={() => add(o.merchantProductId)}
-              disabled={!o.isAvailable || o.stockQuantity === 0}
-            >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
-                {o.stockQuantity === 0 ? 'Out' : '+ Add'}
-              </Text>
-            </TouchableOpacity>
+            <AddButton
+              merchantProductId={o.merchantProductId}
+              outOfStock={!o.isAvailable || o.stockQuantity === 0}
+            />
           </View>
         </View>
       ))}

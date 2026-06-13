@@ -1,9 +1,10 @@
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { FlatList, Image, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, Text, View } from 'react-native';
 import type { RootStackParamList } from '../App';
-import { api, getLocation, isLoggedIn, pkr } from '../lib/api';
+import { api, getLocation, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { AddButton } from '../components/AddButton';
 
 export default function ShopScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'Shop'>>();
@@ -17,14 +18,6 @@ export default function ShopScreen() {
       api.get(`/merchants/${route.params.merchantId}/products?pageSize=60`).then((r) => setProducts(r.items ?? [])).catch(() => undefined);
     })();
   }, [route.params.merchantId]);
-
-  const add = async (merchantProductId: string) => {
-    try {
-      await api.post(`${(await isLoggedIn()) ? '/cart' : '/guest/cart'}/items`, { merchantProductId, quantity: 1 });
-    } catch (e: any) {
-      alert(e.message);
-    }
-  };
 
   if (!shop) return <Text style={[s.muted, s.pad]}>Loading…</Text>;
 
@@ -72,15 +65,10 @@ export default function ShopScreen() {
             <Text style={s.faint}>{[mp.product.brand, mp.product.size ?? mp.product.unit].filter(Boolean).join(' · ')}</Text>
             <Text style={{ fontWeight: '800', marginTop: 2 }}>{pkr(mp.discountPricePaisa ?? mp.pricePaisa)}</Text>
           </View>
-          <TouchableOpacity
-            style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
-            onPress={() => add(mp.merchantProductId ?? mp.id)}
-            disabled={!mp.isAvailable || mp.stockQuantity === 0}
-          >
-            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
-              {mp.stockQuantity === 0 ? 'Out' : '+ Add'}
-            </Text>
-          </TouchableOpacity>
+          <AddButton
+            merchantProductId={mp.merchantProductId ?? mp.id}
+            outOfStock={!mp.isAvailable || mp.stockQuantity === 0}
+          />
         </View>
       )}
     />

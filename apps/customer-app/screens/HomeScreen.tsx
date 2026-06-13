@@ -5,8 +5,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Image, RefreshControl, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, API_URL, FALLBACK_LOCATION, getLocation, isLoggedIn, pkr, setLocation, SbLocation } from '../lib/api';
+import { api, API_URL, FALLBACK_LOCATION, getLocation, pkr, setLocation, SbLocation } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { AddButton } from '../components/AddButton';
 
 export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -96,15 +97,6 @@ export default function HomeScreen() {
   const submitSearch = () => {
     const q = query.trim();
     navigation.navigate('Search', q ? { q } : undefined);
-  };
-
-  const addToCart = async (merchantProductId: string) => {
-    try {
-      const base = (await isLoggedIn()) ? '/cart' : '/guest/cart';
-      await api.post(`${base}/items`, { merchantProductId, quantity: 1 });
-    } catch (e: any) {
-      alert(e.message);
-    }
   };
 
   return (
@@ -212,12 +204,7 @@ export default function HomeScreen() {
                         <Text style={{ fontWeight: '800', color: colors.text }}>
                           {pkr(item.discountPricePaisa ?? item.pricePaisa)}
                         </Text>
-                        <TouchableOpacity
-                          style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}
-                          onPress={() => addToCart(item.merchantProductId)}
-                        >
-                          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>+ Add</Text>
-                        </TouchableOpacity>
+                        <AddButton merchantProductId={item.merchantProductId} />
                       </View>
                     </TouchableOpacity>
                   ))}

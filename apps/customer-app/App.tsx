@@ -14,6 +14,7 @@ import ProductScreen from './screens/ProductScreen';
 import ShopScreen from './screens/ShopScreen';
 import CheckoutScreen from './screens/CheckoutScreen';
 import OrderDetailScreen from './screens/OrderDetailScreen';
+import { ToastHost } from './components/Toast';
 
 export type RootStackParamList = {
   Tabs: undefined;
@@ -80,6 +81,7 @@ export default function App() {
         <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
         <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
       </Stack.Navigator>
+      <ToastHost />
     </NavigationContainer>
   );
 }

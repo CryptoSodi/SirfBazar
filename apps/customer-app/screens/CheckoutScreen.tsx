@@ -6,6 +6,7 @@ import type { RootStackParamList } from '../App';
 import { LoginSheet } from '../components/LoginSheet';
 import { api, fetchCart, getLocation, isLoggedIn, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { toast } from '../components/Toast';
 
 const METHODS = [
   ['COD', '💵 Cash on delivery'],
@@ -66,7 +67,7 @@ export default function CheckoutScreen() {
       return;
     }
     if (!addressId) {
-      alert('Add a delivery address first.');
+      toast('Add a delivery address first.');
       return;
     }
     setBusy(true);
@@ -78,7 +79,7 @@ export default function CheckoutScreen() {
       }
       navigation.replace('OrderDetail', { orderId: order.id });
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message);
     } finally {
       setBusy(false);
     }
