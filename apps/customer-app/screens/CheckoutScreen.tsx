@@ -7,6 +7,7 @@ import { LoginSheet } from '../components/LoginSheet';
 import { api, fetchCart, getLocation, isLoggedIn, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
 import { toast } from '../components/Toast';
+import { refreshBadges } from '../lib/badges';
 
 const METHODS = [
   ['COD', '💵 Cash on delivery'],
@@ -29,6 +30,7 @@ export default function CheckoutScreen() {
   const refresh = useCallback(async () => {
     setLoggedIn(await isLoggedIn());
     fetchCart().then(setCart).catch(() => undefined);
+    refreshBadges(); // cart may have merged on login
     if (await isLoggedIn()) {
       try {
         const addrs = await api.get('/customer/addresses');
@@ -77,6 +79,7 @@ export default function CheckoutScreen() {
         const init = await api.post(`/payments/order/${order.id}/initiate`);
         await api.post(`/payments/${init.paymentId}/confirm`, {});
       }
+      refreshBadges(); // cart emptied, an order is now active
       navigation.replace('OrderDetail', { orderId: order.id });
     } catch (e: any) {
       toast(e.message);

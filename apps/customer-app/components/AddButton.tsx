@@ -3,6 +3,7 @@ import { ActivityIndicator, Animated, Text, TouchableOpacity } from 'react-nativ
 import { api, isLoggedIn } from '../lib/api';
 import { colors } from '../lib/theme';
 import { toast } from './Toast';
+import { refreshBadges } from '../lib/badges';
 
 /**
  * Reusable add-to-cart button with inline feedback (no blocking alerts):
@@ -32,6 +33,7 @@ export function AddButton({
         Animated.spring(scale, { toValue: 1.18, useNativeDriver: true, speed: 50, bounciness: 12 }),
         Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 20 }),
       ]).start();
+      refreshBadges();
       onAdded?.();
       setTimeout(() => setState('idle'), 1300);
     } catch (e: any) {

@@ -2,6 +2,7 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { Text } from 'react-native';
 import { colors } from './lib/theme';
 import HomeScreen from './screens/HomeScreen';
@@ -15,6 +16,7 @@ import ShopScreen from './screens/ShopScreen';
 import CheckoutScreen from './screens/CheckoutScreen';
 import OrderDetailScreen from './screens/OrderDetailScreen';
 import { ToastHost } from './components/Toast';
+import { refreshBadges, useBadges } from './lib/badges';
 
 export type RootStackParamList = {
   Tabs: undefined;
@@ -37,6 +39,14 @@ const TABS = [
 ] as const;
 
 function Tabs() {
+  const badges = useBadges();
+  useEffect(() => {
+    refreshBadges();
+  }, []);
+
+  const badgeFor = (name: string) =>
+    name === 'Cart' ? badges.cart : name === 'Orders' ? badges.orders : 0;
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -44,19 +54,25 @@ function Tabs() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.faint,
       }}
+      screenListeners={{ tabPress: () => refreshBadges() }}
     >
-      {TABS.map(([name, Screen, icon]) => (
-        <Tab.Screen
-          key={name}
-          name={name}
-          component={Screen}
-          options={{
-            tabBarIcon: ({ focused }) => (
-              <Text style={{ fontSize: 18, opacity: focused ? 1 : 0.55 }}>{icon}</Text>
-            ),
-          }}
-        />
-      ))}
+      {TABS.map(([name, Screen, icon]) => {
+        const count = badgeFor(name);
+        return (
+          <Tab.Screen
+            key={name}
+            name={name}
+            component={Screen}
+            options={{
+              tabBarIcon: ({ focused }) => (
+                <Text style={{ fontSize: 18, opacity: focused ? 1 : 0.55 }}>{icon}</Text>
+              ),
+              tabBarBadge: count > 0 ? count : undefined,
+              tabBarBadgeStyle: { backgroundColor: colors.primary, fontSize: 10 },
+            }}
+          />
+        );
+      })}
     </Tab.Navigator>
   );
 }

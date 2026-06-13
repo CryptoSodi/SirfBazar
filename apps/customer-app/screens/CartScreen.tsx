@@ -7,6 +7,7 @@ import type { RootStackParamList } from '../App';
 import { api, cartBase, fetchCart, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
 import { toast } from '../components/Toast';
+import { refreshBadges } from '../lib/badges';
 
 export default function CartScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -22,6 +23,7 @@ export default function CartScreen() {
   const setQty = async (itemId: string, quantity: number) => {
     try {
       setCart(await api.put(`${await cartBase()}/items/${itemId}`, { quantity }));
+      refreshBadges();
     } catch (e: any) {
       toast(e.message);
     }
@@ -31,6 +33,7 @@ export default function CartScreen() {
     if (!coupon.trim()) return;
     try {
       setCart(await api.post(`${await cartBase()}/apply-coupon`, { code: coupon.trim() }));
+      refreshBadges();
     } catch (e: any) {
       toast(e.message);
     }

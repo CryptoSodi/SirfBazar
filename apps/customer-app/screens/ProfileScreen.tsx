@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LoginSheet } from '../components/LoginSheet';
 import { api, clearAuth, isLoggedIn, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { refreshBadges } from '../lib/badges';
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<any>(null);
@@ -52,6 +53,7 @@ export default function ProfileScreen() {
               onPress={async () => {
                 await clearAuth();
                 load();
+                refreshBadges(); // recompute (orders → 0 for guest)
               }}
             >
               <Text style={s.btnGhostText}>Log out</Text>
@@ -65,7 +67,7 @@ export default function ProfileScreen() {
           SirfBazar — your nearby bazar, now online.
         </Text>
       </ScrollView>
-      <LoginSheet visible={showLogin} onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); load(); }} />
+      <LoginSheet visible={showLogin} onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); load(); refreshBadges(); }} />
     </SafeAreaView>
   );
 }

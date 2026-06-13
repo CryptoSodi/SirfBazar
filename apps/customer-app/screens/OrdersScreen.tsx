@@ -7,6 +7,7 @@ import type { RootStackParamList } from '../App';
 import { LoginSheet } from '../components/LoginSheet';
 import { api, isLoggedIn, pkr, statusLabel } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { refreshBadges } from '../lib/badges';
 
 export default function OrdersScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -38,7 +39,7 @@ export default function OrdersScreen() {
             <Text style={s.btnText}>Login</Text>
           </TouchableOpacity>
         </View>
-        <LoginSheet visible={showLogin} onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); load(); }} />
+        <LoginSheet visible={showLogin} onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); load(); refreshBadges(); }} />
       </SafeAreaView>
     );
   }

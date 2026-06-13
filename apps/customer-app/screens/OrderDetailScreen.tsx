@@ -5,6 +5,7 @@ import type { RootStackParamList } from '../App';
 import { api, pkr, statusLabel } from '../lib/api';
 import { colors, s } from '../lib/theme';
 import { toast } from '../components/Toast';
+import { refreshBadges } from '../lib/badges';
 
 export default function OrderDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'OrderDetail'>>();
@@ -27,6 +28,7 @@ export default function OrderDetailScreen() {
     try {
       await api.post(`/orders/${route.params.orderId}/cancel`, { reason: 'Changed my mind' });
       load();
+      refreshBadges(); // one fewer active order
     } catch (e: any) {
       toast(e.message);
     }
