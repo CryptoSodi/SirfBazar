@@ -1,14 +1,17 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 import { colors } from '../lib/theme';
 import { useBadges } from '../lib/badges';
 
 /**
- * Animated bottom navigation bar: a colored highlight pill glides under the
- * selected tab while the active icon lifts onto it (the style of the linked
- * package), built with React Native's Animated — no native modules.
+ * Animated bottom navigation bar:
+ *  - a short white background whose top edge curves up into a bump under the
+ *    selected tab (drawn with react-native-svg, animated as you switch tabs),
+ *  - an emerald "blob" that glides under the active tab (the selector),
+ *  - the active icon rendered larger and lifted onto the bump.
  */
 const TABS = [
   { name: 'HomeTab', icon: '🏠', label: 'Home' },
@@ -17,7 +20,35 @@ const TABS = [
   { name: 'ProfileTab', icon: '👤', label: 'Account' },
 ] as const;
 
-const CIRCLE = 46;
+const SVG_H = 48; // background height (≈ half the old bar)
+const TOP = 18; // y of the flat top edge
+const BW = 46; // half-width of the bump
+const BLOB = 40;
+
+function bgPath(cx: number, w: number) {
+  // Filled background: flat top at y=TOP, curving up to y=0 at the active center.
+  return [
+    `M0 ${TOP}`,
+    `H ${cx - BW}`,
+    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} 0, ${cx} 0`,
+    `C ${cx + BW * 0.55} 0, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
+    `H ${w}`,
+    `V ${SVG_H}`,
+    `H 0`,
+    'Z',
+  ].join(' ');
+}
+
+function topEdgePath(cx: number, w: number) {
+  // Just the curved top edge, for a crisp border line.
+  return [
+    `M0 ${TOP}`,
+    `H ${cx - BW}`,
+    `C ${cx - BW * 0.5} ${TOP}, ${cx - BW * 0.55} 0, ${cx} 0`,
+    `C ${cx + BW * 0.55} 0, ${cx + BW * 0.5} ${TOP}, ${cx + BW} ${TOP}`,
+    `H ${w}`,
+  ].join(' ');
+}
 
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -60,25 +91,27 @@ function TabItem({
   useEffect(() => {
     Animated.spring(a, { toValue: focused ? 1 : 0, useNativeDriver: true, friction: 7 }).start();
   }, [focused, a]);
-  const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
-  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
+  const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 1.5] }); // active icon noticeably bigger
+  const translateY = a.interpolate({ inputRange: [0, 1], outputRange: [0, -10] }); // lifted onto the bump
+  const labelOpacity = a.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }); // hide label when active
 
   return (
-    <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={{ flex: 1, alignItems: 'center', paddingTop: 9 }}>
-      <View style={{ height: CIRCLE, justifyContent: 'center' }}>
-        <Animated.Text style={{ fontSize: 20, transform: [{ scale }, { translateY }] }}>{icon}</Animated.Text>
+    <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={{ flex: 1, alignItems: 'center', paddingTop: 10 }}>
+      <View style={{ height: 26, justifyContent: 'center' }}>
+        <Animated.Text style={{ fontSize: 19, transform: [{ scale }, { translateY }] }}>{icon}</Animated.Text>
         <Badge count={badge} />
       </View>
-      <Text
+      <Animated.Text
         style={{
           fontSize: 10,
-          marginTop: -1,
-          fontWeight: focused ? '800' : '500',
-          color: focused ? colors.primary : colors.faint,
+          marginTop: 1,
+          fontWeight: '600',
+          color: colors.faint,
+          opacity: labelOpacity,
         }}
       >
         {label}
-      </Text>
+      </Animated.Text>
     </TouchableOpacity>
   );
 }
@@ -88,6 +121,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const badges = useBadges();
   const { width } = useWindowDimensions();
   const itemWidth = width / TABS.length;
+  const centerOf = (i: number) => i * itemWidth + itemWidth / 2;
 
   const activeName = state.routes[state.index]?.name;
   const activeIndex = Math.max(
@@ -96,17 +130,22 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   );
 
   const pos = useRef(new Animated.Value(activeIndex)).current;
+  const [bumpX, setBumpX] = useState(centerOf(activeIndex));
+
+  // Recompute the bump center each animation frame (JS-driven so we can read it).
   useEffect(() => {
-    Animated.spring(pos, { toValue: activeIndex, useNativeDriver: true, friction: 8, tension: 70 }).start();
+    const id = pos.addListener(({ value }) => setBumpX(centerOf(value)));
+    return () => pos.removeListener(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos, itemWidth]);
+
+  useEffect(() => {
+    Animated.spring(pos, { toValue: activeIndex, useNativeDriver: false, friction: 9, tension: 80 }).start();
   }, [activeIndex, pos]);
 
-  // Linear slide between evenly-spaced tab centers.
-  const translateX = pos.interpolate({
+  const blobX = pos.interpolate({
     inputRange: [0, TABS.length - 1],
-    outputRange: [
-      itemWidth / 2 - CIRCLE / 2,
-      (TABS.length - 1) * itemWidth + itemWidth / 2 - CIRCLE / 2,
-    ],
+    outputRange: [centerOf(0) - BLOB / 2, centerOf(TABS.length - 1) - BLOB / 2],
   });
 
   const navigate = (name: string) => {
@@ -118,46 +157,42 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   };
 
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        backgroundColor: colors.card,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-        paddingBottom: insets.bottom,
-        height: 62 + insets.bottom,
-        elevation: 12,
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: -2 },
-      }}
-    >
-      {/* Sliding highlight under the active tab */}
+    <View style={{ height: SVG_H + insets.bottom + 6, backgroundColor: 'transparent' }}>
+      {/* Curved background */}
+      <Svg width={width} height={SVG_H} style={{ position: 'absolute', bottom: insets.bottom, left: 0 }}>
+        <Path d={bgPath(bumpX, width)} fill={colors.card} />
+        <Path d={topEdgePath(bumpX, width)} stroke={colors.border} strokeWidth={1} fill="none" />
+      </Svg>
+
+      {/* Gliding emerald blob (the selector) sitting in the bump */}
       <Animated.View
         style={{
           position: 'absolute',
-          top: 9,
+          bottom: insets.bottom + SVG_H - BLOB + 6,
           left: 0,
-          width: CIRCLE,
-          height: CIRCLE,
-          borderRadius: CIRCLE / 2,
+          width: BLOB,
+          height: BLOB,
+          borderRadius: BLOB / 2,
           backgroundColor: colors.emeraldBg,
           borderWidth: 1.5,
           borderColor: colors.primary,
-          transform: [{ translateX }],
+          transform: [{ translateX: blobX }],
         }}
       />
-      {TABS.map((t, i) => (
-        <TabItem
-          key={t.name}
-          icon={t.icon}
-          label={t.label}
-          focused={activeIndex === i}
-          badge={t.name === 'CartTab' ? badges.cart : t.name === 'OrdersTab' ? badges.orders : 0}
-          onPress={() => navigate(t.name)}
-        />
-      ))}
+
+      {/* Tab items */}
+      <View style={{ flexDirection: 'row', position: 'absolute', bottom: insets.bottom, left: 0, right: 0, height: SVG_H }}>
+        {TABS.map((t, i) => (
+          <TabItem
+            key={t.name}
+            icon={t.icon}
+            label={t.label}
+            focused={activeIndex === i}
+            badge={t.name === 'CartTab' ? badges.cart : t.name === 'OrdersTab' ? badges.orders : 0}
+            onPress={() => navigate(t.name)}
+          />
+        ))}
+      </View>
     </View>
   );
 }
