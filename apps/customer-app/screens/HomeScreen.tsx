@@ -233,7 +233,7 @@ export default function HomeScreen() {
         renderItem={({ item: c }) => (
           <TouchableOpacity
             style={[s.card, { flex: 1, alignItems: 'center', paddingVertical: 16 }]}
-            onPress={() => navigation.navigate('Search', { q: c.name })}
+            onPress={() => navigation.navigate('Category', { categoryId: c.id, name: c.name })}
           >
             <Text style={{ fontSize: 30 }}>{c.iconUrl || '🛍️'}</Text>
             <Text style={[s.faint, { textAlign: 'center', marginTop: 6 }]} numberOfLines={2}>

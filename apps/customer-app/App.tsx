@@ -6,6 +6,7 @@ import { Text } from 'react-native';
 import { colors } from './lib/theme';
 import HomeScreen from './screens/HomeScreen';
 import SearchScreen from './screens/SearchScreen';
+import CategoryScreen from './screens/CategoryScreen';
 import CartScreen from './screens/CartScreen';
 import OrdersScreen from './screens/OrdersScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -17,6 +18,7 @@ import OrderDetailScreen from './screens/OrderDetailScreen';
 export type RootStackParamList = {
   Tabs: undefined;
   Search: { q?: string } | undefined;
+  Category: { categoryId: string; name: string };
   Product: { productId: string };
   Shop: { merchantId: string };
   Checkout: undefined;
@@ -72,6 +74,7 @@ export default function App() {
       >
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
+        <Stack.Screen name="Category" component={CategoryScreen} options={{ title: 'Category' }} />
         <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
         <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
