@@ -56,7 +56,7 @@ export function useLocation() {
         () => {
           storeLocation(FALLBACK_LOCATION);
         },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300_000 },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 60_000 },
       );
     }
 

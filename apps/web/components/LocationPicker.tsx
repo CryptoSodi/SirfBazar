@@ -36,6 +36,7 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
         setBusy(false);
         alert('Location permission denied — pick an area below instead.');
       },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
   };
 

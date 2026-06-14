@@ -72,8 +72,9 @@ export function AddressForm({
       },
       () => {
         setLocating(false);
-        setError('Location permission denied — pin it on the map or type it instead.');
+        setError('Couldn’t get an accurate fix — pin it on the map instead.');
       },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
   };
 
