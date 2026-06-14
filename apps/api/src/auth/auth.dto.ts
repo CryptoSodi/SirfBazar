@@ -32,8 +32,8 @@ export class GoogleLoginDto {
 
   /** Which app the user is signing in from — gates role access. Default customer. */
   @IsOptional()
-  @IsIn(['customer', 'admin', 'merchant'])
-  context?: 'customer' | 'admin' | 'merchant';
+  @IsIn(['customer', 'admin', 'merchant', 'rider'])
+  context?: 'customer' | 'admin' | 'merchant' | 'rider';
 }
 
 export class RefreshTokenDto {

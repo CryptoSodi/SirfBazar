@@ -7,8 +7,19 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "sirfbazar-merchant",
-    "splash": { "backgroundColor": "#0f172a", "resizeMode": "contain" },
-    "ios": { "supportsTablet": true },
-    "android": { "package": "pk.sirfbazar.merchant" }
+    "splash": {
+      "backgroundColor": "#0f172a",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "pk.sirfbazar.merchant"
+    },
+    "android": {
+      "package": "pk.sirfbazar.merchant"
+    },
+    "plugins": [
+      "@react-native-google-signin/google-signin"
+    ]
   }
 }

@@ -118,7 +118,7 @@ export class AuthService {
 
   // ── Google ────────────────────────────────────────────────────────────────
 
-  async googleLogin(idToken: string, context: 'customer' | 'admin' | 'merchant' = 'customer') {
+  async googleLogin(idToken: string, context: 'customer' | 'admin' | 'merchant' | 'rider' = 'customer') {
     const profile = await this.googleAuth.verifyIdToken(idToken);
 
     let user = await this.prisma.user.findUnique({ where: { googleId: profile.googleId } });
@@ -142,21 +142,22 @@ export class AuthService {
           },
         });
       } else {
-        throw new UnauthorizedException(
-          context === 'admin'
-            ? 'This Google account is not an authorised admin user.'
-            : 'This Google account is not registered as a merchant.',
-        );
+        const what =
+          context === 'admin' ? 'an authorised admin' : context === 'rider' ? 'a registered rider' : 'a registered merchant';
+        throw new UnauthorizedException(`This Google account is not ${what}.`);
       }
     }
 
     // Gate by the surface the user signed in from: a consumer Google account must
-    // not unlock admin/merchant access (and vice-versa).
+    // not unlock admin/merchant/rider access (and vice-versa).
     if (context === 'admin' && !ADMIN_ROLES.includes(user.role as UserRole)) {
       throw new UnauthorizedException('This account does not have admin access.');
     }
     if (context === 'merchant' && !MERCHANT_ROLES.includes(user.role as UserRole)) {
       throw new UnauthorizedException('This account is not a merchant.');
+    }
+    if (context === 'rider' && user.role !== UserRole.RIDER) {
+      throw new UnauthorizedException('This account is not a rider.');
     }
 
     if (user.status === 'SUSPENDED') throw new UnauthorizedException('Account is suspended');

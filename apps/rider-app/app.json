@@ -7,16 +7,23 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "sirfbazar-rider",
-    "splash": { "backgroundColor": "#059669", "resizeMode": "contain" },
+    "splash": {
+      "backgroundColor": "#059669",
+      "resizeMode": "contain"
+    },
     "ios": {
       "supportsTablet": false,
+      "bundleIdentifier": "pk.sirfbazar.rider",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "SirfBazar Rider shares your location with the customer during active deliveries."
       }
     },
     "android": {
       "package": "pk.sirfbazar.rider",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "plugins": [
       [
@@ -24,7 +31,8 @@
         {
           "locationWhenInUsePermission": "SirfBazar Rider shares your location with the customer during active deliveries."
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ]
   }
 }

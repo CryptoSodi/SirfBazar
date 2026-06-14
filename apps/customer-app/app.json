@@ -22,7 +22,9 @@
       "package": "pk.sirfbazar.customer",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "config": {
         "googleMaps": {
@@ -38,6 +40,11 @@
         }
       ],
       "@react-native-google-signin/google-signin"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6434c258-86f8-4cc6-8d42-cd89dc0e31c2"
+      }
+    }
   }
 }

@@ -5,6 +5,7 @@ import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, storeAuth } from '../lib/api';
+import { googleSignInIdToken } from '../lib/google';
 import { colors, s } from '../lib/theme';
 
 export default function LoginScreen() {
@@ -46,6 +47,21 @@ export default function LoginScreen() {
     }
   };
 
+  const google = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const idToken = await googleSignInIdToken();
+      const auth = await api.post('/auth/google-login', { idToken, context: 'merchant' });
+      await storeAuth(auth);
+      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+    } catch (e: any) {
+      setError(e?.message ?? 'Google sign-in failed. It needs a development build (not Expo Go).');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={[s.screen, { backgroundColor: colors.dark }]}>
       <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
@@ -65,6 +81,18 @@ export default function LoginScreen() {
               />
               <TouchableOpacity style={[s.btn, { marginTop: 12 }]} onPress={sendOtp} disabled={busy}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Send code</Text>}
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12 }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+                <Text style={[s.faint, { marginHorizontal: 8 }]}>or</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: '#e2e8f0' }} />
+              </View>
+              <TouchableOpacity
+                onPress={google}
+                disabled={busy}
+                style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+              >
+                <Text style={{ color: '#0f172a', fontWeight: '700' }}>🔵 Continue with Google</Text>
               </TouchableOpacity>
             </>
           ) : (
