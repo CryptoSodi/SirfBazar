@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { afterLogin, api } from '@/lib/api';
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
 /**
  * Login-at-checkout bottom sheet (spec 16.3): phone OTP or Google.
@@ -55,19 +58,11 @@ export function LoginSheet({
     }
   };
 
-  const google = async () => {
+  const loginWithIdToken = async (idToken: string) => {
     setBusy(true);
     setError('');
     try {
-      // Dev flow: the mock verifier accepts "mock:<email>:<name>".
-      const email = prompt('Google login (dev): enter your email', 'demo@sirfbazar.pk');
-      if (!email) {
-        setBusy(false);
-        return;
-      }
-      const auth = await api.post('/auth/google-login', {
-        idToken: `mock:${email}:${email.split('@')[0]}`,
-      });
+      const auth = await api.post('/auth/google-login', { idToken });
       await afterLogin(auth);
       onSuccess();
     } catch (e: any) {
@@ -75,6 +70,12 @@ export function LoginSheet({
     } finally {
       setBusy(false);
     }
+  };
+
+  // Dev fallback when no Google client ID is configured (mock verifier).
+  const googleDev = async () => {
+    const email = prompt('Google login (dev): enter your email', 'demo@sirfbazar.pk');
+    if (email) await loginWithIdToken(`mock:${email}:${email.split('@')[0]}`);
   };
 
   return (
@@ -107,9 +108,21 @@ export function LoginSheet({
               {busy ? 'Sending…' : 'Send code'}
             </button>
             <div className="text-center text-xs uppercase tracking-wide text-stone-400">or</div>
-            <button className="btn-secondary w-full" onClick={google} disabled={busy}>
-              <span className="mr-2">🔵</span> Continue with Google
-            </button>
+            {GOOGLE_CLIENT_ID ? (
+              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                <div className="flex justify-center">
+                  <GoogleLogin
+                    onSuccess={(cr) => cr.credential && loginWithIdToken(cr.credential)}
+                    onError={() => setError('Google sign-in failed — please try again.')}
+                    width="320"
+                  />
+                </div>
+              </GoogleOAuthProvider>
+            ) : (
+              <button className="btn-secondary w-full" onClick={googleDev} disabled={busy}>
+                <span className="mr-2">🔵</span> Continue with Google (dev)
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
