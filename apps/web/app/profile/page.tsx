@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { api, isLoggedIn, logoutLocal } from '@/lib/api';
 import { formatPKR } from '@/lib/format';
 import { LoginSheet } from '@/components/LoginSheet';
+import { AddressForm } from '@/components/AddressForm';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -13,6 +14,7 @@ export default function ProfilePage() {
   const [addresses, setAddresses] = useState<any[]>([]);
   const [needLogin, setNeedLogin] = useState(false);
   const [name, setName] = useState('');
+  const [editing, setEditing] = useState<any | 'new' | null>(null);
 
   const load = () => {
     if (!isLoggedIn()) {
@@ -67,27 +69,57 @@ export default function ProfilePage() {
       </section>
 
       <section className="card p-5">
-        <h2 className="mb-3 font-bold">Saved addresses</h2>
-        <div className="space-y-2">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-bold">Saved addresses</h2>
+          {editing !== 'new' && (
+            <button className="btn-secondary text-sm" onClick={() => setEditing('new')}>+ Add address</button>
+          )}
+        </div>
+
+        {editing === 'new' && (
+          <AddressForm onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />
+        )}
+
+        <div className="mt-2 space-y-2">
           {addresses.map((a) => (
-            <div key={a.id} className="flex items-start justify-between gap-2 rounded-xl border border-stone-200 p-3 text-sm">
-              <div>
-                <b>{a.label}</b> {a.isDefault && <span className="chip ml-1 bg-emerald-50 text-emerald-700">default</span>}
-                <div className="text-stone-500">{a.fullAddress}</div>
-              </div>
-              <div className="flex shrink-0 gap-2 text-xs">
-                {!a.isDefault && (
-                  <button className="text-emerald-700 underline" onClick={async () => { await api.put(`/customer/addresses/${a.id}/default`); load(); }}>
-                    make default
-                  </button>
-                )}
-                <button className="text-red-600 underline" onClick={async () => { if (confirm('Delete this address?')) { await api.del(`/customer/addresses/${a.id}`); load(); } }}>
-                  delete
-                </button>
-              </div>
+            <div key={a.id} className="rounded-xl border border-stone-200 p-3 text-sm">
+              {editing && editing !== 'new' && editing.id === a.id ? (
+                <AddressForm initial={a} onSaved={() => { setEditing(null); load(); }} onCancel={() => setEditing(null)} />
+              ) : (
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <b>{a.label}</b> {a.isDefault && <span className="chip ml-1 bg-emerald-50 text-emerald-700">default</span>}
+                    <div className="text-stone-500">{a.fullAddress}</div>
+                    {a.instructions && <div className="text-xs text-stone-400">📝 {a.instructions}</div>}
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
+                    <button className="text-emerald-700 underline" onClick={() => setEditing(a)}>edit</button>
+                    {!a.isDefault && (
+                      <button className="text-emerald-700 underline" onClick={async () => { await api.put(`/customer/addresses/${a.id}/default`); load(); }}>
+                        make default
+                      </button>
+                    )}
+                    <button
+                      className="text-red-600 underline"
+                      onClick={async () => {
+                        if (confirm('Delete this address?')) {
+                          try {
+                            await api.del(`/customer/addresses/${a.id}`);
+                            load();
+                          } catch (e: any) {
+                            alert(e.message);
+                          }
+                        }
+                      }}
+                    >
+                      delete
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
-          {addresses.length === 0 && <p className="text-sm text-stone-500">No saved addresses yet — add one at checkout.</p>}
+          {addresses.length === 0 && editing !== 'new' && <p className="text-sm text-stone-500">No saved addresses yet.</p>}
         </div>
       </section>
 

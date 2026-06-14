@@ -1,11 +1,12 @@
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { LoginSheet } from '../components/LoginSheet';
-import { api, fetchCart, getLocation, isLoggedIn, pkr } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { api, fetchCart, isLoggedIn, pkr } from '../lib/api';
+import { detectCurrentLocation, LocationPermissionError } from '../lib/location';
+import { useTheme } from '../lib/theme';
 import { toast } from '../components/Toast';
 import { refreshBadges } from '../lib/badges';
 
@@ -16,15 +17,20 @@ const METHODS = [
   ['CARD', '💳 Card'],
 ] as const;
 
+const ADDR_ICONS: Record<string, string> = { Home: '🏠', Work: '💼', Family: '❤️' };
+const addrIcon = (label?: string) => (label && ADDR_ICONS[label]) || '📍';
+
 export default function CheckoutScreen() {
+  const { colors, s } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'Checkout'>>();
   const [cart, setCart] = useState<any>(null);
   const [loggedIn, setLoggedIn] = useState(false);
   const [addresses, setAddresses] = useState<any[]>([]);
   const [addressId, setAddressId] = useState('');
   const [method, setMethod] = useState('COD');
   const [showLogin, setShowLogin] = useState(false);
-  const [newAddress, setNewAddress] = useState('');
+  const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -35,32 +41,48 @@ export default function CheckoutScreen() {
       try {
         const addrs = await api.get('/customer/addresses');
         setAddresses(addrs);
-        const def = addrs.find((a: any) => a.isDefault) ?? addrs[0];
-        if (def) setAddressId(def.id);
+        // Default to the default address, but never clobber an existing choice
+        // (e.g. one the user just picked or returned from the editor with).
+        setAddressId((cur) => cur || (addrs.find((a: any) => a.isDefault) ?? addrs[0])?.id || '');
       } catch {
         /* fresh customer */
       }
     }
   }, []);
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // Reload on focus so a newly added address shows up when returning here.
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
-  const saveAddress = async () => {
-    if (!newAddress.trim()) return;
-    const loc = await getLocation();
-    const created = await api.post('/customer/addresses', {
-      label: 'Home',
-      fullAddress: newAddress.trim(),
-      city: 'Lahore',
-      latitude: loc.latitude,
-      longitude: loc.longitude,
-      isDefault: true,
-    });
-    setAddresses((prev) => [...prev, created]);
-    setAddressId(created.id);
-    setNewAddress('');
+  // When the address editor sends us back, select the address just saved.
+  useEffect(() => {
+    const sel = route.params?.selectedAddressId;
+    if (sel) setAddressId(sel);
+  }, [route.params?.selectedAddressId]);
+
+  const useCurrentLocation = async () => {
+    setLocating(true);
+    try {
+      const loc = await detectCurrentLocation();
+      navigation.navigate('AddressEdit', {
+        fromCheckout: true,
+        prefill: {
+          fullAddress: loc.fullAddress,
+          area: loc.area,
+          city: loc.city,
+          province: loc.province,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+        },
+      });
+    } catch (e: any) {
+      toast(e instanceof LocationPermissionError ? e.message : 'Could not get your location. Try again outdoors.');
+    } finally {
+      setLocating(false);
+    }
   };
 
   const placeOrder = async () => {
@@ -94,28 +116,40 @@ export default function CheckoutScreen() {
     <ScrollView style={s.screen} contentContainerStyle={[s.pad, { paddingBottom: 32 }]}>
       <Text style={s.h2}>Delivery address</Text>
       {!loggedIn ? (
-        <Text style={[s.muted, { marginTop: 6 }]}>You will add your address after a quick login below.</Text>
+        <Text style={[s.muted, { marginTop: 6 }]}>You will choose your address after a quick login below.</Text>
       ) : (
         <View style={{ marginTop: 8, gap: 8 }}>
-          {addresses.map((a) => (
-            <TouchableOpacity
-              key={a.id}
-              style={[s.card, addressId === a.id && { borderColor: colors.primary, backgroundColor: colors.emeraldBg }]}
-              onPress={() => setAddressId(a.id)}
-            >
-              <Text style={[s.body, { fontWeight: '700' }]}>{a.label}</Text>
-              <Text style={s.muted}>{a.fullAddress}</Text>
-            </TouchableOpacity>
-          ))}
+          {addresses.length === 0 && (
+            <Text style={s.muted}>No saved addresses yet — use your current location or add one.</Text>
+          )}
+          {addresses.map((a) => {
+            const active = addressId === a.id;
+            return (
+              <TouchableOpacity
+                key={a.id}
+                style={[s.card, s.row, { gap: 10 }, active && { borderColor: colors.primary, backgroundColor: colors.emeraldBg }]}
+                onPress={() => setAddressId(a.id)}
+              >
+                <Text style={{ fontSize: 20 }}>{addrIcon(a.label)}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={[s.row, { gap: 8 }]}>
+                    <Text style={[s.body, { fontWeight: '700' }]}>{a.label}</Text>
+                    {a.isDefault && (
+                      <Text style={[s.chip, { backgroundColor: colors.emeraldBg, color: colors.primary, fontWeight: '700' }]}>Default</Text>
+                    )}
+                  </View>
+                  <Text style={s.muted} numberOfLines={2}>{a.fullAddress}</Text>
+                </View>
+                <Text style={{ color: active ? colors.primary : colors.faint, fontWeight: '900', fontSize: 16 }}>{active ? '●' : '○'}</Text>
+              </TouchableOpacity>
+            );
+          })}
           <View style={[s.row, { gap: 8 }]}>
-            <TextInput
-              style={[s.input, { flex: 1 }]}
-              placeholder="New address (house, street, area)"
-              value={newAddress}
-              onChangeText={setNewAddress}
-            />
-            <TouchableOpacity style={s.btnGhost} onPress={saveAddress}>
-              <Text style={s.btnGhostText}>Save</Text>
+            <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={useCurrentLocation} disabled={locating}>
+              {locating ? <ActivityIndicator color={colors.primary} /> : <Text style={s.btnGhostText}>📍 Use current location</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={() => navigation.navigate('AddressEdit', { fromCheckout: true })}>
+              <Text style={s.btnGhostText}>➕ Add new</Text>
             </TouchableOpacity>
           </View>
         </View>

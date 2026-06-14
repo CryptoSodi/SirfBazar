@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { colors } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { useBadges } from '../lib/badges';
 
 /**
@@ -47,6 +47,7 @@ function topEdgePath(cx: number, w: number) {
 }
 
 function Badge({ count }: { count: number }) {
+  const { colors } = useTheme();
   if (count <= 0) return null;
   return (
     <View
@@ -83,6 +84,7 @@ function TabItem({
   badge: number;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
   const a = useRef(new Animated.Value(focused ? 1 : 0)).current;
   useEffect(() => {
     Animated.spring(a, { toValue: focused ? 1 : 0, useNativeDriver: true, friction: 7 }).start();
@@ -113,6 +115,7 @@ function TabItem({
 }
 
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const badges = useBadges();
   const { width } = useWindowDimensions();
@@ -152,10 +155,13 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     if (!focused && !event.defaultPrevented) navigation.navigate(name as never);
   };
 
+  // Opaque page-colored container so the headroom above the curved bar never
+  // shows the native window through (which can be white if the OS is in light
+  // mode while the app is forced to dark).
   return (
-    <View style={{ height: SVG_H + insets.bottom + 14, backgroundColor: 'transparent' }}>
-      {/* Curved background */}
+    <View style={{ height: SVG_H + insets.bottom + 14, backgroundColor: colors.bg }}>
       <Svg width={width} height={SVG_H} style={{ position: 'absolute', bottom: insets.bottom, left: 0 }}>
+        {/* Curved bar surface + hairline top edge, both themed. */}
         <Path d={bgPath(bumpX, width)} fill={colors.card} />
         <Path d={topEdgePath(bumpX, width)} stroke={colors.border} strokeWidth={1} fill="none" />
       </Svg>

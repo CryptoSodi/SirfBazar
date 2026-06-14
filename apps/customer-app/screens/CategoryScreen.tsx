@@ -4,12 +4,13 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, getLocation, pkr } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { AddButton } from '../components/AddButton';
 
 /** Products in a category, from shops near the user (dynamic/hyperlocal) — mirrors
  *  the website's category page. Tap a product to view it; quick-add to cart. */
 export default function CategoryScreen() {
+  const { colors, s } = useTheme();
   const route = useRoute<RouteProp<RootStackParamList, 'Category'>>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<any[]>([]);

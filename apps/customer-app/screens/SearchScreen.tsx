@@ -4,10 +4,11 @@ import { useEffect, useState } from 'react';
 import { FlatList, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, getLocation, pkr } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { AddButton } from '../components/AddButton';
 
 export default function SearchScreen() {
+  const { colors, s } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Search'>>();
   const [q, setQ] = useState(route.params?.q ?? '');
@@ -41,6 +42,7 @@ export default function SearchScreen() {
         <TextInput
           style={s.input}
           placeholder="Search milk, bread, medicine…"
+          placeholderTextColor={colors.faint}
           value={q}
           onChangeText={setQ}
           autoFocus={!route.params?.q}
@@ -75,7 +77,7 @@ export default function SearchScreen() {
               <Text style={s.faint} numberOfLines={1}>
                 {item.merchant?.shopName} {item.merchant?.distanceKm != null && `· ${item.merchant.distanceKm} km`}
               </Text>
-              <Text style={{ fontWeight: '800', marginTop: 2 }}>{pkr(item.discountPricePaisa ?? item.pricePaisa)}</Text>
+              <Text style={{ fontWeight: '800', marginTop: 2, color: colors.text }}>{pkr(item.discountPricePaisa ?? item.pricePaisa)}</Text>
             </View>
             <AddButton
               merchantProductId={item.merchantProductId}

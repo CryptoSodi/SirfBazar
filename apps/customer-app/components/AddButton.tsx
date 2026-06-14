@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Text, TouchableOpacity } from 'react-native';
 import { api, isLoggedIn } from '../lib/api';
-import { colors } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { toast } from './Toast';
 import { refreshBadges } from '../lib/badges';
 
@@ -19,6 +19,7 @@ export function AddButton({
   outOfStock?: boolean;
   onAdded?: () => void;
 }) {
+  const { colors } = useTheme();
   const [state, setState] = useState<'idle' | 'adding' | 'added'>('idle');
   const scale = useRef(new Animated.Value(1)).current;
 

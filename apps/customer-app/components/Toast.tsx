@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
+import { useTheme } from '../lib/theme';
 
 /**
  * Lightweight global toast. Call `toast('message')` from anywhere; a single
@@ -11,9 +12,13 @@ export function toast(message: string) {
 }
 
 export function ToastHost() {
+  const { isDark } = useTheme();
   const [msg, setMsg] = useState<string | null>(null);
   const opacity = useRef(new Animated.Value(0)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Invert the pill so it reads on either background.
+  const pillBg = isDark ? '#f5f5f4' : '#1c1917';
+  const pillFg = isDark ? '#1c1917' : '#fff';
 
   useEffect(() => {
     show = (m: string) => {
@@ -34,8 +39,8 @@ export function ToastHost() {
 
   if (!msg) return null;
   return (
-    <Animated.View pointerEvents="none" style={[styles.toast, { opacity }]}>
-      <Text style={styles.text}>{msg}</Text>
+    <Animated.View pointerEvents="none" style={[styles.toast, { opacity, backgroundColor: pillBg }]}>
+      <Text style={[styles.text, { color: pillFg }]}>{msg}</Text>
     </Animated.View>
   );
 }

@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import { FlatList, Image, Text, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, getLocation, pkr } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { AddButton } from '../components/AddButton';
 
 export default function ShopScreen() {
+  const { colors, s } = useTheme();
   const route = useRoute<RouteProp<RootStackParamList, 'Shop'>>();
   const [shop, setShop] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -63,7 +64,7 @@ export default function ShopScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[s.body, { fontWeight: '600' }]} numberOfLines={2}>{mp.product.name}</Text>
             <Text style={s.faint}>{[mp.product.brand, mp.product.size ?? mp.product.unit].filter(Boolean).join(' · ')}</Text>
-            <Text style={{ fontWeight: '800', marginTop: 2 }}>{pkr(mp.discountPricePaisa ?? mp.pricePaisa)}</Text>
+            <Text style={{ fontWeight: '800', marginTop: 2, color: colors.text }}>{pkr(mp.discountPricePaisa ?? mp.pricePaisa)}</Text>
           </View>
           <AddButton
             merchantProductId={mp.merchantProductId ?? mp.id}

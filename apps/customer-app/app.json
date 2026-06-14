@@ -4,7 +4,7 @@
     "slug": "sirfbazar-customer",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "scheme": "sirfbazar",
     "splash": {
@@ -19,7 +19,12 @@
     },
     "android": {
       "package": "pk.sirfbazar.customer",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBdkMmH4b_cdnLIQfLFS2zDK84tNvqrbAs"
+        }
+      }
     },
     "plugins": [
       [

@@ -6,6 +6,7 @@ import { api, fetchCart, isLoggedIn } from '@/lib/api';
 import { formatPKR } from '@/lib/format';
 import { useLocation } from '@/lib/location';
 import { LoginSheet } from '@/components/LoginSheet';
+import { AddressForm } from '@/components/AddressForm';
 
 const PAYMENT_METHODS = [
   { id: 'COD', label: 'Cash on delivery', icon: '💵' },
@@ -116,14 +117,14 @@ export default function CheckoutPage() {
                 ))}
               </div>
               {showNewAddress ? (
-                <NewAddressForm
+                <AddressForm
+                  defaultCoords={location ? { latitude: location.latitude, longitude: location.longitude } : null}
                   onSaved={(a) => {
                     setAddresses((prev) => [...prev, a]);
                     setAddressId(a.id);
                     setShowNewAddress(false);
                   }}
                   onCancel={() => setShowNewAddress(false)}
-                  defaultCoords={location}
                 />
               ) : (
                 <button className="btn-secondary mt-3 text-sm" onClick={() => setShowNewAddress(true)}>
@@ -194,65 +195,6 @@ export default function CheckoutPage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function NewAddressForm({
-  onSaved,
-  onCancel,
-  defaultCoords,
-}: {
-  onSaved: (a: any) => void;
-  onCancel: () => void;
-  defaultCoords: { latitude: number; longitude: number } | null;
-}) {
-  const [form, setForm] = useState({ label: 'Home', fullAddress: '', area: '', city: 'Lahore', contactName: '', contactPhone: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const save = async () => {
-    if (!form.fullAddress.trim()) {
-      setError('Address is required');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      const created = await api.post('/customer/addresses', {
-        ...form,
-        latitude: defaultCoords?.latitude,
-        longitude: defaultCoords?.longitude,
-        isDefault: true,
-      });
-      onSaved(created);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
-
-  return (
-    <div className="mt-3 space-y-2 rounded-xl border border-stone-200 p-3">
-      <div className="grid grid-cols-2 gap-2">
-        <input className="input" placeholder="Label (Home/Office)" value={form.label} onChange={set('label')} />
-        <input className="input" placeholder="City" value={form.city} onChange={set('city')} />
-      </div>
-      <input className="input" placeholder="Full address (house, street, block)" value={form.fullAddress} onChange={set('fullAddress')} />
-      <input className="input" placeholder="Area (e.g. Gulberg III)" value={form.area} onChange={set('area')} />
-      <div className="grid grid-cols-2 gap-2">
-        <input className="input" placeholder="Contact name" value={form.contactName} onChange={set('contactName')} />
-        <input className="input" placeholder="Contact phone" value={form.contactPhone} onChange={set('contactPhone')} />
-      </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <div className="flex gap-2">
-        <button className="btn-primary text-sm" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save address'}</button>
-        <button className="btn-secondary text-sm" onClick={onCancel}>Cancel</button>
-      </div>
-      <p className="text-[11px] text-stone-400">Your current map location is attached for accurate delivery distance.</p>
     </div>
   );
 }

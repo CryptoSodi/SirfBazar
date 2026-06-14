@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, pkr, statusLabel } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { toast } from '../components/Toast';
 import { refreshBadges } from '../lib/badges';
 
 export default function OrderDetailScreen() {
+  const { colors, s } = useTheme();
   const route = useRoute<RouteProp<RootStackParamList, 'OrderDetail'>>();
   const [track, setTrack] = useState<any>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -51,7 +52,7 @@ export default function OrderDetailScreen() {
     <ScrollView style={s.screen} contentContainerStyle={[s.pad, { paddingBottom: 32 }]}>
       <View style={s.spread}>
         <Text style={s.h2}>{track.orderNumber}</Text>
-        <Text style={{ fontWeight: '800' }}>{pkr(track.totalAmountPaisa)}</Text>
+        <Text style={{ fontWeight: '800', color: colors.text }}>{pkr(track.totalAmountPaisa)}</Text>
       </View>
       <Text style={{ color: track.status === 'DELIVERED' ? colors.primary : colors.amber, fontWeight: '700', marginTop: 4 }}>
         {statusLabel(track.status)} · {track.paymentStatus?.replace(/_/g, ' ').toLowerCase()}

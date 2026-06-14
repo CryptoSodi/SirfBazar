@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
+import { ACTIVE_ORDER_STATUSES } from '../common/constants';
 
 @Injectable()
 export class CustomersService {
@@ -119,6 +120,15 @@ export class CustomersService {
       where: { id: addressId, customerId },
     });
     if (!existing) throw new NotFoundException('Address not found');
+    // The Order→address FK is optional (nulls on delete), so deleting an address
+    // tied to an in-progress order would silently strip the rider's drop-off.
+    const activeOrder = await this.prisma.order.findFirst({
+      where: { deliveryAddressId: addressId, status: { in: ACTIVE_ORDER_STATUSES } },
+      select: { id: true },
+    });
+    if (activeOrder) {
+      throw new BadRequestException('This address is being used by an active order and cannot be deleted right now.');
+    }
     await this.prisma.customerAddress.delete({ where: { id: addressId } });
     if (existing.isDefault) {
       const next = await this.prisma.customerAddress.findFirst({

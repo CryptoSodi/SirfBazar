@@ -3,10 +3,11 @@ import { useEffect, useState } from 'react';
 import { Image, ScrollView, Text, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { api, getLocation, pkr } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { AddButton } from '../components/AddButton';
 
 export default function ProductScreen() {
+  const { colors, s } = useTheme();
   const route = useRoute<RouteProp<RootStackParamList, 'Product'>>();
   const [product, setProduct] = useState<any>(null);
   const [error, setError] = useState('');
@@ -49,7 +50,7 @@ export default function ProductScreen() {
             </Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 6 }}>
-            <Text style={{ fontWeight: '800' }}>{pkr(o.discountPricePaisa ?? o.pricePaisa)}</Text>
+            <Text style={{ fontWeight: '800', color: colors.text }}>{pkr(o.discountPricePaisa ?? o.pricePaisa)}</Text>
             <AddButton
               merchantProductId={o.merchantProductId}
               outOfStock={!o.isAvailable || o.stockQuantity === 0}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { afterLogin, api } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 
 /** Login-at-checkout bottom sheet: phone OTP (dev master code 123456) or mock Google. */
 export function LoginSheet({
@@ -13,6 +13,7 @@ export function LoginSheet({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { colors, s } = useTheme();
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('+9230');
   const [code, setCode] = useState('');
@@ -49,7 +50,7 @@ export function LoginSheet({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
-        <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}>
           <Text style={s.h2}>Login to continue</Text>
           <Text style={[s.muted, { marginTop: 4, marginBottom: 16 }]}>
             Your cart is safe — you will continue right where you left off.
@@ -62,6 +63,7 @@ export function LoginSheet({
                 value={phone}
                 onChangeText={setPhone}
                 placeholder="+92 3xx xxxxxxx"
+                placeholderTextColor={colors.faint}
                 keyboardType="phone-pad"
               />
               <TouchableOpacity style={[s.btn, { marginTop: 12 }]} onPress={sendOtp} disabled={busy}>
@@ -76,6 +78,7 @@ export function LoginSheet({
                 value={code}
                 onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
                 placeholder="••••••"
+                placeholderTextColor={colors.faint}
                 keyboardType="number-pad"
                 autoFocus
               />

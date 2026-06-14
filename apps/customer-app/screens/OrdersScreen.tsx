@@ -6,10 +6,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { LoginSheet } from '../components/LoginSheet';
 import { api, isLoggedIn, pkr, statusLabel } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { refreshBadges } from '../lib/badges';
 
 export default function OrdersScreen() {
+  const { colors, s } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [orders, setOrders] = useState<any[] | null>(null);
   const [needLogin, setNeedLogin] = useState(false);
@@ -62,7 +63,7 @@ export default function OrdersScreen() {
             <TouchableOpacity style={s.card} onPress={() => navigation.navigate('OrderDetail', { orderId: o.id })}>
               <View style={s.spread}>
                 <Text style={[s.body, { fontWeight: '700' }]}>{o.orderNumber}</Text>
-                <Text style={{ fontWeight: '800' }}>{pkr(o.totalAmountPaisa)}</Text>
+                <Text style={{ fontWeight: '800', color: colors.text }}>{pkr(o.totalAmountPaisa)}</Text>
               </View>
               <Text style={s.faint} numberOfLines={1}>🏪 {shops}</Text>
               <View style={[s.spread, { marginTop: 6 }]}>

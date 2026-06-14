@@ -6,10 +6,11 @@ import { FlatList, Image, RefreshControl, ScrollView, Text, TextInput, Touchable
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, API_URL, FALLBACK_LOCATION, getLocation, pkr, setLocation, SbLocation } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { AddButton } from '../components/AddButton';
 
 export default function HomeScreen() {
+  const { colors, s } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [loc, setLoc] = useState<SbLocation | null>(null);
   const [categories, setCategories] = useState<any[]>([]);
@@ -111,6 +112,7 @@ export default function HomeScreen() {
           <TextInput
             style={[s.input, { flex: 1 }]}
             placeholder="Search milk, bread, medicine…"
+            placeholderTextColor={colors.faint}
             value={query}
             onChangeText={setQuery}
             returnKeyType="search"
@@ -133,7 +135,7 @@ export default function HomeScreen() {
         ListHeaderComponent={
           <View style={{ marginBottom: 6 }}>
             {error && (
-              <View style={[s.card, { marginBottom: 12, borderColor: colors.danger, backgroundColor: '#fef2f2' }]}>
+              <View style={[s.card, { marginBottom: 12, borderColor: colors.danger, backgroundColor: colors.dangerBg }]}>
                 <Text style={{ color: colors.danger, fontWeight: '700' }}>Couldn’t load content</Text>
                 <Text style={[s.faint, { color: colors.danger, marginTop: 2 }]}>{error}</Text>
                 <Text style={[s.faint, { marginTop: 6 }]}>Pull down to retry.</Text>

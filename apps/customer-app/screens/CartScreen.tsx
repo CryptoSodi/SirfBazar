@@ -5,11 +5,21 @@ import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, cartBase, fetchCart, pkr } from '../lib/api';
-import { colors, s } from '../lib/theme';
+import { useTheme } from '../lib/theme';
 import { toast } from '../components/Toast';
 import { refreshBadges } from '../lib/badges';
 
 export default function CartScreen() {
+  const { colors, s } = useTheme();
+  const qtyBtn = {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    width: 28,
+    height: 28,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  };
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [cart, setCart] = useState<any>(null);
   const [coupon, setCoupon] = useState('');
@@ -72,13 +82,13 @@ export default function CartScreen() {
                 </View>
                 <View style={[s.row, { gap: 10 }]}>
                   <TouchableOpacity onPress={() => setQty(item.id, item.quantity - 1)} style={qtyBtn}>
-                    <Text style={{ fontWeight: '800' }}>−</Text>
+                    <Text style={{ fontWeight: '800', color: colors.text }}>−</Text>
                   </TouchableOpacity>
-                  <Text style={{ fontWeight: '700' }}>{item.quantity}</Text>
+                  <Text style={{ fontWeight: '700', color: colors.text }}>{item.quantity}</Text>
                   <TouchableOpacity onPress={() => setQty(item.id, item.quantity + 1)} style={qtyBtn}>
-                    <Text style={{ fontWeight: '800' }}>+</Text>
+                    <Text style={{ fontWeight: '800', color: colors.text }}>+</Text>
                   </TouchableOpacity>
-                  <Text style={{ fontWeight: '800', width: 70, textAlign: 'right' }}>{pkr(item.totalPaisa)}</Text>
+                  <Text style={{ fontWeight: '800', width: 70, textAlign: 'right', color: colors.text }}>{pkr(item.totalPaisa)}</Text>
                 </View>
               </View>
             ))}
@@ -90,6 +100,7 @@ export default function CartScreen() {
           <TextInput
             style={[s.input, { flex: 1 }]}
             placeholder="Coupon code"
+            placeholderTextColor={colors.faint}
             autoCapitalize="characters"
             value={coupon}
             onChangeText={(v) => setCoupon(v.toUpperCase())}
@@ -127,17 +138,8 @@ export default function CartScreen() {
   );
 }
 
-const qtyBtn = {
-  borderWidth: 1,
-  borderColor: colors.border,
-  borderRadius: 8,
-  width: 28,
-  height: 28,
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-};
-
 function Bill({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  const { colors, s } = useTheme();
   return (
     <View style={[s.spread, { marginTop: 4 }]}>
       <Text style={s.muted}>{label}</Text>
