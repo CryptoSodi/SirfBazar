@@ -13,13 +13,17 @@
     },
     "ios": {
       "supportsTablet": false,
+      "bundleIdentifier": "pk.sirfbazar.customer",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "SirfBazar uses your location to show shops and products near you."
       }
     },
     "android": {
       "package": "pk.sirfbazar.customer",
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBdkMmH4b_cdnLIQfLFS2zDK84tNvqrbAs"
@@ -32,7 +36,8 @@
         {
           "locationWhenInUsePermission": "SirfBazar uses your location to show shops and products near you."
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ]
   }
 }

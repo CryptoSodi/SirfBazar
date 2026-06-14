@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { afterLogin, api } from '../lib/api';
+import { googleSignInIdToken } from '../lib/google';
 import { useTheme } from '../lib/theme';
 
 /** Login-at-checkout bottom sheet: phone OTP (dev master code 123456) or mock Google. */
@@ -47,6 +48,21 @@ export function LoginSheet({
     }
   };
 
+  const google = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const idToken = await googleSignInIdToken();
+      const auth = await api.post('/auth/google-login', { idToken });
+      await afterLogin(auth);
+      onSuccess();
+    } catch (e: any) {
+      setError(e?.message ?? 'Google sign-in failed. It needs a development build (not Expo Go).');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
@@ -68,6 +84,14 @@ export function LoginSheet({
               />
               <TouchableOpacity style={[s.btn, { marginTop: 12 }]} onPress={sendOtp} disabled={busy}>
                 {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Send code</Text>}
+              </TouchableOpacity>
+              <View style={[s.row, { marginVertical: 12 }]}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                <Text style={[s.faint, { marginHorizontal: 8 }]}>or</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+              </View>
+              <TouchableOpacity style={s.btnGhost} onPress={google} disabled={busy}>
+                <Text style={s.btnGhostText}>🔵 Continue with Google</Text>
               </TouchableOpacity>
             </>
           ) : (
