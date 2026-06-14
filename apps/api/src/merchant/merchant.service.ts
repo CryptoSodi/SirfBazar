@@ -50,6 +50,8 @@ export class MerchantService {
           closingTime: dto.closingTime ?? '21:00',
           minimumOrderValuePaisa: dto.minimumOrderValuePaisa ?? 0,
           averagePreparationMinutes: dto.averagePreparationMinutes ?? 20,
+          logoUrl: dto.logoUrl ?? null,
+          bannerUrl: dto.bannerUrl ?? null,
           approvalStatus: MerchantApprovalStatus.SUBMITTED,
           isOnline: false,
         },

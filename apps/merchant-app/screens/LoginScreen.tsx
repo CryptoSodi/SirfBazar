@@ -48,9 +48,18 @@ export default function LoginScreen() {
     setError('');
     try {
       const idToken = await googleSignInIdToken();
-      const auth = await api.post('/auth/google-login', { idToken, context: 'merchant' });
-      await storeAuth(auth);
-      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+      try {
+        const auth = await api.post('/auth/google-login', { idToken, context: 'merchant' });
+        await storeAuth(auth);
+        navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+        return;
+      } catch {
+        // Not a merchant yet — sign in as the base account and start onboarding.
+        const idAuth = await api.post('/auth/google-login', { idToken, context: 'customer' });
+        await storeAuth(idAuth);
+        navigation.reset({ index: 0, routes: [{ name: 'Onboard' }] });
+        return;
+      }
     } catch (e: any) {
       setError(e?.message ?? 'Google sign-in failed. It needs a development build (not Expo Go).');
     } finally {

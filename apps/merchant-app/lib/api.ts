@@ -77,6 +77,40 @@ export const api = {
   del: (p: string) => request('DELETE', p),
 };
 
+/** Upload an image (multipart) and get back its public URL. */
+export async function uploadImage(uri: string): Promise<string> {
+  const access = await AsyncStorage.getItem(KEYS.access);
+  const name = uri.split('/').pop() || 'photo.jpg';
+  const extRaw = (name.split('.').pop() || 'jpg').toLowerCase();
+  const type = `image/${extRaw === 'jpg' ? 'jpeg' : extRaw}`;
+  const form = new FormData();
+  form.append('file', { uri, name, type } as any);
+  const res = await fetch(`${API_URL}/uploads/image`, {
+    method: 'POST',
+    headers: access ? { authorization: `Bearer ${access}` } : {},
+    body: form as any,
+  });
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    /* empty */
+  }
+  if (!res.ok) throw new Error(data?.message || 'Image upload failed');
+  return data.url as string;
+}
+
+/** After /merchant/onboard returns fresh tokens, persist them + the user profile. */
+export async function finishOnboarding(tokens: { accessToken: string; refreshToken: string }) {
+  await AsyncStorage.multiSet([
+    [KEYS.access, tokens.accessToken],
+    [KEYS.refresh, tokens.refreshToken],
+  ]);
+  const user = await request('GET', '/auth/me');
+  await AsyncStorage.setItem(KEYS.user, JSON.stringify(user));
+  return user;
+}
+
 export function pkr(paisa: number | null | undefined): string {
   return `Rs ${Math.round((paisa ?? 0) / 100).toLocaleString()}`;
 }

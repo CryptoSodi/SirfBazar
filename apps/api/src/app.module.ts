@@ -23,6 +23,7 @@ import { MerchantModule } from './merchant/merchant.module';
 import { AdminModule } from './admin/admin.module';
 import { SupportModule } from './support/support.module';
 import { SettlementsModule } from './settlements/settlements.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -55,6 +56,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AdminModule,
     SupportModule,
     SettlementsModule,
+    UploadsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

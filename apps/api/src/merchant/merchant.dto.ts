@@ -77,6 +77,14 @@ export class OnboardMerchantDto {
   @IsInt()
   @Min(1)
   averagePreparationMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  bannerUrl?: string;
 }
 
 export class UpdateMerchantProfileDto {

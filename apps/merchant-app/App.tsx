@@ -14,9 +14,11 @@ import ProductsScreen from './screens/ProductsScreen';
 import CatalogScreen from './screens/CatalogScreen';
 import RidersScreen from './screens/RidersScreen';
 import MoreScreen from './screens/MoreScreen';
+import OnboardScreen from './screens/OnboardScreen';
 
 export type RootStackParamList = {
   Login: undefined;
+  Onboard: undefined;
   Tabs: undefined;
   OrderDetail: { orderId: string };
   Catalog: undefined;
@@ -84,6 +86,7 @@ export default function App() {
         screenOptions={{ headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' } }}
       >
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Onboard" component={OnboardScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
         <Stack.Screen name="Catalog" component={CatalogScreen} options={{ title: 'Add from catalog' }} />
