@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
 import { FALLBACK_LOCATION, useLocation } from '@/lib/location';
 
@@ -38,7 +39,7 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
     );
   };
 
-  return (
+  const ui = (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
       <div
         className="card max-h-[80vh] w-full max-w-md overflow-y-auto p-5 sm:rounded-2xl rounded-b-none"
@@ -84,4 +85,8 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+
+  // Render outside the (backdrop-blurred) header so `fixed` is viewport-relative.
+  if (typeof document === 'undefined') return null;
+  return createPortal(ui, document.body);
 }

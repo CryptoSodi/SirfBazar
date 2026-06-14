@@ -2,6 +2,7 @@
 
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { GOOGLE_MAPS_API_KEY } from '@/lib/maps';
 
 const FALLBACK = { lat: 31.5204, lng: 74.3587 }; // Gulberg, Lahore
@@ -36,7 +37,7 @@ export function MapPicker({
     );
   };
 
-  return (
+  const ui = (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
       <div
         className="card w-full max-w-lg overflow-hidden rounded-b-none p-0 sm:rounded-2xl"
@@ -98,4 +99,7 @@ export function MapPicker({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(ui, document.body);
 }
