@@ -24,7 +24,7 @@ export class AuthController {
   @Public()
   @Post('google-login')
   googleLogin(@Body() dto: GoogleLoginDto) {
-    return this.authService.googleLogin(dto.idToken);
+    return this.authService.googleLogin(dto.idToken, dto.context);
   }
 
   @Public()

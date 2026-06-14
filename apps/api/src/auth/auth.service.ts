@@ -10,7 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '../common/constants';
+import { ADMIN_ROLES, MERCHANT_ROLES, UserRole } from '../common/constants';
 import { generateNumericCode, generateToken } from '../common/utils/ids';
 import { IOtpService, OTP_SERVICE } from './otp/otp.interface';
 import { GOOGLE_AUTH_SERVICE, IGoogleAuthService } from './google/google-auth.service';
@@ -118,28 +118,47 @@ export class AuthService {
 
   // ── Google ────────────────────────────────────────────────────────────────
 
-  async googleLogin(idToken: string) {
+  async googleLogin(idToken: string, context: 'customer' | 'admin' | 'merchant' = 'customer') {
     const profile = await this.googleAuth.verifyIdToken(idToken);
 
     let user = await this.prisma.user.findUnique({ where: { googleId: profile.googleId } });
     if (!user) {
       const byEmail = await this.prisma.user.findUnique({ where: { email: profile.email } });
-      user = byEmail
-        ? await this.prisma.user.update({
-            where: { id: byEmail.id },
-            data: { googleId: profile.googleId, isEmailVerified: true },
-          })
-        : await this.prisma.user.create({
-            data: {
-              googleId: profile.googleId,
-              email: profile.email,
-              fullName: profile.name || null,
-              profileImageUrl: profile.picture || null,
-              role: UserRole.CUSTOMER,
-              isEmailVerified: true,
-            },
-          });
+      if (byEmail) {
+        user = await this.prisma.user.update({
+          where: { id: byEmail.id },
+          data: { googleId: profile.googleId, isEmailVerified: true },
+        });
+      } else if (context === 'customer') {
+        // Consumers self-register on first Google sign-in; staff/merchants do not.
+        user = await this.prisma.user.create({
+          data: {
+            googleId: profile.googleId,
+            email: profile.email,
+            fullName: profile.name || null,
+            profileImageUrl: profile.picture || null,
+            role: UserRole.CUSTOMER,
+            isEmailVerified: true,
+          },
+        });
+      } else {
+        throw new UnauthorizedException(
+          context === 'admin'
+            ? 'This Google account is not an authorised admin user.'
+            : 'This Google account is not registered as a merchant.',
+        );
+      }
     }
+
+    // Gate by the surface the user signed in from: a consumer Google account must
+    // not unlock admin/merchant access (and vice-versa).
+    if (context === 'admin' && !ADMIN_ROLES.includes(user.role as UserRole)) {
+      throw new UnauthorizedException('This account does not have admin access.');
+    }
+    if (context === 'merchant' && !MERCHANT_ROLES.includes(user.role as UserRole)) {
+      throw new UnauthorizedException('This account is not a merchant.');
+    }
+
     if (user.status === 'SUSPENDED') throw new UnauthorizedException('Account is suspended');
 
     await this.ensureCustomerRecord(user.id, user.role);

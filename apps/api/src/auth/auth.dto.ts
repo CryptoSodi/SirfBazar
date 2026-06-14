@@ -29,6 +29,11 @@ export class GoogleLoginDto {
   @IsString()
   @IsNotEmpty()
   idToken: string;
+
+  /** Which app the user is signing in from — gates role access. Default customer. */
+  @IsOptional()
+  @IsIn(['customer', 'admin', 'merchant'])
+  context?: 'customer' | 'admin' | 'merchant';
 }
 
 export class RefreshTokenDto {
