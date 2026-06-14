@@ -33,11 +33,7 @@ export default function LoginScreen() {
     setBusy(true);
     setError('');
     try {
-      const auth = await api.post('/auth/verify-otp', { phoneNumber: phone.trim(), code: code.trim() });
-      if (!['MERCHANT_OWNER', 'MERCHANT_STAFF'].includes(auth.user?.role)) {
-        setError('This number is not a merchant account. Onboard your shop on the SirfBazar website first.');
-        return;
-      }
+      const auth = await api.post('/auth/verify-otp', { phoneNumber: phone.trim(), code: code.trim(), context: 'merchant' });
       await storeAuth(auth);
       navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
     } catch (e: any) {

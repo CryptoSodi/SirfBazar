@@ -33,11 +33,7 @@ export default function LoginScreen() {
     setBusy(true);
     setError('');
     try {
-      const auth = await api.post('/auth/verify-otp', { phoneNumber: phone.trim(), code: code.trim() });
-      if (auth.user?.role !== 'RIDER') {
-        setError('This number is not a rider account. Ask your shop owner to add you as a rider.');
-        return;
-      }
+      const auth = await api.post('/auth/verify-otp', { phoneNumber: phone.trim(), code: code.trim(), context: 'rider' });
       await storeAuth(auth);
       navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
     } catch (e: any) {

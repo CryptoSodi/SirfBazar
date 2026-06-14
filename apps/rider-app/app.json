@@ -22,7 +22,9 @@
       "package": "pk.sirfbazar.rider",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "plugins": [
@@ -33,6 +35,11 @@
         }
       ],
       "@react-native-google-signin/google-signin"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "493f7f43-898b-4c40-b9a4-bc0c51bf3313"
+      }
+    }
   }
 }

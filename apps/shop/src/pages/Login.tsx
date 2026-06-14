@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
-import { api, isMerchant, storeAuth } from '../lib/api';
+import { api, storeAuth } from '../lib/api';
 import { btnCls, inputCls } from '../components/ui';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -16,10 +16,7 @@ export default function Login() {
 
   // Only merchant owners/staff may use this panel.
   const finish = (auth: any) => {
-    if (!isMerchant(auth.user)) {
-      setError('This account is not a merchant. Use a shop owner or staff account.');
-      return;
-    }
+    // The backend (context: 'merchant') guarantees only merchant accounts reach here.
     storeAuth(auth);
     navigate('/');
   };
@@ -41,7 +38,7 @@ export default function Login() {
     setBusy(true);
     setError('');
     try {
-      finish(await api.post('/auth/verify-otp', { phoneNumber: phone.trim(), code: code.trim() }));
+      finish(await api.post('/auth/verify-otp', { phoneNumber: phone.trim(), code: code.trim(), context: 'merchant' }));
     } catch (e: any) {
       setError(e.message);
     } finally {

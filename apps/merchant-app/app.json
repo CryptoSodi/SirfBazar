@@ -20,6 +20,11 @@
     },
     "plugins": [
       "@react-native-google-signin/google-signin"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3dd9ec80-1b9c-418a-bfb2-fc124b20a765"
+      }
+    }
   }
 }

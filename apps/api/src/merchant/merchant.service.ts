@@ -54,10 +54,9 @@ export class MerchantService {
           isOnline: false,
         },
       });
-      await tx.user.update({
-        where: { id: userId },
-        data: { role: UserRole.MERCHANT_OWNER },
-      });
+      // Don't overwrite User.role — the account keeps any customer/rider access.
+      // Merchant capability is the Merchant record itself; the merchant token is
+      // minted on login by context (and the fresh token below).
       return created;
     });
 

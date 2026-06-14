@@ -10,12 +10,15 @@ import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { ADMIN_ROLES, MERCHANT_ROLES, UserRole } from '../common/constants';
+import { ADMIN_ROLES, UserRole } from '../common/constants';
 import { generateNumericCode, generateToken } from '../common/utils/ids';
 import { IOtpService, OTP_SERVICE } from './otp/otp.interface';
 import { GOOGLE_AUTH_SERVICE, IGoogleAuthService } from './google/google-auth.service';
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+/** Which app the user signed in from — selects which "hat" (role) the token grants. */
+type AuthContext = 'customer' | 'admin' | 'merchant' | 'rider';
 
 @Injectable()
 export class AuthService {
@@ -69,7 +72,7 @@ export class AuthService {
     return { sent: true, expiresInSeconds: this.otpTtlSeconds };
   }
 
-  async verifyOtp(phoneNumber: string, code: string, fullName?: string) {
+  async verifyOtp(phoneNumber: string, code: string, fullName?: string, context: AuthContext = 'customer') {
     const otp = await this.prisma.otpCode.findFirst({
       where: { phoneNumber, purpose: 'LOGIN', consumedAt: null },
       orderBy: { createdAt: 'desc' },
@@ -96,6 +99,8 @@ export class AuthService {
 
     let user = await this.prisma.user.findUnique({ where: { phoneNumber } });
     if (!user) {
+      // Only the customer flow self-registers; merchant/rider accounts are provisioned.
+      if (context !== 'customer') throw new UnauthorizedException('No account exists for this number.');
       user = await this.prisma.user.create({
         data: {
           phoneNumber,
@@ -112,13 +117,13 @@ export class AuthService {
     }
     if (user.status === 'SUSPENDED') throw new UnauthorizedException('Account is suspended');
 
-    await this.ensureCustomerRecord(user.id, user.role);
-    return this.issueTokens(user.id, user.role as UserRole);
+    const role = await this.resolveContextRole(user.id, context);
+    return this.issueTokens(user.id, role);
   }
 
   // ── Google ────────────────────────────────────────────────────────────────
 
-  async googleLogin(idToken: string, context: 'customer' | 'admin' | 'merchant' | 'rider' = 'customer') {
+  async googleLogin(idToken: string, context: AuthContext = 'customer') {
     const profile = await this.googleAuth.verifyIdToken(idToken);
 
     let user = await this.prisma.user.findUnique({ where: { googleId: profile.googleId } });
@@ -148,22 +153,10 @@ export class AuthService {
       }
     }
 
-    // Gate by the surface the user signed in from: a consumer Google account must
-    // not unlock admin/merchant/rider access (and vice-versa).
-    if (context === 'admin' && !ADMIN_ROLES.includes(user.role as UserRole)) {
-      throw new UnauthorizedException('This account does not have admin access.');
-    }
-    if (context === 'merchant' && !MERCHANT_ROLES.includes(user.role as UserRole)) {
-      throw new UnauthorizedException('This account is not a merchant.');
-    }
-    if (context === 'rider' && user.role !== UserRole.RIDER) {
-      throw new UnauthorizedException('This account is not a rider.');
-    }
-
     if (user.status === 'SUSPENDED') throw new UnauthorizedException('Account is suspended');
 
-    await this.ensureCustomerRecord(user.id, user.role);
-    return this.issueTokens(user.id, user.role as UserRole);
+    const role = await this.resolveContextRole(user.id, context);
+    return this.issueTokens(user.id, role);
   }
 
   // ── Admin email/password ──────────────────────────────────────────────────
@@ -247,13 +240,43 @@ export class AuthService {
     return safe;
   }
 
-  /** Customers are created lazily at first login so guests can convert instantly. */
-  private async ensureCustomerRecord(userId: string, role: string) {
-    if (role !== UserRole.CUSTOMER) return;
+  /** Customers are created lazily on first customer-context login. */
+  private async ensureCustomerRecord(userId: string) {
     await this.prisma.customer.upsert({
       where: { userId },
       update: {},
       create: { userId },
     });
+  }
+
+  /**
+   * Pick the role to mint into the token for the app the user signed in from.
+   * Capability = the linked record exists, so ONE account can be a customer, a
+   * merchant, and a rider at once — the active role is chosen per app at login.
+   */
+  private async resolveContextRole(userId: string, context: AuthContext): Promise<UserRole> {
+    if (context === 'customer') {
+      await this.ensureCustomerRecord(userId);
+      return UserRole.CUSTOMER;
+    }
+    if (context === 'merchant') {
+      const merchant = await this.prisma.merchant.findUnique({ where: { userId }, select: { id: true } });
+      if (merchant) return UserRole.MERCHANT_OWNER;
+      const staff = await this.prisma.merchantStaff.findFirst({
+        where: { userId, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (staff) return UserRole.MERCHANT_STAFF;
+      throw new UnauthorizedException('This account is not a merchant — onboard your shop first.');
+    }
+    if (context === 'rider') {
+      const rider = await this.prisma.rider.findUnique({ where: { userId }, select: { id: true } });
+      if (rider) return UserRole.RIDER;
+      throw new UnauthorizedException('This account is not a rider.');
+    }
+    // admin
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    if (u && ADMIN_ROLES.includes(u.role as UserRole)) return u.role as UserRole;
+    throw new UnauthorizedException('This account does not have admin access.');
   }
 }

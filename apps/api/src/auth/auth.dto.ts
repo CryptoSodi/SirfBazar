@@ -23,6 +23,11 @@ export class VerifyOtpDto {
   @IsOptional()
   @IsString()
   fullName?: string;
+
+  /** Which app the user is signing in from — selects the role granted. */
+  @IsOptional()
+  @IsIn(['customer', 'admin', 'merchant', 'rider'])
+  context?: 'customer' | 'admin' | 'merchant' | 'rider';
 }
 
 export class GoogleLoginDto {

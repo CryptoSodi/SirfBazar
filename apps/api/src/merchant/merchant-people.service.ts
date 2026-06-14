@@ -43,23 +43,30 @@ export class MerchantPeopleService {
 
     const existingUser = await this.prisma.user.findUnique({
       where: { phoneNumber: dto.phoneNumber },
+      include: { rider: true },
     });
-    if (existingUser) {
-      throw new BadRequestException('This phone number already belongs to another account');
+    if (existingUser?.rider) {
+      throw new BadRequestException('This phone number is already registered as a rider');
     }
 
     const rider = await this.prisma.$transaction(async (tx) => {
-      const riderUser = await tx.user.create({
-        data: {
-          phoneNumber: dto.phoneNumber,
-          fullName: dto.fullName,
-          role: UserRole.RIDER,
-        },
-      });
+      // Attach a rider profile to the existing account if the phone is already
+      // registered (so a customer can also be a rider); otherwise provision one.
+      const riderUserId =
+        existingUser?.id ??
+        (
+          await tx.user.create({
+            data: {
+              phoneNumber: dto.phoneNumber,
+              fullName: dto.fullName,
+              role: UserRole.RIDER,
+            },
+          })
+        ).id;
       return tx.rider.create({
         data: {
           merchantId: ctx.merchantId,
-          userId: riderUser.id,
+          userId: riderUserId,
           fullName: dto.fullName,
           phoneNumber: dto.phoneNumber,
           vehicleType: dto.vehicleType ?? 'MOTORBIKE',
