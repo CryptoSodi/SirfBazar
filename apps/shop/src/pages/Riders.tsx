@@ -38,6 +38,16 @@ export default function Riders() {
     }
   };
 
+  const decide = async (r: any, action: 'approve' | 'reject') => {
+    try {
+      await api.post(`/merchant/riders/${r.id}/${action}`);
+      toast(action === 'approve' ? 'Rider approved' : 'Request rejected');
+      reload();
+    } catch (e: any) {
+      toast(e.message, false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -62,10 +72,17 @@ export default function Riders() {
             </td>
             <td className="px-4 py-2.5 text-xs">{r.isOnline ? '🟢 online' : '⚪ offline'}</td>
             <td className="px-4 py-2.5">
-              <Badge value={r.isActive ? 'ACTIVE' : 'INACTIVE'} />
+              <Badge value={r.approvalStatus === 'PENDING' ? 'PENDING' : r.isActive ? 'ACTIVE' : 'INACTIVE'} />
             </td>
             <td className="px-4 py-2.5 text-right">
-              {r.isActive ? (
+              {r.approvalStatus === 'PENDING' ? (
+                <div className="flex justify-end gap-2">
+                  <button className={btnCls} onClick={() => decide(r, 'approve')}>Approve</button>
+                  <button className={btnDanger} onClick={() => confirm(`Reject ${r.fullName}?`) && decide(r, 'reject')}>
+                    Reject
+                  </button>
+                </div>
+              ) : r.isActive ? (
                 <button
                   className={btnDanger}
                   onClick={() => confirm(`Deactivate ${r.fullName}?`) && setActive(r, false)}

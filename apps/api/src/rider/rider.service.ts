@@ -8,12 +8,14 @@ import { AccessService } from '../common/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { OrderStatusService } from '../orders/order-status.service';
+import { AuthService } from '../auth/auth.service';
 import {
   ACTIVE_ORDER_STATUSES,
   NotificationType,
   OrderStatus,
   PaymentStatus,
   RiderStatus,
+  UserRole,
 } from '../common/constants';
 
 @Injectable()
@@ -24,7 +26,83 @@ export class RiderService {
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeService,
     private readonly statusService: OrderStatusService,
+    private readonly auth: AuthService,
   ) {}
+
+  // ── Rider self-onboarding (apply to a shop) ─────────────────────────────────
+
+  /** Approved shops a rider can apply to work for. */
+  async listShops(q?: string) {
+    return this.prisma.merchant.findMany({
+      where: {
+        approvalStatus: 'APPROVED',
+        ...(q ? { shopName: { contains: q, mode: 'insensitive' } } : {}),
+      },
+      select: { id: true, shopName: true, city: true, area: true, address: true },
+      orderBy: { shopName: 'asc' },
+      take: 50,
+    });
+  }
+
+  /** A logged-in user applies to deliver for a shop; pending the shop's approval. */
+  async applyAsRider(
+    userId: string,
+    dto: {
+      merchantId: string;
+      fullName: string;
+      phoneNumber: string;
+      vehicleType?: string;
+      vehicleNumber?: string;
+      profileImageUrl?: string;
+    },
+  ) {
+    const existing = await this.prisma.rider.findUnique({ where: { userId } });
+    if (existing) throw new BadRequestException('This account is already registered as a rider.');
+    const merchant = await this.prisma.merchant.findFirst({
+      where: { id: dto.merchantId, approvalStatus: 'APPROVED' },
+      select: { id: true, shopName: true },
+    });
+    if (!merchant) throw new NotFoundException('Shop not found or not accepting riders');
+
+    let rider;
+    try {
+      rider = await this.prisma.rider.create({
+        data: {
+          merchantId: merchant.id,
+          userId,
+          fullName: dto.fullName,
+          phoneNumber: dto.phoneNumber,
+          vehicleType: dto.vehicleType ?? 'MOTORBIKE',
+          vehicleNumber: dto.vehicleNumber ?? null,
+          profileImageUrl: dto.profileImageUrl ?? null,
+          approvalStatus: 'PENDING',
+          isActive: false,
+        },
+      });
+    } catch (e: any) {
+      // Lost a race with a concurrent apply (or a merchant-created rider row): the
+      // userId unique constraint fired. Surface the friendly 400, not a raw 500.
+      if (e?.code === 'P2002') {
+        throw new BadRequestException('This account is already registered as a rider.');
+      }
+      throw e;
+    }
+
+    const ownerIds = await this.access.merchantUserIds(merchant.id);
+    await Promise.all(
+      ownerIds.map((uid) =>
+        this.notifications.notify({
+          userId: uid,
+          title: 'New rider request',
+          body: `${dto.fullName} wants to deliver for ${merchant.shopName}.`,
+          type: NotificationType.SYSTEM,
+        }),
+      ),
+    );
+
+    const tokens = await this.auth.issueTokens(userId, UserRole.RIDER);
+    return { rider, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
+  }
 
   async profile(userId: string) {
     const rider = await this.access.riderByUser(userId);

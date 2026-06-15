@@ -166,6 +166,16 @@ export class MerchantController {
     return this.people.setRiderActive(user.userId, id, false);
   }
 
+  @Post('riders/:id/approve')
+  approveRider(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.people.approveRider(user.userId, id);
+  }
+
+  @Post('riders/:id/reject')
+  rejectRider(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.people.rejectRider(user.userId, id);
+  }
+
   @Get('riders/:id/orders')
   riderOrders(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.people.riderOrders(user.userId, id);

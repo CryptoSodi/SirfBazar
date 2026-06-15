@@ -44,6 +44,15 @@ export default function RidersScreen() {
     }
   };
 
+  const decide = async (rider: any, action: 'approve' | 'reject') => {
+    try {
+      await api.post(`/merchant/riders/${rider.id}/${action}`);
+      load();
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
       <View style={[s.pad, s.spread]}>
@@ -71,12 +80,26 @@ export default function RidersScreen() {
               <Text style={[s.faint, { color: r.isOnline ? colors.primary : colors.faint }]}>
                 {r.isOnline ? '🟢 online' : '⚪ offline'} · {r.currentStatus?.toLowerCase()}
               </Text>
+              {r.approvalStatus === 'PENDING' && (
+                <Text style={{ color: colors.amber, fontWeight: '700', fontSize: 11, marginTop: 2 }}>⏳ Requested to join your shop</Text>
+              )}
             </View>
-            <TouchableOpacity style={r.isActive ? s.btnDanger : s.btnGhost} onPress={() => toggle(r)}>
-              <Text style={r.isActive ? s.btnDangerText : s.btnGhostText}>
-                {r.isActive ? 'Deactivate' : 'Activate'}
-              </Text>
-            </TouchableOpacity>
+            {r.approvalStatus === 'PENDING' ? (
+              <View style={{ gap: 6 }}>
+                <TouchableOpacity style={s.btn} onPress={() => decide(r, 'approve')}>
+                  <Text style={s.btnText}>Approve</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.btnDanger} onPress={() => decide(r, 'reject')}>
+                  <Text style={s.btnDangerText}>Reject</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={r.isActive ? s.btnDanger : s.btnGhost} onPress={() => toggle(r)}>
+                <Text style={r.isActive ? s.btnDangerText : s.btnGhostText}>
+                  {r.isActive ? 'Deactivate' : 'Activate'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       />

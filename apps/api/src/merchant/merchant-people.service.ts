@@ -124,6 +124,44 @@ export class MerchantPeopleService {
     return { ok: true, isActive: active };
   }
 
+  /** Approve a rider who applied to this shop. */
+  async approveRider(userId: string, riderId: string) {
+    const rider = await this.getRider(userId, riderId);
+    const updated = await this.prisma.rider.update({
+      where: { id: rider.id },
+      data: { approvalStatus: 'APPROVED', isActive: true },
+    });
+    await this.notifications.notify({
+      userId: rider.userId,
+      title: 'Rider request approved 🎉',
+      body: 'Your shop approved you — you can start accepting deliveries.',
+      type: NotificationType.SYSTEM,
+    });
+    await this.audit.log({ userId, action: 'RIDER_APPROVED', entityType: 'Rider', entityId: rider.id });
+    return updated;
+  }
+
+  /** Decline a pending rider request (removes the rider profile so they can re-apply). */
+  async rejectRider(userId: string, riderId: string) {
+    const rider = await this.getRider(userId, riderId);
+    // Reject only ever removes a fresh applicant. An APPROVED rider may hold orders
+    // (Order.riderId would be nulled on delete) — deactivate those instead.
+    if (rider.approvalStatus !== 'PENDING') {
+      throw new BadRequestException(
+        'Only a pending rider request can be rejected — deactivate an approved rider instead.',
+      );
+    }
+    await this.notifications.notify({
+      userId: rider.userId,
+      title: 'Rider request declined',
+      body: 'Your request to join the shop was declined. You can apply to another shop.',
+      type: NotificationType.SYSTEM,
+    });
+    await this.audit.log({ userId, action: 'RIDER_REJECTED', entityType: 'Rider', entityId: rider.id });
+    await this.prisma.rider.delete({ where: { id: rider.id } });
+    return { ok: true };
+  }
+
   async riderOrders(userId: string, riderId: string) {
     const rider = await this.getRider(userId, riderId);
     return this.prisma.order.findMany({

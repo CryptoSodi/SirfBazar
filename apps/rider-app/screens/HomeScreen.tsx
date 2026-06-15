@@ -47,11 +47,21 @@ export default function HomeScreen() {
             <Switch
               value={profile?.isOnline ?? false}
               onValueChange={toggleOnline}
+              disabled={profile?.approvalStatus !== 'APPROVED'}
               trackColor={{ true: colors.primary }}
             />
             <Text style={[s.faint, { marginTop: 2 }]}>{profile?.isOnline ? 'Online' : 'Offline'}</Text>
           </View>
         </View>
+
+        {profile?.approvalStatus === 'PENDING' && (
+          <View style={{ marginTop: 14, backgroundColor: '#fffbeb', borderColor: '#fcd34d', borderWidth: 1, borderRadius: 12, padding: 12 }}>
+            <Text style={{ color: colors.amber, fontWeight: '800' }}>⏳ Waiting for shop approval</Text>
+            <Text style={[s.muted, { marginTop: 2 }]}>
+              {profile?.merchant?.shopName ?? 'The shop'} hasn't approved your rider request yet. You'll be able to go online once approved.
+            </Text>
+          </View>
+        )}
 
         <Text style={[s.h2, { marginTop: 18, marginBottom: 8 }]}>Assigned deliveries</Text>
       </View>

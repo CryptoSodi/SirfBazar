@@ -77,6 +77,17 @@ export const api = {
   del: (p: string) => request('DELETE', p),
 };
 
+/** After /rider/apply returns fresh tokens, persist them + the user profile. */
+export async function finishOnboarding(tokens: { accessToken: string; refreshToken: string }) {
+  await AsyncStorage.multiSet([
+    [KEYS.access, tokens.accessToken],
+    [KEYS.refresh, tokens.refreshToken],
+  ]);
+  const user = await request('GET', '/auth/me');
+  await AsyncStorage.setItem(KEYS.user, JSON.stringify(user));
+  return user;
+}
+
 export function pkr(paisa: number | null | undefined): string {
   return `Rs ${Math.round((paisa ?? 0) / 100).toLocaleString()}`;
 }

@@ -99,8 +99,10 @@ export class AuthService {
 
     let user = await this.prisma.user.findUnique({ where: { phoneNumber } });
     if (!user) {
-      // Only the customer flow self-registers; merchant/rider accounts are provisioned.
-      if (context !== 'customer') throw new UnauthorizedException('No account exists for this number.');
+      // Customer + rider self-onboarding create a base account; merchant/admin must pre-exist.
+      if (context !== 'customer' && context !== 'rider') {
+        throw new UnauthorizedException('No account exists for this number.');
+      }
       user = await this.prisma.user.create({
         data: {
           phoneNumber,
@@ -272,7 +274,10 @@ export class AuthService {
     if (context === 'rider') {
       const rider = await this.prisma.rider.findUnique({ where: { userId }, select: { id: true } });
       if (rider) return UserRole.RIDER;
-      throw new UnauthorizedException('This account is not a rider.');
+      // Not a rider yet — hand back a base customer identity so the account can
+      // self-onboard (browse shops + apply); /rider/apply then mints a RIDER token.
+      await this.ensureCustomerRecord(userId);
+      return UserRole.CUSTOMER;
     }
     // admin
     const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });

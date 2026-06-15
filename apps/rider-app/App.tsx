@@ -5,12 +5,14 @@ import { useEffect, useState } from 'react';
 import { isLoggedIn } from './lib/api';
 import { colors } from './lib/theme';
 import LoginScreen from './screens/LoginScreen';
+import OnboardScreen from './screens/OnboardScreen';
 import HomeScreen from './screens/HomeScreen';
 import DeliveryScreen from './screens/DeliveryScreen';
 import HistoryScreen from './screens/HistoryScreen';
 
 export type RootStackParamList = {
   Login: undefined;
+  Onboard: undefined;
   Home: undefined;
   Delivery: { orderId: string };
   History: undefined;
@@ -44,6 +46,7 @@ export default function App() {
         screenOptions={{ headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' } }}
       >
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Onboard" component={OnboardScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Delivery" component={DeliveryScreen} options={{ title: 'Delivery' }} />
         <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'History' }} />

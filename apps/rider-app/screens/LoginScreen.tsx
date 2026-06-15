@@ -35,7 +35,8 @@ export default function LoginScreen() {
     try {
       const auth = await api.post('/auth/verify-otp', { phoneNumber: phone.trim(), code: code.trim(), context: 'rider' });
       await storeAuth(auth);
-      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+      // Existing rider → Home; a new/customer-only account → the rider application.
+      navigation.reset({ index: 0, routes: [{ name: auth.user?.rider ? 'Home' : 'Onboard' }] });
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -48,9 +49,19 @@ export default function LoginScreen() {
     setError('');
     try {
       const idToken = await googleSignInIdToken();
-      const auth = await api.post('/auth/google-login', { idToken, context: 'rider' });
-      await storeAuth(auth);
-      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+      try {
+        const auth = await api.post('/auth/google-login', { idToken, context: 'rider' });
+        await storeAuth(auth);
+        // Existing rider → Home; an existing non-rider account → the rider application.
+        navigation.reset({ index: 0, routes: [{ name: auth.user?.rider ? 'Home' : 'Onboard' }] });
+        return;
+      } catch {
+        // Brand-new Google account — register the base identity, then start the application.
+        const idAuth = await api.post('/auth/google-login', { idToken, context: 'customer' });
+        await storeAuth(idAuth);
+        navigation.reset({ index: 0, routes: [{ name: 'Onboard' }] });
+        return;
+      }
     } catch (e: any) {
       setError(e?.message ?? 'Google sign-in failed. It needs a development build (not Expo Go).');
     } finally {
