@@ -52,10 +52,12 @@ async function api(
   return { status: res.status, data };
 }
 
-async function loginOtp(phone: string) {
+async function loginOtp(phone: string, context?: 'customer' | 'merchant' | 'rider' | 'admin') {
   await api('POST', '/auth/send-otp', { body: { phoneNumber: phone } });
   const { data } = await api('POST', '/auth/verify-otp', {
-    body: { phoneNumber: phone, code: '123456' },
+    // Multi-role identity: the login context selects which "hat" the token grants
+    // (one account can be customer + merchant + rider at once). Omit = customer.
+    body: { phoneNumber: phone, code: '123456', ...(context ? { context } : {}) },
     expect: 201,
   });
   return data as { accessToken: string; refreshToken: string; user: any };
@@ -171,7 +173,7 @@ async function main() {
   check('stock validation present', (order.data.items ?? []).length === 2);
 
   // Merchant side
-  const merchant1Owner = await loginOtp(await ownerPhone(m1));
+  const merchant1Owner = await loginOtp(await ownerPhone(m1), 'merchant');
   check('merchant owner login', merchant1Owner.user.role === 'MERCHANT_OWNER');
 
   const mOrders = await api('GET', '/merchant/orders?status=SENT_TO_MERCHANT', { token: merchant1Owner.accessToken, expect: 200 });
@@ -196,7 +198,7 @@ async function main() {
   check('merchant assigned own rider', assign.data.ok === true);
 
   // Tenancy guard: another merchant's rider must be rejected.
-  const merchant2Owner = await loginOtp(await ownerPhone(m2));
+  const merchant2Owner = await loginOtp(await ownerPhone(m2), 'merchant');
   const foreignAssign = await api('POST', `/merchant/orders/${orderId}/assign-rider`, {
     token: merchant2Owner.accessToken,
     body: { riderId },
@@ -205,7 +207,7 @@ async function main() {
 
   // Rider side
   const riderPhone = riderList[0].phoneNumber;
-  const rider = await loginOtp(riderPhone);
+  const rider = await loginOtp(riderPhone, 'rider');
   check('rider OTP login', rider.user.role === 'RIDER');
   await api('POST', '/rider/online', { token: rider.accessToken, expect: 201 });
 
