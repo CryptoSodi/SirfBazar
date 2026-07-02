@@ -331,7 +331,8 @@ model Order {
   deliveryAddressId         String?
   status                    String    @default("CREATED")
   paymentStatus             String    @default("PENDING")
-  paymentMethod             String    @default("COD") // COD | WALLET | CARD | JAZZCASH | EASYPAISA | BANK_TRANSFER
+  paymentMethod             String    @default("COD") // COD | WALLET | CARD | JAZZCASH | EASYPAISA | BANK_TRANSFER | CASH
+  channel                   String    @default("ONLINE") // ONLINE (marketplace) | POS (in-store sale)
   subtotalPaisa             Int       @default(0)
   deliveryFeePaisa          Int       @default(0)
   serviceFeePaisa           Int       @default(0)
@@ -373,6 +374,7 @@ model Order {
 
   @@index([customerId, status])
   @@index([merchantId, status])
+  @@index([merchantId, channel])
   @@index([riderId, status])
   @@index([parentOrderId])
   @@index([createdAt])

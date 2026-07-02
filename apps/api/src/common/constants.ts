@@ -201,5 +201,6 @@ export const StaffPermission = {
   FINANCE: 'FINANCE',
   STORE: 'STORE',
   PROMOTIONS: 'PROMOTIONS',
+  POS: 'POS',
 } as const;
 export type StaffPermission = (typeof StaffPermission)[keyof typeof StaffPermission];

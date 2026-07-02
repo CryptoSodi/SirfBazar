@@ -46,6 +46,9 @@ export class SettlementsService {
         where: {
           merchantId: merchant.id,
           status: OrderStatus.DELIVERED,
+          // In-store POS sales are cash-in-hand — nothing for the platform to
+          // settle, so they never enter a payout batch.
+          channel: 'ONLINE',
           deliveredAt: { gte: start, lte: end },
           settlementId: null,
         },
