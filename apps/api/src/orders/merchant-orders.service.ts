@@ -38,7 +38,8 @@ export class MerchantOrdersService {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.ORDERS);
     return this.prisma.order.findMany({
-      where: { merchantId: ctx.merchantId, ...(status ? { status } : {}) },
+      // Online marketplace orders only — in-store POS sales live in the POS app.
+      where: { merchantId: ctx.merchantId, channel: 'ONLINE', ...(status ? { status } : {}) },
       include: {
         items: true,
         deliveryAddress: true,

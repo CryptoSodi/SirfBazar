@@ -191,7 +191,7 @@ export class MerchantService {
         },
       }),
       this.prisma.order.count({
-        where: { merchantId, status: OrderStatus.DELIVERED, deliveredAt: { gte: startOfToday } },
+        where: { merchantId, status: OrderStatus.DELIVERED, channel: 'ONLINE', deliveredAt: { gte: startOfToday } },
       }),
       this.prisma.order.count({
         where: {
@@ -242,7 +242,9 @@ export class MerchantService {
 
   private async salesAggregate(merchantId: string, since: Date) {
     const agg = await this.prisma.order.aggregate({
-      where: { merchantId, status: OrderStatus.DELIVERED, deliveredAt: { gte: since } },
+      // Online orders only — POS cash sales are reported in the POS app and are
+      // never settled by the platform, so they must not inflate these figures.
+      where: { merchantId, status: OrderStatus.DELIVERED, channel: 'ONLINE', deliveredAt: { gte: since } },
       _sum: { totalAmountPaisa: true, commissionAmountPaisa: true, merchantEarningPaisa: true },
     });
     return {
@@ -264,6 +266,10 @@ export class MerchantService {
       where: {
         merchantId: ctx.merchantId,
         status: OrderStatus.DELIVERED,
+        // Only marketplace orders are payable by the platform; POS cash is already
+        // in the shop's hand — mirrors the settlement generation filter so "Net
+        // payable" reconciles with what settlements actually pay out.
+        channel: 'ONLINE',
         deliveredAt: { gte: fromDate, lte: toDate },
       },
       select: {
