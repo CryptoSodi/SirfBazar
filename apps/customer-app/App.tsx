@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { Appearance } from 'react-native';
 import { useEffect } from 'react';
+import { isLoggedIn } from './lib/api';
 import { loadThemeMode, useTheme } from './lib/theme';
 import HomeScreen from './screens/HomeScreen';
 import SearchScreen from './screens/SearchScreen';
@@ -125,6 +126,10 @@ export default function App() {
   useEffect(() => {
     loadThemeMode();
     refreshBadges();
+    // Re-register for order alerts on every app start (push tokens can rotate).
+    isLoggedIn().then((ok) => {
+      if (ok) void import('./lib/push').then((m) => m.registerForPush()).catch(() => undefined);
+    });
   }, []);
 
   // Force the native appearance to match the chosen mode, so system chrome

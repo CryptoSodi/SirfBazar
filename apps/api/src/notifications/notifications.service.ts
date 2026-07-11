@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { ExpoPushService } from './expo-push.service';
 
 export interface NotifyInput {
   userId: string;
@@ -11,8 +12,9 @@ export interface NotifyInput {
 }
 
 /**
- * Persists in-app notifications and pushes them over the websocket.
- * FCM/SMS/email channels plug in here later without touching call sites.
+ * Persists in-app notifications, pushes them over the websocket, and delivers
+ * a device push (Expo) to the user's registered phones. New channels (SMS,
+ * email) plug in here without touching call sites.
  */
 @Injectable()
 export class NotificationsService {
@@ -21,6 +23,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
+    private readonly expoPush: ExpoPushService,
   ) {}
 
   async notify(input: NotifyInput) {
@@ -35,6 +38,12 @@ export class NotificationsService {
         },
       });
       this.realtime.emitToUser(input.userId, 'notification', notification);
+      // Device push is fire-and-forget: it must never delay or fail the caller.
+      void this.expoPush.sendToUser(input.userId, {
+        title: input.title,
+        body: input.body,
+        data: { type: input.type, referenceId: input.referenceId ?? null },
+      });
       return notification;
     } catch (err) {
       // Notification failures must never break the business operation.

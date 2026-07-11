@@ -34,7 +34,8 @@
           "locationWhenInUsePermission": "SirfBazar Rider shares your location with the customer during active deliveries."
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-notifications"
     ],
     "extra": {
       "eas": {

@@ -22,7 +22,9 @@
       "@react-native-google-signin/google-signin",
       [
         "expo-location",
-        { "locationWhenInUsePermission": "SirfBazar Merchant uses your location to pin your shop on the map." }
+        {
+          "locationWhenInUsePermission": "SirfBazar Merchant uses your location to pin your shop on the map."
+        }
       ],
       [
         "expo-image-picker",
@@ -30,7 +32,8 @@
           "photosPermission": "SirfBazar Merchant needs photo access to add your shop-front picture.",
           "cameraPermission": "SirfBazar Merchant needs camera access to take your shop-front picture."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "extra": {
       "eas": {

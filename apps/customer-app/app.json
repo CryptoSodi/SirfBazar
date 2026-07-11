@@ -39,7 +39,8 @@
           "locationWhenInUsePermission": "SirfBazar uses your location to show shops and products near you."
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-notifications"
     ],
     "extra": {
       "eas": {

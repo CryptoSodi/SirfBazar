@@ -73,6 +73,8 @@ export default function App() {
     isLoggedIn().then((ok) => {
       setAuthed(ok);
       setReady(true);
+      // Re-register for order alerts on every app start (push tokens can rotate).
+      if (ok) void import('./lib/push').then((m) => m.registerForPush()).catch(() => undefined);
     });
   }, []);
 
