@@ -75,9 +75,21 @@ export class ApiError extends Error {
   }
 }
 
+function isPublicRead(method: string, path: string) {
+  if (method !== 'GET') return false;
+  if (path.startsWith('/products/recommended')) return false;
+  return ['/products', '/merchants', '/location', '/coupons'].some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`),
+  );
+}
+
 async function rawRequest(method: string, path: string, body?: unknown, retry = true): Promise<any> {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  const access = localStorage.getItem(LS.access);
+  const headers: Record<string, string> = {};
+  if (body != null) headers['content-type'] = 'application/json';
+
+  // Storefront discovery is anonymous. Do not let a stale login token block
+  // catalog browsing or trigger an unnecessary CORS preflight.
+  const access = isPublicRead(method, path) ? null : localStorage.getItem(LS.access);
   if (access) headers.authorization = `Bearer ${access}`;
   if (path.startsWith('/guest')) headers['x-guest-session'] = await ensureGuestToken();
 
