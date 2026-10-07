@@ -1,5 +1,7 @@
 'use client';
 
+import { AppIcon, type AppIconName } from './AppIcon';
+
 import dynamic from 'next/dynamic';
 import { useRef, useState } from 'react';
 import { api } from '@/lib/api';
@@ -10,11 +12,11 @@ import type { PickedPoint } from './MapPicker';
 const MapPicker = dynamic(() => import('./MapPicker').then((m) => m.MapPicker), { ssr: false });
 const OpenMapPicker = dynamic(() => import('./OpenMapPicker').then((m) => m.OpenMapPicker), { ssr: false });
 
-const LABELS: { key: string; icon: string }[] = [
-  { key: 'Home', icon: '🏠' },
-  { key: 'Work', icon: '💼' },
-  { key: 'Family', icon: '❤️' },
-  { key: 'Other', icon: '📍' },
+const LABELS: { key: string; icon: AppIconName }[] = [
+  { key: 'Home', icon: 'home' },
+  { key: 'Work', icon: 'briefcase' },
+  { key: 'Family', icon: 'team' },
+  { key: 'Other', icon: 'pin' },
 ];
 
 /** Add or edit a saved delivery address — parity with the mobile app:
@@ -126,7 +128,7 @@ export function AddressForm({
       {/* Location pinning */}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-secondary text-sm" onClick={useCurrentLocation} disabled={locating}>
-          {locating ? 'Locating…' : '📍 Use current location'}
+          {locating ? 'Locating…' : <><AppIcon name="location" size={18} /> Use current location</>}
         </button>
         <button ref={mapTrigger} type="button" className="btn-secondary text-sm" onClick={() => setShowMap(true)}>Pin on map</button>
         {coords && (
@@ -149,7 +151,7 @@ export function AddressForm({
                 active ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-700' : 'border-stone-200 text-stone-600'
               }`}
             >
-              <div className="text-base">{l.icon}</div>
+              <div className="text-base"><AppIcon name={l.icon} size={18} /></div>
               {l.key}
             </button>
           );

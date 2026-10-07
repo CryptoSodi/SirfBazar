@@ -1,3 +1,5 @@
+import { AppIcon } from '../components/AppIcon';
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
@@ -42,7 +44,7 @@ export default function Merchants() {
             <td className="px-4 py-2.5">{m.user?.fullName}<div className="text-xs text-slate-400">{m.user?.phoneNumber}</div></td>
             <td className="px-4 py-2.5">{m.city}<div className="text-xs text-slate-400">{m.area}</div></td>
             <td className="px-4 py-2.5"><Badge value={m.approvalStatus} /></td>
-            <td className="px-4 py-2.5">{m.isOnline ? '🟢' : '⚪'} {m.isOpen ? 'open' : 'closed'}</td>
+            <td className="px-4 py-2.5"><AppIcon name={m.isOnline ? "online" : "offline"} size={16} /> {m.isOnline ? 'Online' : 'Offline'} · {m.isOpen ? 'open' : 'closed'}</td>
             <td className="px-4 py-2.5">{m.commissionType === 'PERCENTAGE' ? `${m.commissionValue}%` : pkr(m.commissionValue)}</td>
             <td className="px-4 py-2.5">{m._count?.orders ?? 0}</td>
             <td className="px-4 py-2.5 text-right">
@@ -87,7 +89,7 @@ function MerchantModal({ merchant, onClose, act, reload, toast }: any) {
           <div><b>Type:</b> {merchant.shopType}</div>
           <div><b>City:</b> {merchant.city} ({merchant.area})</div>
           <div><b>Min order:</b> {pkr(merchant.minimumOrderValuePaisa)}</div>
-          <div><b>Rating:</b> ⭐ {merchant.ratingAverage} ({merchant.ratingCount})</div>
+          <div><b>Rating:</b> <AppIcon name="star" size={16} /> {merchant.ratingAverage} ({merchant.ratingCount})</div>
           <div><b>Products:</b> {merchant._count?.products ?? '–'} · <b>Riders:</b> {merchant._count?.riders ?? '–'}</div>
         </div>
 
@@ -109,17 +111,17 @@ function MerchantModal({ merchant, onClose, act, reload, toast }: any) {
         <div className="flex flex-wrap gap-2">
           {['SUBMITTED', 'UNDER_REVIEW', 'REJECTED', 'SUSPENDED'].includes(merchant.approvalStatus) && (
             <button className={btnCls} onClick={() => act(merchant.id, merchant.approvalStatus === 'SUSPENDED' ? 'reactivate' : 'approve')}>
-              ✓ Approve
+              <UiIcon name="check" size={18} /> Approve
             </button>
           )}
           {['SUBMITTED', 'UNDER_REVIEW'].includes(merchant.approvalStatus) && (
             <button className={btnDanger} onClick={() => { const reason = prompt('Rejection reason:'); if (reason !== null) act(merchant.id, 'reject', { reason }); }}>
-              ✗ Reject
+              <AppIcon name="close" size={16} /> Reject
             </button>
           )}
           {merchant.approvalStatus === 'APPROVED' && (
             <button className={btnDanger} onClick={() => { const reason = prompt('Suspension reason:'); if (reason !== null) act(merchant.id, 'suspend', { reason }); }}>
-              ⏸ Suspend
+              <AppIcon name="offline" size={16} /> Suspend
             </button>
           )}
         </div>

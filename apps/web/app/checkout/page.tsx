@@ -1,4 +1,6 @@
 'use client';
+import { AppIcon as UiIcon } from '../../components/AppIcon';
+
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -252,10 +254,10 @@ export default function CheckoutPage() {
 
   return (
     <div className="sb-checkout">
-      <nav className="sb-breadcrumb" aria-label="Breadcrumb"><Link href="/cart">Your basket</Link><span aria-hidden="true">›</span><span>Checkout</span></nav>
+      <nav className="sb-breadcrumb" aria-label="Breadcrumb"><Link href="/cart">Your basket</Link><span aria-hidden="true"><UiIcon name="chevron" size={18} /></span><span>Checkout</span></nav>
       <h1>A few details, then you’re done.</h1>
       <p className="sb-muted">No password to create. Your basket stays with you.</p>
-      <div className="sb-checkout-steps" aria-label="Checkout progress"><span>✓ Basket</span><span>2 {reviewed ? 'Review & place order' : 'Delivery details'}</span><span>3 Confirmation</span></div>
+      <div className="sb-checkout-steps" aria-label="Checkout progress"><span><UiIcon name="check" size={18} /> Basket</span><span>2 {reviewed ? 'Review & place order' : 'Delivery details'}</span><span>3 Confirmation</span></div>
       <div className="sb-checkout-grid">
         <div className="sb-checkout-main">
           <section className="card sb-checkout-panel">
@@ -272,7 +274,7 @@ export default function CheckoutPage() {
             </div>
             {signedIn && <button className="btn-secondary mt-4" onClick={() => void saveDraft()} disabled={busy}>Save as new address</button>}
           </section>
-          <section className="card sb-checkout-panel"><h2><span className="sb-step-number">2</span>How would you like to pay?</h2><div className="sb-payment-selected"><span aria-hidden="true">◉</span><span><strong>Cash on delivery</strong><small>Pay when your order arrives.</small></span></div><p className="sb-muted mt-3">Online payment is unavailable until a live payment provider is verified.</p></section>
+          <section className="card sb-checkout-panel"><h2><span className="sb-step-number">2</span>How would you like to pay?</h2><div className="sb-payment-selected"><UiIcon name="checkCircle" size={22} /><span><strong>Cash on delivery</strong><small>Pay when your order arrives.</small></span></div><p className="sb-muted mt-3">Online payment is unavailable until a live payment provider is verified.</p></section>
         </div>
         <aside className="card sb-checkout-panel sb-checkout-summary"><h2>Your order summary</h2>{approved?.quote ? <dl>
           {approved.quote.items?.map((item: any) => <div key={item.merchantProductId}><dt>{item.quantity} × {item.name}</dt><dd>{formatPKR(item.quantity * item.unitPricePaisa)}</dd></div>)}
@@ -297,7 +299,7 @@ export default function CheckoutPage() {
           <p className="sb-muted mt-3 text-center">{cart.groups.length === 1 ? 'One shop, one delivery.' : `${cart.groups.length} shops will make separate deliveries.`}</p>
         </aside>
       </div>
-      <div className="sb-checkout-mobile-action"><span><small>Total to pay</small><strong>{formatPKR(cart.totalPaisa)}</strong></span><button className="btn-primary" disabled={busy} onClick={onContinue}>{busy ? 'Please wait…' : !signedIn ? 'Continue to sign in' : !addressId ? 'Save address' : reviewed ? 'Place order' : 'Review order'}&nbsp; →</button></div>
+      <div className="sb-checkout-mobile-action"><span><small>Total to pay</small><strong>{formatPKR(cart.totalPaisa)}</strong></span><button className="btn-primary" disabled={busy} onClick={onContinue}>{busy ? 'Please wait…' : !signedIn ? 'Continue to sign in' : !addressId ? 'Save address' : reviewed ? 'Place order' : 'Review order'}&nbsp; <UiIcon name="arrow" size={18} /></button></div>
       {showLogin && <LoginSheet title="Continue to checkout" description="Sign in, then review your basket and place the order yourself." onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); setReviewed(false); setNotice('Your basket has been merged. Check the items and total before placing the order.'); void refresh(); }} />}
       {showMap && (hasMapsKey ? <MapPicker initial={draft.latitude !== null && draft.longitude !== null ? { latitude: draft.latitude, longitude: draft.longitude } : null} onConfirm={pinLocation} onClose={closeMap} returnFocusTo={mapTrigger.current} /> : <OpenMapPicker initial={draft.latitude !== null && draft.longitude !== null ? { latitude: draft.latitude, longitude: draft.longitude } : null} onConfirm={pinLocation} onClose={closeMap} returnFocusTo={mapTrigger.current} />)}
       {uncertain && <div className="sb-modal-backdrop"><div ref={uncertainFocus.ref} onKeyDown={uncertainFocus.onKeyDown} tabIndex={-1} className="card sb-modal" role="alertdialog" aria-modal="true" aria-labelledby="order-uncertain-title"><h2 id="order-uncertain-title">We’re checking your order</h2><p>The response didn’t arrive. Your order may already have been created. Do not place it again yet.</p><Link className="btn-primary mt-4 inline-flex w-full justify-center" href="/orders">Check order status</Link><Link className="btn-secondary mt-2 inline-flex w-full justify-center" href="/contact">Contact support</Link></div></div>}

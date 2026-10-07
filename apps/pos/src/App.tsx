@@ -1,3 +1,4 @@
+import { AppIcon } from './components/AppIcon';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { getUser, isLoggedIn, logout } from './lib/api';
 import Login from './pages/Login';
@@ -5,8 +6,8 @@ import Register from './pages/Register';
 import Sales from './pages/Sales';
 
 const NAV = [
-  ['/', '🧾 Register'],
-  ['/sales', '📊 Sales'],
+  ['/', 'Register', 'receipt'],
+  ['/sales', 'Sales', 'overview'],
 ] as const;
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -25,7 +26,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="flex gap-1">
-          {NAV.map(([href, label]) => (
+          {NAV.map(([href, label, icon]) => (
             <Link
               key={href}
               to={href}
@@ -33,7 +34,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                 location.pathname === href ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              {label}
+              <AppIcon name={icon} size={18} /> <AppIcon name={icon} size={18} /> {label}
             </Link>
           ))}
         </nav>

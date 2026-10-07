@@ -1,3 +1,4 @@
+import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 import { readMemory, writeMemory } from './memoryCache';
@@ -76,7 +77,7 @@ export function Pager({
         disabled={page <= 1}
         onClick={() => setPage(page - 1)}
       >
-        ←
+        <UiIcon name="back" />
       </button>
       <span className="text-slate-500">
         {page} / {totalPages}
@@ -86,7 +87,7 @@ export function Pager({
         disabled={page >= totalPages}
         onClick={() => setPage(page + 1)}
       >
-        →
+        <UiIcon name="arrow" />
       </button>
     </div>
   );

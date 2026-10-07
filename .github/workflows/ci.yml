@@ -43,6 +43,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run test:pos
+      - run: node -r ts-node/register/transpile-only --test test/category-sections.test.cjs
       - run: npm run test:waha
       - run: npm run test:whatsapp
       - name: Initialize disposable smoke database

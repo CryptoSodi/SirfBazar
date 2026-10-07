@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from './AppIcon';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
@@ -64,7 +65,7 @@ export function Modal({ title, onClose, children, returnFocus }: { title: string
         <div className="mb-4 flex items-center justify-between">
           <h2 id={titleId} className="text-lg font-bold">{title}</h2>
           <button aria-label="Close dialog" className="text-slate-400 hover:text-slate-600" onClick={onClose}>
-            ✕
+            <UiIcon name="close" size={18} />
           </button>
         </div>
         {children}

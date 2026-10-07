@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { AppIcon } from '../components/AppIcon';
+import { categoryIconChoices, categoryIconName } from '../lib/category-icons';
 import { api } from '../lib/api';
 import { usePaged } from '../lib/usePaged';
 import { Badge, Modal, Table, btnCls, btnDanger, btnGhost, inputCls, useToast } from '../components/ui';
@@ -26,10 +28,11 @@ export default function Categories() {
         <button className={btnCls} onClick={() => setEditing('new')}>+ New category</button>
       </div>
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-      <Table headers={['Category', 'Slug', 'Products', 'Sort', 'Status', '']}>
+      <Table headers={['Category', 'Parent section', 'Slug', 'Products', 'Sort', 'Status', '']}>
         {items.map((c) => (
           <tr key={c.id} className="hover:bg-slate-50">
-            <td className="px-4 py-2.5 font-medium">{c.iconUrl} {c.name}</td>
+            <td className="px-4 py-2.5 font-medium"><AppIcon name={categoryIconName(c.slug, c.iconUrl)} size={20} /> {c.name}</td>
+            <td className="px-4 py-2.5">{c.parentCategoryId ? items.find(parent => parent.id === c.parentCategoryId)?.name ?? 'Parent category' : 'Top-level category'}</td>
             <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{c.slug}</td>
             <td className="px-4 py-2.5">{c._count?.products ?? 0}</td>
             <td className="px-4 py-2.5">{c.sortOrder}</td>
@@ -40,7 +43,7 @@ export default function Categories() {
             </td>
           </tr>
         ))}
-        {!loading && items.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No categories.</td></tr>}
+        {!loading && items.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No categories.</td></tr>}
       </Table>
       {editing && <CategoryModal category={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} toast={toast} />}
       {node}
@@ -75,7 +78,13 @@ function CategoryModal({ category, onClose, onSaved, toast }: any) {
     <Modal title={category ? `Edit ${category.name}` : 'New category'} onClose={onClose}>
       <div className="space-y-2 text-sm">
         <input className={inputCls} placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input className={inputCls} placeholder="Icon (emoji)" value={form.iconUrl} onChange={(e) => setForm({ ...form, iconUrl: e.target.value })} />
+        <label className="block">Category icon
+          <select className={inputCls} value={form.iconUrl.startsWith('lucide:') ? form.iconUrl : ''} onChange={(e) => setForm({ ...form, iconUrl: e.target.value || category?.iconUrl || '' })}>
+            <option value="">Automatic — keep existing category artwork</option>
+            {categoryIconChoices.map((name) => <option key={name} value={'lucide:' + name}>{name[0].toUpperCase() + name.slice(1)}</option>)}
+          </select>
+        </label>
+        <AppIcon name={categoryIconName(category?.slug, form.iconUrl)} size={28} />
         <input className={inputCls} placeholder="Sort order" type="number" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} />
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} /> Active

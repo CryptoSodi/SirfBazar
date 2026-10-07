@@ -1,3 +1,4 @@
+import { IconLabel } from '../components/IconLabel';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -63,7 +64,7 @@ export default function OrderDetailScreen() {
           </View>
         ))}
         {order.customerNote && (
-          <Text style={[s.muted, { marginTop: 10 }]}>📝 Customer note: {order.customerNote}</Text>
+          <IconLabel icon="file" style={[s.muted, { marginTop: 10 }]}>Customer note: {order.customerNote}</IconLabel>
         )}
       </View>
 
@@ -72,7 +73,7 @@ export default function OrderDetailScreen() {
         <Text style={[s.body, { marginTop: 4 }]}>{order.customer?.user?.fullName ?? 'Customer'}</Text>
         <Text style={s.muted}>{order.deliveryAddress?.fullAddress}</Text>
         <Text style={s.muted}>{order.customer?.user?.phoneNumber}</Text>
-        {order.rider && <Text style={[s.body, { marginTop: 6 }]}>🛵 Rider: {order.rider.fullName}</Text>}
+        {order.rider && <IconLabel icon="bike" style={[s.body, { marginTop: 6 }]}>Rider: {order.rider.fullName}</IconLabel>}
       </View>
 
       {/* Lifecycle actions */}
@@ -80,30 +81,30 @@ export default function OrderDetailScreen() {
         {order.status === 'SENT_TO_MERCHANT' && (
           <>
             <TouchableOpacity style={s.btn} onPress={() => act('accept')} disabled={busy}>
-              <Text style={s.btnText}>✓ Accept order</Text>
+              <IconLabel icon="check" style={s.btnText}>Accept order</IconLabel>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.btnDanger}
               onPress={() => act('reject', { reason: 'Unable to fulfil right now' })}
               disabled={busy}
             >
-              <Text style={s.btnDangerText}>✗ Reject order</Text>
+              <IconLabel icon="close" style={s.btnDangerText}>Reject order</IconLabel>
             </TouchableOpacity>
           </>
         )}
         {order.status === 'MERCHANT_ACCEPTED' && (
           <TouchableOpacity style={s.btn} onPress={() => act('preparing')} disabled={busy}>
-            <Text style={s.btnText}>👨‍🍳 Start preparing</Text>
+            <IconLabel icon="chef" style={s.btnText}>Start preparing</IconLabel>
           </TouchableOpacity>
         )}
         {['MERCHANT_ACCEPTED', 'PREPARING'].includes(order.status) && (
           <TouchableOpacity style={s.btn} onPress={() => act('ready')} disabled={busy}>
-            <Text style={s.btnText}>📦 Mark ready for pickup</Text>
+            <IconLabel icon="box" style={s.btnText}>Mark ready for pickup</IconLabel>
           </TouchableOpacity>
         )}
         {order.status === 'READY_FOR_PICKUP' && (
           <TouchableOpacity style={s.btn} onPress={openRiderPicker} disabled={busy}>
-            <Text style={s.btnText}>🛵 Assign rider</Text>
+            <IconLabel icon="bike" style={s.btnText}>Assign rider</IconLabel>
           </TouchableOpacity>
         )}
       </View>
@@ -134,9 +135,9 @@ export default function OrderDetailScreen() {
                     await act('assign-rider', { riderId: r.id });
                   }}
                 >
-                  <Text style={[s.body, { fontWeight: '700' }]}>🛵 {r.fullName}</Text>
+                  <IconLabel icon="bike" style={[s.body, { fontWeight: '700' }]}>{r.fullName}</IconLabel>
                   <Text style={s.faint}>
-                    {r.phoneNumber} · {r.isOnline ? '🟢 online' : '⚪ offline'} · {r.currentStatus.toLowerCase()}
+                    {r.phoneNumber} · {r.isOnline ? 'Online' : 'Offline'} · {r.currentStatus.toLowerCase()}
                   </Text>
                 </TouchableOpacity>
               ))}

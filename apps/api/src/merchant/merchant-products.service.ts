@@ -6,6 +6,7 @@ import { parsePage, paged, PageQuery } from '../common/utils/pagination';
 import { AddMerchantProductDto, BulkItemDto, BulkUploadDto, UpdateMerchantProductDto } from './merchant.dto';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { serializable } from '../common/transaction';
+import { resolveCategoryBranch } from '../common/utils/category-tree';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -34,7 +35,7 @@ export class MerchantProductsService {
     }
     if (query.q) where.product = { name: { contains: query.q, mode: 'insensitive' } };
     if (query.categoryId) {
-      where.product = { ...(where.product ?? {}), categoryId: query.categoryId };
+      where.product = { ...(where.product ?? {}), categoryId: { in: await resolveCategoryBranch(this.prisma, query.categoryId) } };
     }
 
     let [rows, total] = await Promise.all([
@@ -71,21 +72,9 @@ export class MerchantProductsService {
     const where: any = { approvalStatus: ProductApprovalStatus.APPROVED };
     if (query.q) where.name = { contains: query.q, mode: 'insensitive' };
     if (query.categoryId) {
-      const categories = await this.prisma.category.findMany({ select: { id: true, parentCategoryId: true, isActive: true } });
-      const selected = categories.find((category) => category.id === query.categoryId && category.isActive);
-      if (!selected) throw new BadRequestException('Category not found');
-      const descendants = new Set<string>([selected.id]);
-      let changed = true;
-      while (changed) {
-        changed = false;
-        for (const category of categories) {
-          if (category.isActive && category.parentCategoryId && descendants.has(category.parentCategoryId) && !descendants.has(category.id)) {
-            descendants.add(category.id);
-            changed = true;
-          }
-        }
-      }
-      where.categoryId = { in: [...descendants] };
+      const descendants = await resolveCategoryBranch(this.prisma, query.categoryId);
+      if (!descendants.length) throw new BadRequestException('Category not found');
+      where.categoryId = { in: descendants };
     }
 
     // Products this merchant already lists (to flag / optionally exclude).

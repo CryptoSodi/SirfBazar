@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
@@ -42,8 +43,8 @@ export default function Products() {
             <td className="space-x-1 px-4 py-2.5 text-right">
               {p.approvalStatus === 'PENDING' && (
                 <>
-                  <button className={btnCls} onClick={() => act(p.id, 'approve')}>✓</button>
-                  <button className={btnDanger} onClick={() => { const reason = prompt('Rejection reason:'); if (reason !== null) act(p.id, 'reject', { reason }); }}>✗</button>
+                  <button className={btnCls} aria-label={`Approve ${p.name}`} onClick={() => act(p.id, 'approve')}><UiIcon name="check" size={18} /></button>
+                  <button aria-label={`Reject ${p.name}`} className={btnDanger} onClick={() => { const reason = prompt('Rejection reason:'); if (reason !== null) act(p.id, 'reject', { reason }); }}><UiIcon name="close" size={16} /></button>
                 </>
               )}
               {p.approvalStatus === 'APPROVED' && <button className={btnDanger} onClick={() => act(p.id, 'disable')}>Disable</button>}

@@ -1,4 +1,6 @@
 'use client';
+import { AppIcon as UiIcon } from '../../components/AppIcon';
+
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -34,7 +36,7 @@ export default function OrdersPage() {
     return (
       <>
         <div className="card mx-auto max-w-md p-10 text-center">
-          <div className="text-4xl">📦</div>
+          <div className="text-4xl"><UiIcon name="box" size={18} /></div>
           <h1 className="mt-2 text-lg font-bold">Login to see your orders</h1>
           <button className="btn-primary mt-4" onClick={() => setNeedLogin(true)}>Login</button>
         </div>
@@ -67,7 +69,7 @@ export default function OrdersPage() {
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-semibold">{o.orderNumber}</div>
-                  <div className="truncate text-sm text-stone-500">🏪 {shops} · {itemCount} item{itemCount === 1 ? '' : 's'}</div>
+                  <div className="truncate text-sm text-stone-500"><UiIcon name="shop" size={18} /> {shops} · {itemCount} item{itemCount === 1 ? '' : 's'}</div>
                   <div className="text-xs text-stone-400">{new Date(o.createdAt).toLocaleString()}</div>
                 </div>
                 <div className="text-right">

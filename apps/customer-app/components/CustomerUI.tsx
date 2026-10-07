@@ -82,7 +82,17 @@ export function Choice({ title, subtitle, icon, selected, onPress, disabled = fa
 }
 export function CategoryChips({ items, selected, onSelect }: { items: any[]; selected: string; onSelect: (id: string) => void }) {
   const { colors } = useTheme();
-  return <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 16 }}>{[{ id: '', name: 'All' }, ...items].map(c => <TouchableOpacity accessibilityRole="button" accessibilityState={{ selected: selected === c.id }} key={c.id} onPress={() => onSelect(c.id)} style={{ paddingHorizontal: 13, minHeight: 44, justifyContent: 'center', borderRadius: 11, borderWidth: 1, borderColor: selected === c.id ? colors.action : colors.border, backgroundColor: selected === c.id ? colors.action : colors.card }}><Text style={{ color: selected === c.id ? '#fff' : colors.muted, fontSize: 12 }}>{c.name}</Text></TouchableOpacity>)}</ScrollView>;
+  const contains = (node: any): boolean => node.id === selected || (node.children ?? []).some(contains);
+  const levels: { title: string; entries: any[] }[] = [{ title: 'Categories', entries: [{ id: '', name: 'All' }, ...items] }];
+  let parent = items.find(contains);
+  while (parent?.children?.length) {
+    levels.push({ title: parent.name, entries: [{ id: parent.id, name: `All ${parent.name}` }, ...parent.children] });
+    parent = parent.children.find(contains);
+  }
+  return <View>{levels.map((level, index) => <View key={index}>
+    {index > 0 && <Text style={{ color: colors.muted, fontSize: 12 }}>{level.title} subsections</Text>}
+    <ScrollView horizontal accessibilityLabel={level.title} showsHorizontalScrollIndicator contentContainerStyle={{ gap: 8, paddingVertical: 12 }}>{level.entries.map(c => <TouchableOpacity accessibilityRole="button" accessibilityState={{ selected: selected === c.id }} key={c.id} onPress={() => onSelect(c.id)} style={{ paddingHorizontal: 13, minHeight: 44, justifyContent: 'center', borderRadius: 11, borderWidth: 1, borderColor: selected === c.id ? colors.action : colors.border, backgroundColor: selected === c.id ? colors.action : colors.card }}><Text style={{ color: selected === c.id ? '#fff' : colors.muted, fontSize: 12 }}>{c.name}</Text></TouchableOpacity>)}</ScrollView>
+  </View>)}</View>;
 }
 export function ProductArtwork({ uri, size = 103, name }: { uri?: string; size?: number; name?: string }) {
   const { colors } = useTheme(); const [failedUri, setFailedUri] = useState<string>();

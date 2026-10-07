@@ -1,3 +1,4 @@
+import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useEffect, useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
@@ -71,7 +72,7 @@ export default function Earnings() {
           {items.map((s) => (
             <tr key={s.id}>
               <td className="px-4 py-2.5 text-xs">
-                {fmtDate(s.startDate)} → {fmtDate(s.endDate)}
+                {fmtDate(s.startDate)} <UiIcon name="arrow" /> {fmtDate(s.endDate)}
               </td>
               <td className="px-4 py-2.5 font-semibold">{pkr(s.amountPaisa)}</td>
               <td className="px-4 py-2.5">
@@ -94,7 +95,7 @@ export default function Earnings() {
         <Pager page={page} totalPages={totalPages} setPage={setPage} />
       </div>
       </section>
-      {selected && <Modal title="Settlement details" onClose={() => setSelected(null)}><div className="dialog-body"><div className="order-summary"><div><Badge value={selected.status} /><p>{fmtDate(selected.startDate)} → {fmtDate(selected.endDate)}</p></div><strong>{pkr(selected.amountPaisa)}</strong></div><div className="definition"><span>Paid at</span><b>{fmtDateTime(selected.paidAt)}</b></div><div className="definition"><span>Reference</span><b>{selected.paymentReference ?? '—'}</b></div><div className="definition"><span>Created</span><b>{fmtDateTime(selected.createdAt)}</b></div></div></Modal>}
+      {selected && <Modal title="Settlement details" onClose={() => setSelected(null)}><div className="dialog-body"><div className="order-summary"><div><Badge value={selected.status} /><p>{fmtDate(selected.startDate)} <UiIcon name="arrow" /> {fmtDate(selected.endDate)}</p></div><strong>{pkr(selected.amountPaisa)}</strong></div><div className="definition"><span>Paid at</span><b>{fmtDateTime(selected.paidAt)}</b></div><div className="definition"><span>Reference</span><b>{selected.paymentReference ?? '—'}</b></div><div className="definition"><span>Created</span><b>{fmtDateTime(selected.createdAt)}</b></div></div></Modal>}
       {node}
     </div>
   );

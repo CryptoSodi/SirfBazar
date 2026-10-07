@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getConfirmedLocation, pkr } from '../lib/api';
 import { subscribeCustomerEvent } from '../lib/customer-events';
 import { useTheme } from '../lib/theme';
+import { findCategoryName } from '../lib/category-tree';
 import { CategoryChips, Field, Icon, IconButton, Notice, PageHeading, ProductCard, SearchField, SectionTitle, StatePanel, goTab, usePageInset } from './CustomerUI';
 
 type Filters = { sort: 'relevance' | 'price_asc' | 'price_desc' | 'rating'; brand: string; min: string; max: string };
@@ -79,7 +80,7 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
         </>}
         {!globalCatalog && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><View style={{ flex: 1 }}><SearchField value={q} onChangeText={(value) => { sequence.current++; setQ(value); setPage(1); }} placeholder={merchantId ? 'Search this shop' : 'What do you need?'} /></View>{!merchantId && <IconButton name="filter" label={filterCount ? `Filters, ${filterCount} applied` : 'Filters'} onPress={() => { setDraft({ ...filters }); setDraftCategory(selected); setFilterError(''); setSheet('filters'); }} />}</View>}
         {!merchantId && !globalCatalog && <CategoryChips items={categories} selected={selected} onSelect={choose} />}
-        {!globalCatalog && <><SectionTitle title={merchantId ? 'Shop products' : q.trim() ? `Results for “${q.trim()}”` : categories.find((category) => category.id === selected)?.name ?? 'Find your essentials'} />{!merchantId && typeof total === 'number' && !loading && <Text style={[s.muted, { marginBottom: 4 }]}>{total} {total === 1 ? 'listing' : 'listings'} · prices by shop{filterCount ? ` · ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'} applied` : ''}</Text>}</>}
+        {!globalCatalog && <><SectionTitle title={merchantId ? 'Shop products' : q.trim() ? `Results for “${q.trim()}”` : findCategoryName(categories, selected) ?? 'Find your essentials'} />{!merchantId && typeof total === 'number' && !loading && <Text style={[s.muted, { marginBottom: 4 }]}>{total} {total === 1 ? 'listing' : 'listings'} · prices by shop{filterCount ? ` · ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'} applied` : ''}</Text>}</>}
         {!!metaError && <View style={{ marginBottom: 12 }}><Notice danger>{metaError} Product results may still be available.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 10 }]} onPress={retry}><Text style={s.btnGhostText}>Retry details</Text></TouchableOpacity></View>}
         {!!error && items.length > 0 && <Notice danger>{error} Loaded products are still shown. Retry below for the next page.</Notice>}
       </View>}

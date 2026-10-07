@@ -1,3 +1,4 @@
+import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage, pkr } from '../lib/api';
 import { Modal, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
@@ -17,7 +18,7 @@ type Selection = { item: CatalogItem; price: string; stock: string; error?: stri
 
 function CategoryNode({ category, selected, onSelect }: { category: CatalogCategory; selected: string; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  return <div className="catalog-category-node"><div className="catalog-category-line">{category.children?.length ? <button type="button" className="catalog-disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${category.name}`} aria-expanded={open} onClick={() => setOpen(!open)}>{open ? '▾' : '▸'}</button> : <span className="catalog-disclosure-spacer" />}<button type="button" className={selected === category.id ? 'active' : ''} aria-pressed={selected === category.id} onClick={() => onSelect(category.id)}>{category.name}{category.children?.length ? ' (includes subcategories)' : ''}</button></div>{open && category.children?.length ? <div className="catalog-children">{category.children.map((child) => <CategoryNode key={child.id} category={child} selected={selected} onSelect={onSelect} />)}</div> : null}</div>;
+  return <div className="catalog-category-node"><div className="catalog-category-line">{category.children?.length ? <button type="button" className="catalog-disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${category.name}`} aria-expanded={open} onClick={() => setOpen(!open)}><ReferenceIcon name={open ? "down" : "right"} size="sm" /></button> : <span className="catalog-disclosure-spacer" />}<button type="button" className={selected === category.id ? 'active' : ''} aria-pressed={selected === category.id} onClick={() => onSelect(category.id)}>{category.name}{category.children?.length ? ' (includes subcategories)' : ''}</button></div>{open && category.children?.length ? <div className="catalog-children">{category.children.map((child) => <CategoryNode key={child.id} category={child} selected={selected} onSelect={onSelect} />)}</div> : null}</div>;
 }
 
 function ProductViewTabs({ view, onChange }: { view: 'catalog' | 'shop'; onChange: (view: 'catalog' | 'shop') => void }) {
@@ -129,7 +130,7 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
       </div>
     </article>)}</div>}
     {!loading && result?.items.length === 0 && !error && <div className="panel catalog-empty">{query ? `No catalog products match “${query}”.` : 'The catalog is empty.'}</div>}
-    {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Catalog pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next →</button></nav>}
+    {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Catalog pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}><UiIcon name="back" /> Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next <UiIcon name="arrow" /></button></nav>}
     </div>
     <aside className="catalog-review" aria-label="Selected products"><h2>Review selected products <span>{Object.keys(selected).length}</span></h2>{!Object.keys(selected).length && <p>Select products from the visible page to set their sale price and stock.</p>}{Object.values(selected).map(({ item, price, stock }) => <div className="catalog-review-item" key={item.productId}><strong>{item.name}</strong><button type="button" className="btn tiny" disabled={!!bulkRequest} onClick={() => toggleSelected(item)} aria-label={`Remove ${item.name} from selection`}>Remove</button><label>Sale price (Rs)<input className={inputCls} inputMode="decimal" value={price} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], price: event.target.value } }))} /></label><label>Stock quantity (units)<input className={inputCls} inputMode="numeric" value={stock} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], stock: event.target.value } }))} /></label></div>)}{bulkError && <p className="inline-error" role="alert">{bulkError}</p>}{bulkResult && <div role="status"><p>{bulkResult.created} added · {bulkResult.skipped} skipped · {bulkResult.failed.length} failed</p>{bulkResult.rows.filter((row) => row.error).map((row) => <p key={row.rowId}>{row.rowId}: {row.error}</p>)}</div>}{bulkRequest ? <><button type="button" className="btn primary" disabled={bulkBusy} onClick={() => void submitSelected(true)}>{bulkBusy ? 'Checking…' : 'Retry same selection'}</button>{bulkResult?.failed.length ? <button type="button" className="btn" disabled={bulkBusy} onClick={() => { setBulkRequest(null); setBulkResult(null); setBulkError(''); }}>Edit failed rows</button> : null}</> : <button type="button" className="btn primary" disabled={bulkBusy || !Object.keys(selected).length} onClick={() => void submitSelected()}>{bulkBusy ? 'Adding…' : `Add ${Object.keys(selected).length} selected`}</button>}</aside>
     </div>
@@ -321,7 +322,7 @@ export default function Products() {
       <div className="panel-foot"><span>{result?.total ?? 0} matching products · {visible.length} on this page</span><span>Low stock uses each listing’s threshold.</span></div>
       </section>
 
-      {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Shop listing pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next →</button></nav>}
+      {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Shop listing pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}><UiIcon name="back" /> Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next <UiIcon name="arrow" /></button></nav>}
 
       {editing && (
         <EditModal
@@ -353,7 +354,7 @@ function Thumb({ name, imageUrl }: { name?: string; imageUrl?: string | null }) 
   }
   return (
     <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-50 text-lg" aria-hidden>
-      🛍️
+      <UiIcon name="bag" />
     </div>
   );
 }
@@ -534,7 +535,7 @@ function CatalogModal({
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
             >
-              ←
+              <UiIcon name="back" />
             </button>
             <span className="text-slate-500">
               {page} / {totalPages}
@@ -544,7 +545,7 @@ function CatalogModal({
               disabled={page >= totalPages}
               onClick={() => setPage(page + 1)}
             >
-              →
+              <UiIcon name="arrow" />
             </button>
           </div>
         )}

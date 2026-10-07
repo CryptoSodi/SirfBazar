@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from './components/AppIcon';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Bike, ClipboardList, Grid2X2, Headphones, LayoutDashboard, Package, Palette, RotateCcw, ScrollText, Store, Tag, Users, Wallet } from 'lucide-react';
 import { lazy, Suspense } from 'react';
@@ -48,7 +49,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="ops-sidebar-footer"><img src="/brand/sirfbazar-slogan-urdu.svg" alt="بازار وہی۔ طریقہ نیا۔" style={{ width: 185, maxWidth: '100%' }} /><small>One bazar. A complete overview.</small></div>
       </aside>
       <div className="ops-frame">
-        <header className="ops-topbar"><div><small>Marketplace&nbsp; › &nbsp;</small><strong>{current?.label ?? 'Overview'}</strong></div><div className="ops-topbar-actions"><AdminHeaderTools openTheme={open} />{import.meta.env.MODE !== 'production' && <button type="button" className="ops-button" onClick={open}><Palette size={16} aria-hidden="true" />Theme Studio</button>}<div className="ops-identity"><strong>{user?.fullName ?? user?.email ?? 'Admin'}</strong><span>{user?.role?.replace(/_/g, ' ').toLowerCase()}</span></div><button type="button" className="ops-button" onClick={logout}>Sign out</button></div></header>
+        <header className="ops-topbar"><div><small>Marketplace&nbsp; <UiIcon name="chevron" size={18} /> &nbsp;</small><strong>{current?.label ?? 'Overview'}</strong></div><div className="ops-topbar-actions"><AdminHeaderTools openTheme={open} />{import.meta.env.MODE !== 'production' && <button type="button" className="ops-button" onClick={open}><Palette size={16} aria-hidden="true" />Theme Studio</button>}<div className="ops-identity"><strong>{user?.fullName ?? user?.email ?? 'Admin'}</strong><span>{user?.role?.replace(/_/g, ' ').toLowerCase()}</span></div><button type="button" className="ops-button" onClick={logout}>Sign out</button></div></header>
         <main id="main-content" className="ops-main"><Suspense fallback={<div className="ops-panel" role="status">Loading workspace…</div>}>{children}</Suspense></main>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { AppIcon } from '../components/AppIcon';
 import { api } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
 import { Badge, Table, btnDanger, btnGhost, useToast } from '../components/ui';
@@ -26,9 +27,9 @@ export default function Riders() {
             <td className="px-4 py-2.5 font-medium">{r.fullName}<div className="text-xs text-slate-400">{r.phoneNumber}</div></td>
             <td className="px-4 py-2.5">{r.merchant?.shopName}</td>
             <td className="px-4 py-2.5 text-xs">{r.vehicleType} {r.vehicleNumber && `· ${r.vehicleNumber}`}</td>
-            <td className="px-4 py-2.5">{r.isOnline ? '🟢 online' : '⚪ offline'}</td>
+            <td className="px-4 py-2.5"><AppIcon name={r.isOnline ? "online" : "offline"} size={16} /> {r.isOnline ? 'Online' : 'Offline'}</td>
             <td className="px-4 py-2.5"><Badge value={r.approvalStatus} /> {!r.isActive && <Badge value="INACTIVE" />}</td>
-            <td className="px-4 py-2.5 text-xs">{r.currentOrderId ? `🛵 ${r.currentStatus}` : '—'}</td>
+            <td className="px-4 py-2.5 text-xs">{r.currentOrderId ? <><AppIcon name="bike" size={16} /> {r.currentStatus}</> : '—'}</td>
             <td className="px-4 py-2.5 text-right">
               {r.approvalStatus === 'SUSPENDED' ? (
                 <button className={btnGhost} onClick={() => act(r.id, 'activate')}>Reinstate</button>

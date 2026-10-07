@@ -46,22 +46,3 @@ export const TRACKING_STEPS = [
   'ON_THE_WAY',
   'DELIVERED',
 ];
-
-export const CATEGORY_EMOJI: Record<string, string> = {
-  groceries: '🛒',
-  'milk-eggs-bread': '🥛',
-  'fruits-vegetables': '🥕',
-  'snacks-drinks': '🥤',
-  bakery: '🥐',
-  pharmacy: '💊',
-  'personal-care': '🧴',
-  'baby-care': '🍼',
-  household: '🧹',
-  stationery: '✏️',
-  'mobile-accessories': '🔌',
-  'pet-food': '🐾',
-};
-
-export function productEmoji(card: { categoryId?: string } | null, slugHint?: string): string {
-  return CATEGORY_EMOJI[slugHint ?? ''] ?? '🛍️';
-}

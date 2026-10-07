@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { resolveCategoryBranch } from '../common/utils/category-tree';
 
 export interface CouponQuote {
   couponId: string;
@@ -46,12 +47,11 @@ export class CouponsService {
     if (coupon.applicableMerchantId && !ctx.merchantIds.includes(coupon.applicableMerchantId)) {
       throw new BadRequestException('Coupon is not valid for this shop');
     }
-    if (
-      coupon.applicableCategoryId &&
-      ctx.categoryIds &&
-      !ctx.categoryIds.includes(coupon.applicableCategoryId)
-    ) {
-      throw new BadRequestException('Coupon is not valid for these products');
+    if (coupon.applicableCategoryId) {
+      const eligible = new Set(await resolveCategoryBranch(db, coupon.applicableCategoryId));
+      if (!ctx.categoryIds?.some(id => eligible.has(id))) {
+        throw new BadRequestException('Coupon is not valid for these products');
+      }
     }
     if (coupon.applicableCity && ctx.city && coupon.applicableCity !== ctx.city) {
       throw new BadRequestException('Coupon is not valid in your city');

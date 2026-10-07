@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from './AppIcon';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { tone } from '../lib/api';
@@ -52,7 +53,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     return () => { if (dialog?.open) dialog.close(); previous?.focus(); };
   }, []);
   return createPortal(<dialog ref={dialogRef} className="sb-modal" aria-label={title} onCancel={(e) => { e.preventDefault(); closeRef.current(); }} onClick={(e) => { if (e.target === e.currentTarget) closeRef.current(); }}>
-    <div className="sb-modal-head"><h2 className="ops-panel-title">{title}</h2><button type="button" data-modal-close className="ops-button" aria-label={`Close ${title}`} onClick={() => closeRef.current()}>✕</button></div>
+    <div className="sb-modal-head"><h2 className="ops-panel-title">{title}</h2><button type="button" data-modal-close className="ops-button" aria-label={`Close ${title}`} onClick={() => closeRef.current()}><UiIcon name="close" size={18} /></button></div>
     {children}
   </dialog>, document.body);
 }

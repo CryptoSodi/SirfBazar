@@ -1,5 +1,9 @@
 'use client';
 
+import { AppIcon } from './AppIcon';
+import { AppIcon as UiIcon } from './AppIcon';
+
+
 import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -105,7 +109,7 @@ export function MapPicker({
               />
               {/* Fixed centre pin — its tip points at the map centre. */}
               <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full text-4xl drop-shadow-md">
-                📍
+                <UiIcon name="pin" size={36} />
               </div>
               <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/40" />
 
@@ -116,7 +120,7 @@ export function MapPicker({
                 className="absolute bottom-4 right-4 z-10 grid h-11 w-11 place-items-center rounded-full border border-stone-200 bg-white text-lg shadow-lg"
                 title="Use my current location"
               >
-                {locating ? '…' : '🎯'}
+                {locating ? '…' : <AppIcon name="location" size={20} />}
               </button>
             </>
           ) : (

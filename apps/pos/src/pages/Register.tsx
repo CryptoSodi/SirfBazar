@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getUser, pkr } from '../lib/api';
 import { SaleRecovery, clearSaleRecovery, isDefinitiveSaleRejection, readSaleRecovery, receiptMatches, saveSaleRecovery } from '../lib/sale-recovery';
@@ -311,7 +312,7 @@ export default function Register() {
 
       {/* Receipt */}
       {receipt && (
-        <Modal title="Sale complete ✓" onClose={() => setReceipt(null)}>
+        <Modal title="Sale complete" onClose={() => setReceipt(null)}>
           <div className="text-center">
             <div className="text-xs text-slate-400">Receipt #{receipt.orderNumber}</div>
             <div className="mt-1 text-3xl font-black text-emerald-700">{pkr(receipt.totalAmountPaisa)}</div>
@@ -333,7 +334,7 @@ export default function Register() {
           </ul>
           <div className="mt-4 flex gap-2">
             <button className={`${btnGhost} flex-1 py-2.5`} onClick={() => window.print()}>
-              🖨 Print
+              <UiIcon name="printer" size={18} /> Print
             </button>
             <button className={`${btnCls} flex-1 py-2.5`} onClick={() => setReceipt(null)}>
               New sale

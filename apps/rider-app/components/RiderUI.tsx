@@ -1,3 +1,4 @@
+import { AppIcon } from './AppIcon';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Image, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -70,7 +71,7 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType, m
 }
 export function CheckRow({ checked, onPress, children }: { checked: boolean; onPress: () => void; children: ReactNode }) {
   const { palette } = useRiderTheme();
-  return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={onPress} style={{ minHeight: 48, flexDirection: 'row', alignItems: 'flex-start', gap: 11, padding: 13, borderRadius: 13, backgroundColor: palette.surface2 }}><View style={{ height: 21, width: 21, borderWidth: 1.5, borderColor: checked ? palette.action : palette.control, borderRadius: 3, backgroundColor: checked ? palette.action : palette.surface, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}><Text style={{ color: '#FFFFFF', fontSize: 14 }}>{checked ? '✓' : ''}</Text></View><Text style={{ flex: 1, color: palette.ink, fontSize: 13, lineHeight: 20 }}>{children}</Text></Pressable>;
+  return <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={onPress} style={{ minHeight: 48, flexDirection: 'row', alignItems: 'flex-start', gap: 11, padding: 13, borderRadius: 13, backgroundColor: palette.surface2 }}><View style={{ height: 21, width: 21, borderWidth: 1.5, borderColor: checked ? palette.action : palette.control, borderRadius: 3, backgroundColor: checked ? palette.action : palette.surface, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>{checked && <AppIcon name="check" size={16} color="#FFFFFF" />}</View><Text style={{ flex: 1, color: palette.ink, fontSize: 13, lineHeight: 20 }}>{children}</Text></Pressable>;
 }
 export function Header({ title, back, backLabel = 'Back', help, notifications = false }: { title?: string; back?: () => void; backLabel?: string; help?: () => void; notifications?: boolean }) {
   const { palette, mode } = useRiderTheme();

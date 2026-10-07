@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authDestination, type AuthContext } from './auth-flow';
 
 /** Defaults to the live production API. Local backend: EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:3001/api */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.sirfbazar.com/api';
 
-const KEYS = { access: 'sbm.accessToken', refresh: 'sbm.refreshToken', user: 'sbm.user' };
+const KEYS = { access: 'sbm.accessToken', refresh: 'sbm.refreshToken', user: 'sbm.user', context: 'sbm.authContext' };
 let authVersion = 0;
 export const getAuthVersion = () => authVersion;
 
@@ -25,11 +26,18 @@ async function persistAuth(data: { accessToken: string; refreshToken: string; us
   ]);
 }
 
-export async function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
+export async function storeAuth(data: { accessToken: string; refreshToken: string; user: any }, context: AuthContext = 'merchant') {
   authVersion++;
+  await AsyncStorage.setItem(KEYS.context, context);
   await persistAuth(data);
   // Register this device for order alerts (dynamic import avoids an api↔push cycle).
-  void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
+  if (context === 'merchant') void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
+}
+
+export async function getEntryRoute(): Promise<'Login' | 'Tabs' | 'Onboard'> {
+  if (!(await isLoggedIn())) return 'Login';
+  const context = await AsyncStorage.getItem(KEYS.context);
+  return authDestination(await getUser(), context === 'customer' ? 'customer' : 'merchant');
 }
 
 export async function clearAuth() {
@@ -38,7 +46,7 @@ export async function clearAuth() {
   await import('./push').then((m) => m.unregisterPush()).catch(() => undefined);
   const refreshToken = await AsyncStorage.getItem(KEYS.refresh);
   if (refreshToken) await request('POST', '/auth/logout', { refreshToken }, false).catch(() => undefined);
-  if (version === authVersion) await AsyncStorage.multiRemove([KEYS.access, KEYS.refresh, KEYS.user]);
+  if (version === authVersion) await AsyncStorage.multiRemove([KEYS.access, KEYS.refresh, KEYS.user, KEYS.context]);
 }
 
 async function request(method: string, path: string, body?: unknown, retry = true): Promise<any> {
@@ -122,13 +130,14 @@ export async function uploadImage(uri: string): Promise<string> {
 }
 
 /** After /merchant/onboard returns fresh tokens, persist them + the user profile. */
-export async function finishOnboarding(tokens: { accessToken: string; refreshToken: string }) {
+export async function finishOnboarding(tokens: { accessToken: string; refreshToken: string; user?: any }) {
   authVersion++;
   await AsyncStorage.multiSet([
     [KEYS.access, tokens.accessToken],
     [KEYS.refresh, tokens.refreshToken],
+    [KEYS.context, 'merchant'],
   ]);
-  const user = await request('GET', '/auth/me');
+  const user = tokens.user ?? await request('GET', '/auth/me');
   await AsyncStorage.setItem(KEYS.user, JSON.stringify(user));
   void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
   return user;

@@ -104,7 +104,7 @@ export default function LoginScreen() {
                 disabled={busy}
                 style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
               >
-                <Text style={{ color: '#0f172a', fontWeight: '700' }}>🔵 Continue with Google</Text>
+                <Text style={{ color: '#0f172a', fontWeight: '700' }}>Continue with Google</Text>
               </TouchableOpacity>
             </>
           ) : (

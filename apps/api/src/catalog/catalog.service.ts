@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MerchantApprovalStatus, ProductApprovalStatus } from '../common/constants';
 import { boundingBox, estimateDeliveryMinutes, haversineKm } from '../common/utils/geo';
 import { paged, parsePage } from '../common/utils/pagination';
+import { resolveCategoryBranch } from '../common/utils/category-tree';
 import {
   LocationQuery,
   NearbyMerchantsQuery,
@@ -60,7 +61,7 @@ export class CatalogService {
   async catalogProducts(query: SearchProductsQuery) {
     const { page, pageSize, skip, take } = parsePage(query);
     const where: Prisma.ProductWhereInput = { approvalStatus: ProductApprovalStatus.APPROVED };
-    if (query.categoryId) where.categoryId = query.categoryId;
+    if (query.categoryId) where.categoryId = { in: await resolveCategoryBranch(this.prisma, query.categoryId) };
     if (query.q?.trim()) {
       const q = query.q.trim();
       where.OR = [
@@ -357,7 +358,7 @@ export class CatalogService {
     const { page, pageSize, skip, take } = parsePage(query);
 
     const productWhere: Prisma.ProductWhereInput = {};
-    if (query.categoryId) productWhere.categoryId = query.categoryId;
+    if (query.categoryId) productWhere.categoryId = { in: await resolveCategoryBranch(this.prisma, query.categoryId) };
     if (query.brand) productWhere.brand = { contains: query.brand, mode: 'insensitive' };
     if (query.q?.trim()) {
       const q = query.q.trim();
@@ -386,7 +387,7 @@ export class CatalogService {
       latitude: query.latitude,
       longitude: query.longitude,
       radiusKm: query.radiusKm,
-      productWhere: query.categoryId ? { categoryId: query.categoryId } : undefined,
+      productWhere: query.categoryId ? { categoryId: { in: await resolveCategoryBranch(this.prisma, query.categoryId) } } : undefined,
     });
     return paged(cards.slice(skip, skip + take), cards.length, page, pageSize);
   }
@@ -564,7 +565,7 @@ export class CatalogService {
           isAvailable: true,
           stockQuantity: { gt: 0 },
           product: {
-            categoryId: query.categoryId,
+            categoryId: { in: await resolveCategoryBranch(this.prisma, query.categoryId) },
             approvalStatus: ProductApprovalStatus.APPROVED,
           },
         },
@@ -640,7 +641,7 @@ export class CatalogService {
       merchantId,
       product: {
         approvalStatus: ProductApprovalStatus.APPROVED,
-        ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+        ...(query.categoryId ? { categoryId: { in: await resolveCategoryBranch(this.prisma, query.categoryId) } } : {}),
         ...(query.q?.trim()
           ? {
               OR: [

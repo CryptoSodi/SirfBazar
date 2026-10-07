@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -46,7 +47,7 @@ export default function Dashboard() {
       <Stat label="Merchants" value={stats.totalMerchants ?? 0} hint="All registered shops; approval varies" />
       <Stat label="Needs attention" value={attention} hint="Merchant reviews, tickets and refunds" />
     </div>
-    <div className="ops-attention"><span>Your focus today</span><Link to="/merchants">{stats.pendingMerchants ?? 0} merchant reviews →</Link><Link to="/support">{stats.pendingTickets ?? 0} support cases →</Link><Link to="/refunds">{stats.pendingRefunds ?? 0} refund requests →</Link></div>
+    <div className="ops-attention"><span>Your focus today</span><Link to="/merchants">{stats.pendingMerchants ?? 0} merchant reviews <UiIcon name="arrow" size={18} /></Link><Link to="/support">{stats.pendingTickets ?? 0} support cases <UiIcon name="arrow" size={18} /></Link><Link to="/refunds">{stats.pendingRefunds ?? 0} refund requests <UiIcon name="arrow" size={18} /></Link></div>
     <div className="ops-analytics">
       <section className="ops-panel" aria-labelledby="admin-chart-title">
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id="admin-chart-title" className="ops-panel-title">{measure === 'orders' ? 'Delivered orders' : 'Delivered merchandise'}</h2><p className="ops-panel-description">By order placement date · last {days} days</p></div><div className="ops-segment" role="group" aria-label="Chart measure"><button type="button" aria-pressed={measure === 'orders'} onClick={() => setMeasure('orders')}>Orders</button><button type="button" aria-pressed={measure === 'itemValuePaisa'} onClick={() => setMeasure('itemValuePaisa')}>Item value</button></div></div>

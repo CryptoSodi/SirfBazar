@@ -1,5 +1,9 @@
 'use client';
 
+import { AppIcon } from '@/components/AppIcon';
+import { AppIcon as UiIcon } from '../../components/AppIcon';
+
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -125,7 +129,7 @@ export default function ProfilePage() {
                   <div>
                     <b>{a.label}</b> {a.isDefault && <span className="chip ml-1 bg-emerald-50 text-emerald-700">default</span>}
                     <div className="text-stone-500">{a.fullAddress}</div>
-                    {a.instructions && <div className="text-xs text-stone-400">📝 {a.instructions}</div>}
+                    {a.instructions && <div className="text-xs text-stone-400"><UiIcon name="file" size={18} /> {a.instructions}</div>}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
                     <button className="text-emerald-700 underline" onClick={() => setEditing(a)}>edit</button>
@@ -158,13 +162,13 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section className="card p-5"><h2 className="mb-3 font-bold">Appearance</h2><div className="flex flex-wrap gap-2">{(['light', 'dark', 'system'] as const).map((option) => <button key={option} type="button" className={appearance === option ? 'sb-appearance-option selected' : 'sb-appearance-option'} aria-pressed={appearance === option} onClick={() => chooseAppearance(option)}>{option === 'light' ? '☼' : option === 'dark' ? '☾' : '▣'} {option[0].toUpperCase() + option.slice(1)}</button>)}</div><p className="sb-muted mt-3">System follows your device. Changing appearance keeps your basket.</p></section>
+      <section className="card p-5"><h2 className="mb-3 font-bold">Appearance</h2><div className="flex flex-wrap gap-2">{(['light', 'dark', 'system'] as const).map((option) => <button key={option} type="button" className={appearance === option ? 'sb-appearance-option selected' : 'sb-appearance-option'} aria-pressed={appearance === option} onClick={() => chooseAppearance(option)}><AppIcon name={option === 'light' ? 'sun' : option === 'dark' ? 'moon' : 'system'} size={18} /> {option[0].toUpperCase() + option.slice(1)}</button>)}</div><p className="sb-muted mt-3">System follows your device. Changing appearance keeps your basket.</p></section>
 
       <section className="card p-5">
         <h2 className="mb-3 font-bold">Quick links</h2>
         <div className="flex flex-wrap gap-2 text-sm">
-          <Link className="btn-secondary" href="/orders">📦 My orders</Link>
-          <Link className="btn-secondary" href="/cart">🛒 Cart</Link>
+          <Link className="btn-secondary" href="/orders"><UiIcon name="box" size={18} /> My orders</Link>
+          <Link className="btn-secondary" href="/cart"><UiIcon name="cart" size={18} /> Cart</Link>
         </div>
       </section>
 

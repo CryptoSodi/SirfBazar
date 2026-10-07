@@ -9,9 +9,11 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node ../../scripts/test-push-lifecycle.cjs merchant-app"
+    "test": "node --test test/*.test.cjs && node ../../scripts/test-push-lifecycle.cjs merchant-app"
   },
   "dependencies": {
+    "lucide-react-native": "1.48.0",
+    "react-native-svg": "15.12.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
     "@react-navigation/bottom-tabs": "^7.4.0",

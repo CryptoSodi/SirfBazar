@@ -84,7 +84,7 @@ export default function OrdersScreen() {
                   textTransform: 'capitalize',
                 }}
               >
-                {o.status === 'SENT_TO_MERCHANT' ? '🔔 NEW — respond now' : statusLabel(o.status)}
+                {o.status === 'SENT_TO_MERCHANT' ? 'NEW — respond now' : statusLabel(o.status)}
               </Text>
               <Text style={s.faint}>{new Date(o.createdAt).toLocaleTimeString()}</Text>
             </View>

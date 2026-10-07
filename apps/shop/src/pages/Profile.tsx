@@ -280,7 +280,7 @@ export default function Profile() {
 
       {/* Read-only summary */}
       <div hidden className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Rating" value={`${(merchant.ratingAverage ?? 0).toFixed(1)} ★`} hint={`${merchant.ratingCount ?? 0} reviews`} />
+        <Stat label="Rating" value={<>{(merchant.ratingAverage ?? 0).toFixed(1)} <ReferenceIcon name="star" /></>} hint={`${merchant.ratingCount ?? 0} reviews`} />
         <Stat
           label="Commission"
           value={merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}
