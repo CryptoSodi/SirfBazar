@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { PricingService } from '../common/pricing.service';
@@ -160,24 +155,29 @@ export class CartService {
       include: { items: true },
     });
     if (guestCart && guestCart.items.length > 0) {
-      const customerCart = await this.getOrCreateActiveCart(customerOwner);
-      for (const item of guestCart.items) {
-        const existing = await this.prisma.cartItem.findUnique({
-          where: {
-            cartId_merchantProductId: {
-              cartId: customerCart.id,
-              merchantProductId: item.merchantProductId,
-            },
-          },
+      await this.prisma.$transaction(async (tx) => {
+        // Claim and copy atomically. A lost response or concurrent retry must not
+        // add the same guest quantities twice; failed copies roll back the claim.
+        const claimed = await tx.cart.updateMany({
+          where: { id: guestCart.id, status: 'ACTIVE' },
+          data: { status: 'MERGED' },
         });
-        if (existing) {
-          await this.prisma.cartItem.update({
-            where: { id: existing.id },
-            data: { quantity: existing.quantity + item.quantity },
-          });
-        } else {
-          await this.prisma.cartItem.create({
-            data: {
+        if (!claimed.count) return;
+        const customerCart =
+          (await tx.cart.findFirst({
+            where: { customerId: customerOwner.customerId, status: 'ACTIVE' },
+            orderBy: { createdAt: 'desc' },
+          })) ?? (await tx.cart.create({ data: { customerId: customerOwner.customerId } }));
+        for (const item of guestCart.items) {
+          await tx.cartItem.upsert({
+            where: {
+              cartId_merchantProductId: {
+                cartId: customerCart.id,
+                merchantProductId: item.merchantProductId,
+              },
+            },
+            update: { quantity: { increment: item.quantity } },
+            create: {
               cartId: customerCart.id,
               merchantId: item.merchantId,
               productId: item.productId,
@@ -187,14 +187,13 @@ export class CartService {
             },
           });
         }
-      }
-      if (guestCart.couponCode) {
-        await this.prisma.cart.update({
-          where: { id: customerCart.id },
-          data: { couponCode: guestCart.couponCode },
-        });
-      }
-      await this.prisma.cart.update({ where: { id: guestCart.id }, data: { status: 'MERGED' } });
+        if (guestCart.couponCode) {
+          await tx.cart.update({
+            where: { id: customerCart.id },
+            data: { couponCode: guestCart.couponCode },
+          });
+        }
+      });
     }
     return this.view(customerOwner);
   }
@@ -225,7 +224,12 @@ export class CartService {
         if (location) {
           distanceKm =
             Math.round(
-              haversineKm(location.latitude, location.longitude, mp.merchant.latitude, mp.merchant.longitude) * 10,
+              haversineKm(
+                location.latitude,
+                location.longitude,
+                mp.merchant.latitude,
+                mp.merchant.longitude,
+              ) * 10,
             ) / 10;
         }
         group = {

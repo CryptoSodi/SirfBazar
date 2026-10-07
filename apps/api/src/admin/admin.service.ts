@@ -101,20 +101,22 @@ export class AdminService {
         createdAt: true,
         deliveredAt: true,
         totalAmountPaisa: true,
+        subtotalPaisa: true,
         merchantId: true,
         merchant: { select: { shopName: true } },
       },
     });
 
-    const byDay = new Map<string, { orders: number; gmvPaisa: number }>();
+    const byDay = new Map<string, { orders: number; gmvPaisa: number; itemValuePaisa: number }>();
     let deliveryMinutesSum = 0;
     let deliveryMinutesCount = 0;
     const byMerchant = new Map<string, { shopName: string; gmvPaisa: number; orders: number }>();
     for (const o of delivered) {
       const day = o.createdAt.toISOString().slice(0, 10);
-      const d = byDay.get(day) ?? { orders: 0, gmvPaisa: 0 };
+      const d = byDay.get(day) ?? { orders: 0, gmvPaisa: 0, itemValuePaisa: 0 };
       d.orders++;
       d.gmvPaisa += o.totalAmountPaisa;
+      d.itemValuePaisa += o.subtotalPaisa;
       byDay.set(day, d);
 
       if (o.deliveredAt) {

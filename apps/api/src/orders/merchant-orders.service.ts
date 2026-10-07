@@ -11,6 +11,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { OrdersService } from './orders.service';
 import { OrderStatusService } from './order-status.service';
 import { NotificationType, OrderStatus, RiderStatus, StaffPermission } from '../common/constants';
+import { PageQuery, paged, parsePage } from '../common/utils/pagination';
 
 @Injectable()
 export class MerchantOrdersService {
@@ -34,21 +35,29 @@ export class MerchantOrdersService {
     return { ctx, order };
   }
 
-  async list(userId: string, status?: string) {
+  async list(userId: string, query: PageQuery & { status?: string; attention?: string } = {}) {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.ORDERS);
-    return this.prisma.order.findMany({
+    const where = { merchantId: ctx.merchantId, channel: 'ONLINE',
+      ...(query.status ? { status: query.status } : query.attention === 'true' ?
+        { status: { in: [OrderStatus.SENT_TO_MERCHANT, OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING, OrderStatus.READY_FOR_PICKUP] } } : {}) };
+    const paginationRequested = query.page !== undefined || query.pageSize !== undefined;
+    const { page, pageSize, skip, take } = parsePage(query);
+    const [rows, total] = await Promise.all([this.prisma.order.findMany({
       // Online marketplace orders only — in-store POS sales live in the POS app.
-      where: { merchantId: ctx.merchantId, channel: 'ONLINE', ...(status ? { status } : {}) },
+      where,
       include: {
         items: true,
         deliveryAddress: true,
         rider: { select: { id: true, fullName: true, phoneNumber: true } },
         customer: { include: { user: { select: { fullName: true, phoneNumber: true } } } },
       },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: paginationRequested ? skip : 0,
+      take: paginationRequested ? take : 100,
+    }), this.prisma.order.count({ where })]);
+    // Preserve the array response for existing clients; explicit page queries get metadata.
+    return paginationRequested ? paged(rows, total, page, pageSize) : rows;
   }
 
   async detail(userId: string, orderId: string) {

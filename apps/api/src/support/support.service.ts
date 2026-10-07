@@ -38,6 +38,9 @@ export class SupportService {
     if (input.orderId) {
       const order = await this.prisma.order.findUnique({ where: { id: input.orderId } });
       if (!order) throw new NotFoundException('Order not found');
+      if (role === UserRole.CUSTOMER && (!customerId || order.customerId !== customerId)) {
+        throw new ForbiddenException('Not your order');
+      }
     }
 
     const ticket = await this.prisma.supportTicket.create({

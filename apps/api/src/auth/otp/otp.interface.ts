@@ -1,11 +1,10 @@
 /**
- * Provider-agnostic OTP delivery. The real SMS/OTP provider will be supplied
- * later; until then MockOtpService is used in development. Switch with the
- * OTP_PROVIDER env var ("mock" | "external").
+ * Provider-agnostic OTP transport; authentication owns each challenge.
+ * Switch with OTP_PROVIDER ("whatsapp" | "mock" | "waha" | "external").
  */
 export interface IOtpService {
   /** Deliver the OTP code to the given phone number. Must never log the code in production. */
-  sendOtp(phoneNumber: string, code: string, purpose: string): Promise<void>;
+  sendOtp(phoneNumber: string, code: string, purpose: string): Promise<void | { status: 'submitted'; messageId: string; requestId: string }>;
 }
 
 export const OTP_SERVICE = Symbol('OTP_SERVICE');

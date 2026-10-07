@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { AdminLoginDto, GoogleLoginDto, RefreshTokenDto, SendOtpDto, VerifyOtpDto } from './auth.dto';
+import { AdminLoginDto, GoogleLoginDto, MerchantLoginDto, MerchantPasswordRequestDto, MerchantPasswordResetDto, MerchantRegistrationStartDto, MerchantRegistrationVerifyDto, RefreshTokenDto, SendOtpDto, VerifyOtpDto } from './auth.dto';
 import { CurrentUser, Public, AuthUser } from '../common/decorators';
 
 @ApiTags('auth')
@@ -31,6 +31,36 @@ export class AuthController {
   @Post('admin-login')
   adminLogin(@Body() dto: AdminLoginDto) {
     return this.authService.adminLogin(dto.email, dto.password);
+  }
+
+  @Public()
+  @Post('merchant-login')
+  merchantLogin(@Body() dto: MerchantLoginDto) {
+    return this.authService.merchantLogin(dto.identifier, dto.password);
+  }
+
+  @Public()
+  @Post('merchant-register/start')
+  merchantRegistrationStart(@Body() dto: MerchantRegistrationStartDto) {
+    return this.authService.startMerchantRegistration(dto);
+  }
+
+  @Public()
+  @Post('merchant-register/verify')
+  merchantRegistrationVerify(@Body() dto: MerchantRegistrationVerifyDto) {
+    return this.authService.verifyMerchantRegistration(dto.attemptId, dto.code);
+  }
+
+  @Public()
+  @Post('merchant-password/request')
+  merchantPasswordRequest(@Body() dto: MerchantPasswordRequestDto) {
+    return this.authService.requestMerchantPasswordReset(dto.identifier);
+  }
+
+  @Public()
+  @Post('merchant-password/reset')
+  merchantPasswordReset(@Body() dto: MerchantPasswordResetDto) {
+    return this.authService.resetMerchantPassword(dto.identifier, dto.code, dto.password);
   }
 
   @Public()

@@ -1,8 +1,18 @@
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '../common/constants';
 
 export class PlaceOrderDto {
+  /** Stable native checkout ID: retries return the same owned order. */
+  @IsOptional()
+  @IsUUID('4')
+  requestId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  cartId?: string;
+
   @IsString()
   @IsNotEmpty()
   deliveryAddressId: string;

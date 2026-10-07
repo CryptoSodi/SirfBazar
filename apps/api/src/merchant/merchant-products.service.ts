@@ -18,12 +18,19 @@ export class MerchantProductsService {
 
   async list(
     userId: string,
-    query: PageQuery & { q?: string; categoryId?: string; lowStock?: string },
+    query: PageQuery & { q?: string; categoryId?: string; lowStock?: string; isAvailable?: string; minStock?: string },
   ) {
     const ctx = await this.access.merchantContext(userId);
+    this.access.requirePermission(ctx, StaffPermission.INVENTORY);
     const { page, pageSize, skip, take } = parsePage(query);
 
     const where: any = { merchantId: ctx.merchantId };
+    if (query.isAvailable === 'true' || query.isAvailable === 'false') where.isAvailable = query.isAvailable === 'true';
+    if (query.minStock !== undefined) {
+      const minStock = Number(query.minStock);
+      if (!Number.isInteger(minStock) || minStock < 0) throw new BadRequestException('minStock must be a non-negative integer');
+      where.stockQuantity = { gte: minStock };
+    }
     if (query.q) where.product = { name: { contains: query.q, mode: 'insensitive' } };
     if (query.categoryId) {
       where.product = { ...(where.product ?? {}), categoryId: query.categoryId };
@@ -33,7 +40,7 @@ export class MerchantProductsService {
       this.prisma.merchantProduct.findMany({
         where,
         include: { product: { include: { category: { select: { id: true, name: true } } } } },
-        orderBy: { updatedAt: 'desc' },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
         ...(query.lowStock === 'true' ? {} : { skip, take }),
       }),
       this.prisma.merchantProduct.count({ where }),
@@ -57,6 +64,7 @@ export class MerchantProductsService {
     query: PageQuery & { q?: string; categoryId?: string; unlistedOnly?: string },
   ) {
     const ctx = await this.access.merchantContext(userId);
+    this.access.requirePermission(ctx, StaffPermission.INVENTORY);
     const { page, pageSize, skip, take } = parsePage(query);
 
     const where: any = { approvalStatus: ProductApprovalStatus.APPROVED };

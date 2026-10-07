@@ -1,13 +1,12 @@
 /**
- * Imports a scraped catalog (tools/grocerapp-scraper/output/catalog.json) into
+ * Imports the workspace grocerapp-scraper/output/catalog.json export into
  * the global Product table as APPROVED products that any merchant can list.
  *
- * Images are expected to already be downloaded by the scraper into
- * apps/api/storage/catalog/ — this script only records their public URL
- * (PUBLIC_BASE_URL/static/catalog/<file>). It is idempotent (upsert by slug).
+ * Images are copied from the scraper export to storage/catalog and served at
+ * the local API's /static/catalog/<file> path. Re-running updates by slug.
  *
- *   1. cd tools/grocerapp-scraper && npm run scrape   (produces catalog.json + images)
- *   2. cd apps/api && npm run import:catalog
+ *   cd sirfbazar-api && npm run import:catalog -- --dry-run
+ *   cd sirfbazar-api && npm run import:catalog
  */
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
@@ -16,15 +15,15 @@ import { CATEGORY_BY_ANY_SLUG } from './category-map';
 
 const prisma = new PrismaClient();
 
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || 'https://api.sirfbazar.com';
-const CATALOG_JSON = path.resolve(
-  __dirname,
-  '../../../tools/grocerapp-scraper/output/catalog.json',
-);
-const IMAGE_SRC_DIR = path.resolve(__dirname, '../../../tools/grocerapp-scraper/output/images');
+const DRY_RUN = process.argv.includes('--dry-run');
+const workspaceExport = path.resolve(__dirname, '../../grocerapp-scraper/output/catalog.json');
+const monorepoExport = path.resolve(__dirname, '../../../tools/grocerapp-scraper/output/catalog.json');
+const CATALOG_JSON = process.env.CATALOG_JSON || (fs.existsSync(workspaceExport) ? workspaceExport : monorepoExport);
+const IMAGE_SRC_DIR = path.join(path.dirname(CATALOG_JSON), 'images');
 const IMAGE_DEST_DIR = path.resolve(process.cwd(), 'storage/catalog');
 
 interface ScrapedProduct {
+  sourceId: number;
   name: string;
   slug: string;
   brand?: string | null;
@@ -40,13 +39,61 @@ interface ScrapedProduct {
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+function localDatabaseUrl(): URL {
+  // Prisma reads .env; read the same key solely to enforce a local-only guard.
+  const line = fs.readFileSync(path.resolve(process.cwd(), '.env'), 'utf8')
+    .split(/\r?\n/).find((value) => value.startsWith('DATABASE_URL='));
+  const raw = process.env.DATABASE_URL || line?.slice('DATABASE_URL='.length).trim().replace(/^['"]|['"]$/g, '');
+  if (!raw) throw new Error('DATABASE_URL is missing.');
+  const url = new URL(raw);
+  if (!['localhost', '127.0.0.1', '::1'].includes(url.hostname) || url.port !== '5433') {
+    throw new Error('Catalog import is restricted to the local test database on port 5433.');
+  }
+  return url;
+}
+
+function imageIsValid(file: string): boolean {
+  const bytes = fs.readFileSync(file);
+  if (bytes.length < 100) return false;
+  const hex = bytes.subarray(0, 12).toString('hex');
+  return hex.startsWith('ffd8') || hex.startsWith('89504e47') || hex.startsWith('47494638') || hex.startsWith('52494646');
+}
+
+function cleanDescription(value?: string | null): string | null {
+  if (!value || /&Atilde;|&#\d+;|<[^>]+>/.test(value)) return null;
+  const cleaned = value.replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/&quot;/g, '"').trim();
+  return cleaned || null;
+}
+
 async function main() {
+  const database = localDatabaseUrl();
+  const publicBase = (process.env.PUBLIC_BASE_URL || 'http://127.0.0.1:3001').replace(/\/$/, '');
+  const publicUrl = new URL(publicBase);
+  if (!['localhost', '127.0.0.1', '::1'].includes(publicUrl.hostname)) {
+    throw new Error('Catalog image URLs must point to the local API for this import.');
+  }
   if (!fs.existsSync(CATALOG_JSON)) {
-    console.error(`No catalog file at ${CATALOG_JSON} — run the scraper first.`);
-    process.exit(1);
+    throw new Error(`No catalog file at ${CATALOG_JSON}.`);
   }
   const products: ScrapedProduct[] = JSON.parse(fs.readFileSync(CATALOG_JSON, 'utf8'));
-  console.log(`Importing ${products.length} products…`);
+  console.log(`${DRY_RUN ? 'Checking' : 'Importing'} ${products.length} products into ${database.hostname}:${database.port}${database.pathname}`);
+
+  const sourceIds = new Set<number>();
+  for (const product of products) {
+    if (!Number.isInteger(product.sourceId) || !product.name?.trim() || sourceIds.has(product.sourceId)) {
+      throw new Error(`Invalid or repeated source product ID: ${product.sourceId}`);
+    }
+    sourceIds.add(product.sourceId);
+  }
+
+  if (DRY_RUN) {
+    const existing = await prisma.product.count();
+    const validImages = products.filter((product) => product.imageFile &&
+      fs.existsSync(path.join(IMAGE_SRC_DIR, path.basename(product.imageFile))) &&
+      imageIsValid(path.join(IMAGE_SRC_DIR, path.basename(product.imageFile)))).length;
+    console.log(`Dry run: existing=${existing} source=${products.length} validImages=${validImages} missingImages=${products.length - validImages}`);
+    return;
+  }
 
   fs.mkdirSync(IMAGE_DEST_DIR, { recursive: true });
 
@@ -84,16 +131,16 @@ async function main() {
   for (const p of products) {
     try {
       const categoryId = await ensureCategory(p.categoryName, p.categorySlug);
-      const slug = p.slug || slugify(p.name);
+      const slug = `${slugify(p.name) || 'product'}-${p.sourceId}`;
 
       // Copy the downloaded image into the API's served storage dir.
       let imageUrl: string | null = null;
-      if (p.imageFile) {
+      if (p.imageFile && path.basename(p.imageFile) === p.imageFile) {
         const src = path.join(IMAGE_SRC_DIR, p.imageFile);
-        if (fs.existsSync(src)) {
+        if (fs.existsSync(src) && imageIsValid(src)) {
           const dest = path.join(IMAGE_DEST_DIR, p.imageFile);
           if (!fs.existsSync(dest)) fs.copyFileSync(src, dest);
-          imageUrl = `${PUBLIC_BASE_URL}/static/catalog/${p.imageFile}`;
+          imageUrl = `${publicBase}/static/catalog/${encodeURIComponent(p.imageFile)}`;
           images++;
         }
       }
@@ -102,7 +149,7 @@ async function main() {
       const data = {
         name: p.name,
         brand: p.brand ?? null,
-        description: p.description ?? null,
+        description: cleanDescription(p.description),
         categoryId,
         unit: p.unit || 'piece',
         size: p.size ?? null,

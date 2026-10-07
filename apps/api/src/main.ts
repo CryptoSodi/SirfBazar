@@ -20,6 +20,7 @@ async function bootstrap() {
     'https://sirfbazar.com',
     'https://www.sirfbazar.com',
     'https://admin.sirfbazar.com',
+    'https://shop.sirfbazar.com',
     'https://pos.sirfbazar.com',
   ];
   const corsOrigins = [

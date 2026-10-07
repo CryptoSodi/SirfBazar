@@ -23,9 +23,9 @@ export class LocationService {
   }
 
   /**
-   * Locality detection without an external geocoder: the nearest approved
-   * merchant's city/area stands in for the user's locality. Without
-   * coordinates, falls back to the city with the most merchants.
+   * Without a geocoder, identify the nearest merchant area only when that
+   * merchant serves the point. This is not the customer's exact locality.
+   * Without coordinates, fall back to the city with the most merchants.
    */
   async detect(dto: DetectLocationDto) {
     const merchants = await this.approvedMerchantPoints();
@@ -45,15 +45,16 @@ export class LocationService {
       let serviceable = false;
       for (const m of merchants) {
         const km = haversineKm(dto.latitude, dto.longitude, m.latitude, m.longitude);
-        if (km < nearestKm) {
+        if (km <= m.serviceRadiusKm && km < nearestKm) {
           nearestKm = km;
           nearest = m;
         }
         if (km <= m.serviceRadiusKm) serviceable = true;
       }
       return {
-        city: nearest.city,
-        area: nearest.area,
+        // A distant shop's area is not the customer's detected locality.
+        city: serviceable ? nearest.city : null,
+        area: serviceable ? nearest.area : null,
         latitude: dto.latitude,
         longitude: dto.longitude,
         serviceable,
