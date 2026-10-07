@@ -16,7 +16,20 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, transform: true, forbidUnknownValues: false }),
   );
 
-  const corsOrigins = (process.env.CORS_ORIGINS ?? '*').split(',').map((s) => s.trim());
+  const defaultCorsOrigins = [
+    'https://sirfbazar.com',
+    'https://www.sirfbazar.com',
+    'https://admin.sirfbazar.com',
+    'https://shop.sirfbazar.com',
+    'https://pos.sirfbazar.com',
+  ];
+  const corsOrigins = [
+    ...new Set(
+      [...(process.env.CORS_ORIGINS ?? '*').split(','), ...defaultCorsOrigins]
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ];
   app.enableCors({
     origin: corsOrigins.includes('*') ? true : corsOrigins,
     credentials: true,

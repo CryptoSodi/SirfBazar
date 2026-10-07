@@ -14,8 +14,15 @@ import { ADMIN_ROLES, UserRole } from '../common/constants';
 import { generateNumericCode, generateToken } from '../common/utils/ids';
 import { IOtpService, OTP_SERVICE } from './otp/otp.interface';
 import { GOOGLE_AUTH_SERVICE, IGoogleAuthService } from './google/google-auth.service';
+import { MerchantRegistrationStartDto } from './auth.dto';
+import { Prisma } from '@prisma/client';
+import { WhatsAppError, validateWhatsAppPhone } from '../whatsapp/whatsapp.service';
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+const positiveSetting = (name: string, fallback: number) => {
+  const value = Number(process.env[name]);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+};
 
 /** Existing shop riders may have been stored with a local 03 number. */
 function pakistanMobileVariants(phoneNumber: string): string[] {
@@ -37,25 +44,40 @@ export class AuthService {
   ) {}
 
   private get otpTtlSeconds() {
-    return Number(process.env.OTP_TTL_SECONDS || 300);
+    return positiveSetting('OTP_TTL_SECONDS', 300);
   }
   private get otpMaxAttempts() {
-    return Number(process.env.OTP_MAX_ATTEMPTS || 5);
+    return positiveSetting('OTP_MAX_ATTEMPTS', 5);
   }
   private get otpResendCooldownSeconds() {
-    return Number(process.env.OTP_RESEND_COOLDOWN_SECONDS || 60);
+    return positiveSetting('OTP_RESEND_COOLDOWN_SECONDS', 60);
+  }
+  private get otpMaxRequestsPerHour() {
+    return positiveSetting('OTP_MAX_REQUESTS_PER_HOUR', 5);
   }
   private get isMockOtp() {
-    return (process.env.OTP_PROVIDER || 'mock') === 'mock';
+    return process.env.NODE_ENV !== 'production' && (process.env.OTP_PROVIDER || 'mock') === 'mock';
+  }
+  private get isWhatsAppOtp() {
+    return ['waha', 'whatsapp'].includes(process.env.OTP_PROVIDER || (process.env.NODE_ENV === 'production' ? 'whatsapp' : 'mock'));
   }
 
-  // ── OTP ────────────────────────────────────────────────────────────────────
+  private async invalidateOtp(id: string) {
+    await this.prisma.otpCode.update({ where: { id }, data: { consumedAt: new Date() } });
+  }
 
-  async sendOtp(phoneNumber: string, purpose = 'LOGIN') {
-    const recent = await this.prisma.otpCode.findFirst({
-      where: { phoneNumber, purpose, consumedAt: null },
-      orderBy: { createdAt: 'desc' },
-    });
+  private async enforceOtpRequestLimit(identifier: string, purpose: string, db: Prisma.TransactionClient = this.prisma) {
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const [recent, requestsInLastHour] = await Promise.all([
+      db.otpCode.findFirst({
+        where: { phoneNumber: identifier },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+      db.otpCode.count({
+        where: { phoneNumber: identifier, createdAt: { gte: since } },
+      }),
+    ]);
     if (recent) {
       const ageSeconds = (Date.now() - recent.createdAt.getTime()) / 1000;
       if (ageSeconds < this.otpResendCooldownSeconds) {
@@ -65,21 +87,71 @@ export class AuthService {
         );
       }
     }
+    if (requestsInLastHour >= this.otpMaxRequestsPerHour) {
+      throw new HttpException('Too many code requests. Try again later.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+  }
 
-    const code = generateNumericCode(6);
-    await this.prisma.otpCode.create({
-      data: {
-        phoneNumber,
-        purpose,
-        codeHash: sha256(code),
+  private async createOtp(identifier: string, purpose: string, code: string) {
+    // Salted, deliberately slow hashes protect short codes at rest. Never persist plaintext.
+    const codeHash = await bcrypt.hash(code, 12);
+    return this.prisma.$transaction(async db => {
+      // Shared across API processes: concurrent resends cannot bypass recipient limits.
+      await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`otp:${identifier}`}))`;
+      await this.enforceOtpRequestLimit(identifier, purpose, db);
+      await db.otpCode.updateMany({
+        where: { phoneNumber: identifier, purpose, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      return db.otpCode.create({ data: {
+        phoneNumber: identifier, purpose, codeHash,
         expiresAt: new Date(Date.now() + this.otpTtlSeconds * 1000),
-      },
+      } });
     });
-    await this.otpService.sendOtp(phoneNumber, code, purpose);
-    return { sent: true, expiresInSeconds: this.otpTtlSeconds };
+  }
+
+  private async deliverOtp(id: string, identifier: string, code: string, purpose: string) {
+    try {
+      await this.otpService.sendOtp(identifier, code, purpose);
+      return this.isMockOtp ? 'test' as const : 'submitted' as const;
+    } catch (error) {
+      // It may have arrived. Keep the challenge valid and preserve the resend cooldown.
+      if (error instanceof WhatsAppError && error.uncertain) return 'unconfirmed' as const;
+      await this.invalidateOtp(id);
+      throw error;
+    }
+  }
+
+  private async consumeOtp(otp: { id: string; codeHash: string }, code: string) {
+    const invalid = () => new UnauthorizedException('Code is invalid, expired, or has too many failed attempts.');
+    // Reserve an attempt before comparing, including concurrent verification requests.
+    const reserved = await this.prisma.otpCode.updateMany({
+      where: { id: otp.id, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: this.otpMaxAttempts } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (reserved.count !== 1) throw invalid();
+    const valid = (this.isMockOtp && code === '123456') || await bcrypt.compare(code, otp.codeHash);
+    if (!valid) throw invalid();
+    const consumed = await this.prisma.otpCode.updateMany({
+      where: { id: otp.id, consumedAt: null, expiresAt: { gt: new Date() } },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count !== 1) throw invalid();
+  }
+
+  // ── OTP ────────────────────────────────────────────────────────────────────
+
+  async sendOtp(phoneNumber: string, purpose = 'LOGIN') {
+    phoneNumber = this.normalizePhone(phoneNumber);
+    const code = generateNumericCode(6);
+    const attempt = await this.createOtp(phoneNumber, purpose, code);
+    const status = await this.deliverOtp(attempt.id, phoneNumber, code, purpose);
+    return { sent: status !== 'unconfirmed', status, expiresInSeconds: this.otpTtlSeconds,
+      ...(status === 'unconfirmed' ? { message: 'Submission is unconfirmed. If a code arrives, use it; wait before resending.' } : {}) };
   }
 
   async verifyOtp(phoneNumber: string, code: string, fullName?: string, context: AuthContext = 'customer') {
+    phoneNumber = this.normalizePhone(phoneNumber);
     const otp = await this.prisma.otpCode.findFirst({
       where: { phoneNumber, purpose: 'LOGIN', consumedAt: null },
       orderBy: { createdAt: 'desc' },
@@ -90,19 +162,7 @@ export class AuthService {
       throw new UnauthorizedException('Too many failed attempts — request a new code');
     }
 
-    const masterCodeOk = this.isMockOtp && code === '123456';
-    if (!masterCodeOk && otp.codeHash !== sha256(code)) {
-      await this.prisma.otpCode.update({
-        where: { id: otp.id },
-        data: { attempts: { increment: 1 } },
-      });
-      throw new UnauthorizedException('Incorrect code');
-    }
-
-    await this.prisma.otpCode.update({
-      where: { id: otp.id },
-      data: { consumedAt: new Date() },
-    });
+    await this.consumeOtp(otp, code);
 
     let user = await this.prisma.user.findUnique({ where: { phoneNumber } });
     if (context === 'rider') {
@@ -200,6 +260,120 @@ export class AuthService {
     return this.issueTokens(user.id, user.role as UserRole);
   }
 
+  private normalizePhone(value: string) {
+    if (!/^[+\d\s()-]+$/.test(value)) throw new BadRequestException('Invalid phone number.');
+    const digits = value.replace(/\D/g, '');
+    const phone = value.trim().startsWith('+') || digits.startsWith('92') ? `+${digits}`
+      : digits.startsWith('0') ? `+92${digits.slice(1)}` : `+92${digits}`;
+    validateWhatsAppPhone(phone);
+    return phone;
+  }
+
+  private normalizeIdentifier(value: string) {
+    const clean = value.trim().toLowerCase();
+    return clean.includes('@') ? clean : this.normalizePhone(clean);
+  }
+
+  private async merchantUserByIdentifier(identifier: string) {
+    const clean = this.normalizeIdentifier(identifier);
+    return this.prisma.user.findFirst({
+      where: clean.includes('@') ? { email: clean } : { phoneNumber: clean },
+      include: { merchant: { select: { id: true } }, staffOf: { where: { status: 'ACTIVE' }, select: { id: true } } },
+    });
+  }
+
+  async merchantLogin(identifier: string, password: string) {
+    const user = await this.merchantUserByIdentifier(identifier);
+    if (!user || !user.passwordHash || (!user.merchant && !user.staffOf.length)) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!(await bcrypt.compare(password, user.passwordHash))) throw new UnauthorizedException('Invalid credentials');
+    if (user.status === 'SUSPENDED') throw new UnauthorizedException('Account is suspended');
+    return this.issueTokens(user.id, user.merchant ? UserRole.MERCHANT_OWNER : UserRole.MERCHANT_STAFF);
+  }
+
+  async startMerchantRegistration(dto: MerchantRegistrationStartDto) {
+    const identifier = this.normalizeIdentifier(dto.contact);
+    if (!this.isMockOtp && (dto.channel !== 'mobile' || identifier.includes('@'))) {
+      throw new BadRequestException('Verification requires a mobile number. Email delivery is not configured.');
+    }
+    await this.enforceOtpRequestLimit(identifier, 'MERCHANT_REGISTRATION');
+    const cnic = dto.cnic.replace(/\D/g, '');
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ cnic }, identifier.includes('@') ? { email: identifier } : { phoneNumber: identifier }] },
+      include: { merchant: { select: { id: true } } },
+    });
+    if (existing?.merchant) throw new BadRequestException('A merchant account already exists for these details. Sign in instead.');
+    if (existing && existing.cnic && existing.cnic !== cnic) throw new BadRequestException('These registration details are already in use.');
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const data = {
+      fullName: `${dto.firstName.trim()} ${dto.lastName.trim()}`.trim(),
+      cnic,
+      passwordHash,
+      ...(identifier.includes('@') ? { email: identifier } : { phoneNumber: identifier }),
+    };
+    const user = existing
+      ? await this.prisma.user.update({ where: { id: existing.id }, data })
+      : await this.prisma.user.create({ data: { ...data, role: UserRole.CUSTOMER } });
+    const code = this.isMockOtp ? '123456' : generateNumericCode(6);
+    const attempt = await this.createOtp(identifier, 'MERCHANT_REGISTRATION', code);
+    const status = this.isMockOtp ? 'test' : await this.deliverOtp(attempt.id, identifier, code, 'MERCHANT_REGISTRATION');
+    return {
+      attemptId: attempt.id,
+      status,
+      message: status === 'unconfirmed'
+        ? 'Submission is unconfirmed. If a code arrives, use it; wait before resending.'
+        : this.isMockOtp
+        ? 'Local test verification ready.'
+        : this.isWhatsAppOtp
+          ? 'Verification code submitted to WhatsApp.'
+          : 'Verification code sent.',
+    };
+  }
+
+  async verifyMerchantRegistration(attemptId: string, code: string) {
+    const otp = await this.prisma.otpCode.findUnique({ where: { id: attemptId } });
+    if (!otp || otp.purpose !== 'MERCHANT_REGISTRATION' || otp.consumedAt) throw new UnauthorizedException('Registration code is no longer valid.');
+    if (otp.expiresAt < new Date()) throw new UnauthorizedException('Registration code has expired.');
+    if (otp.attempts >= this.otpMaxAttempts) throw new UnauthorizedException('Too many failed attempts.');
+    await this.consumeOtp(otp, code);
+    const user = await this.merchantUserByIdentifier(otp.phoneNumber);
+    if (!user) throw new UnauthorizedException('Registration account was not found.');
+    await this.prisma.user.update({ where: { id: user.id }, data: otp.phoneNumber.includes('@') ? { isEmailVerified: true } : { isPhoneVerified: true } });
+    return this.issueTokens(user.id, UserRole.CUSTOMER);
+  }
+
+  async requestMerchantPasswordReset(identifier: string) {
+    const clean = this.normalizeIdentifier(identifier);
+    if (!this.isMockOtp && clean.includes('@')) {
+      throw new BadRequestException('Use your registered mobile number for password recovery.');
+    }
+    await this.enforceOtpRequestLimit(clean, 'MERCHANT_PASSWORD_RESET');
+    const user = await this.merchantUserByIdentifier(clean);
+    if (user) {
+      const code = this.isMockOtp ? '123456' : generateNumericCode(6);
+      const attempt = await this.createOtp(clean, 'MERCHANT_PASSWORD_RESET', code);
+      if (!this.isMockOtp && !clean.includes('@')) {
+        await this.deliverOtp(attempt.id, clean, code, 'MERCHANT_PASSWORD_RESET');
+      }
+    }
+    return { message: this.isMockOtp ? 'Local test recovery code ready.' : 'If this contact is registered, a code was requested. Submission does not confirm delivery; wait before resending.' };
+  }
+
+  async resetMerchantPassword(identifier: string, code: string, password: string) {
+    const clean = this.normalizeIdentifier(identifier);
+    const user = await this.merchantUserByIdentifier(clean);
+    const otp = await this.prisma.otpCode.findFirst({ where: { phoneNumber: clean, purpose: 'MERCHANT_PASSWORD_RESET', consumedAt: null }, orderBy: { createdAt: 'desc' } });
+    if (!user || !otp || otp.expiresAt < new Date() || otp.attempts >= this.otpMaxAttempts) throw new UnauthorizedException('Recovery code is invalid or expired.');
+    await this.consumeOtp(otp, code);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(password, 12) } }),
+      this.prisma.otpCode.update({ where: { id: otp.id }, data: { consumedAt: new Date() } }),
+      this.prisma.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    return { reset: true };
+  }
+
   // ── Tokens ────────────────────────────────────────────────────────────────
 
   async issueTokens(userId: string, role: UserRole) {
@@ -276,7 +450,7 @@ export class AuthService {
       },
     });
     if (!user) throw new BadRequestException('User not found');
-    const { passwordHash: _ph, ...safe } = user;
+    const { passwordHash: _ph, cnic: _cnic, ...safe } = user;
     return safe;
   }
 

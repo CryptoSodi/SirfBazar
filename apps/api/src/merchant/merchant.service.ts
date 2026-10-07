@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { AuditService } from '../audit/audit.service';
@@ -73,11 +75,12 @@ export class MerchantService {
 
     // Role changed — the old token is stale, hand back a fresh pair.
     const tokens = await this.auth.issueTokens(userId, UserRole.MERCHANT_OWNER);
-    return { merchant, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
+    return { merchant, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: tokens.user };
   }
 
   async addDocument(userId: string, dto: AddDocumentDto) {
     const ctx = await this.access.merchantContext(userId);
+    this.access.requirePermission(ctx, StaffPermission.STORE);
     return this.prisma.merchantDocument.create({
       data: {
         merchantId: ctx.merchantId,
@@ -85,6 +88,64 @@ export class MerchantService {
         documentUrl: dto.documentUrl,
       },
     });
+  }
+
+  async uploadDocument(userId: string, documentType: string, file: any) {
+    const ctx = await this.access.merchantContext(userId);
+    this.access.requirePermission(ctx, StaffPermission.STORE);
+    if (!['BUSINESS_REGISTRATION', 'IDENTITY', 'BANK_DETAILS', 'OTHER'].includes(documentType)) {
+      throw new BadRequestException('Unsupported merchant document type');
+    }
+    if (!file?.buffer || !file?.mimetype) throw new BadRequestException('No document uploaded');
+    const extensions: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+    };
+    const extension = extensions[file.mimetype];
+    if (!extension) throw new BadRequestException('Only PDF, JPG, PNG and WebP documents are allowed');
+
+    const document = await this.prisma.merchantDocument.create({
+      data: { merchantId: ctx.merchantId, documentType, documentUrl: 'PENDING_PRIVATE_UPLOAD' },
+    });
+    const directory = join(process.cwd(), 'private-storage', 'merchant-documents');
+    const filePath = join(directory, `${document.id}.${extension}`);
+    try {
+      await mkdir(directory, { recursive: true });
+      await writeFile(filePath, file.buffer, { flag: 'wx' });
+      return await this.prisma.merchantDocument.update({
+        where: { id: document.id },
+        data: { documentUrl: `/api/merchant/documents/${document.id}/file` },
+      });
+    } catch (error) {
+      await unlink(filePath).catch(() => undefined);
+      await this.prisma.merchantDocument.delete({ where: { id: document.id } }).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async documentFile(userId: string, documentId: string) {
+    const ctx = await this.access.merchantContext(userId);
+    const document = await this.prisma.merchantDocument.findFirst({
+      where: { id: documentId, merchantId: ctx.merchantId },
+    });
+    if (!document || !document.documentUrl.startsWith('/api/merchant/documents/')) {
+      throw new NotFoundException('Merchant document file not found');
+    }
+    const directory = join(process.cwd(), 'private-storage', 'merchant-documents');
+    const filename = (await readdir(directory).catch(() => [] as string[]))
+      .find((candidate) => candidate.startsWith(`${document.id}.`));
+    if (!filename) throw new NotFoundException('Merchant document file not found');
+    const extension = filename.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+    };
+    return {
+      path: join(directory, filename),
+      mimeType: mimeTypes[extension || ''] || 'application/octet-stream',
+      downloadName: `${document.documentType.toLowerCase()}.${extension || 'bin'}`,
+    };
   }
 
   // ── Profile ────────────────────────────────────────────────────────────────

@@ -68,3 +68,5 @@ body {
   outline: 2px solid #4762CC;
   outline-offset: 2px;
 }
+
+@media (max-width: 600px) { .sb-admin-login input { font-size: 16px; } }

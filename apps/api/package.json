@@ -17,7 +17,21 @@
     "import:catalog": "ts-node prisma/import-catalog.ts",
     "import:grocerie-demo": "ts-node prisma/import-grocerie-demo.ts",
     "stock:demo": "ts-node prisma/stock-demo-shops.ts",
-    "smoke": "ts-node test/smoke.ts"
+    "smoke": "ts-node test/smoke.ts",
+    "start:waha": "node scripts/start-with-waha.js",
+    "seed:categories": "ts-node prisma/merge-categories.ts",
+    "seed:test-order": "ts-node test/seed-single-merchant-order.ts",
+    "test:realtime-order": "ts-node test/send-live-merchant-order.ts",
+    "test:merchant-document": "ts-node test/merchant-document-upload.ts",
+    "test:merchant-mutations": "ts-node test/merchant-mutations.ts",
+    "test:merchant-finance": "ts-node test/merchant-finance.ts",
+    "test:merchant-replacement": "ts-node test/merchant-replacement.ts",
+    "test:merchant-support": "ts-node test/merchant-support.ts",
+    "test:merchant-permissions": "ts-node test/merchant-permissions.ts",
+    "test:merchant-pagination": "ts-node test/merchant-pagination.ts",
+    "test:waha": "ts-node test/waha-otp.service.ts",
+    "test:whatsapp": "ts-node test/whatsapp.service.ts && ts-node test/whatsapp-auth.ts",
+    "whatsapp:ready": "ts-node scripts/check-whatsapp.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -34,7 +48,9 @@
     "class-validator": "^0.14.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "@types/web-push": "^3.6.4",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",

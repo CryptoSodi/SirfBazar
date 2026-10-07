@@ -20,6 +20,10 @@ export default function IPos() {
   const [attempt, setAttempt] = useState(0);
   const user = getUser();
   useEffect(() => {
+    document.body.classList.add('ipos-active');
+    return () => document.body.classList.remove('ipos-active');
+  }, []);
+  useEffect(() => {
     let active = true;
     document.title = 'iPOS · SirfBazar merchant';
     setError('');

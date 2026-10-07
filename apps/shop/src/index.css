@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
-@import "../../shared/design/operations.css";
+@import "../shared/design/operations.css";
 @import "leaflet/dist/leaflet.css";
 
 .ops-live-status { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 5px 10px; border: 1px solid var(--sb-border); border-radius: 9px; color: var(--sb-text); text-decoration: none; white-space: nowrap; font-size: 12px; font-weight: 700; }
@@ -65,23 +65,4 @@ body {
 :where(a, button, input, select, textarea):focus-visible {
   outline: 2px solid #4762CC;
   outline-offset: 2px;
-}
-
-.ops-order-alerts { margin-block-end: 22px; padding: 16px; border: 1px solid var(--sb-border); border-radius: var(--sb-card-radius); background: var(--sb-panel); color: var(--sb-text); }
-.ops-order-alerts-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
-.ops-order-alerts-status { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
-.ops-order-alerts-status svg { flex: none; }
-.ops-order-alerts-controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.ops-order-alerts-note { margin-block-start: 8px; color: var(--sb-secondary); font-size: 12px; line-height: 1.5; text-wrap: pretty; }
-.ops-order-alerts-error { margin-block-start: 12px; color: var(--sb-danger); font-size: 13px; line-height: 1.5; }
-.ops-order-alerts-error .ops-button { margin-inline-start: 8px; }
-.ops-order-alerts-pending { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-block-start: 16px; padding: 16px; border-radius: var(--sb-control-radius); background: var(--sb-warning-bg); color: var(--sb-text); font-size: 14px; line-height: 1.5; }
-.ops-order-alerts-pending > div { min-width: 0; flex: 1 1 180px; }
-.ops-order-alerts-pending p { overflow-wrap: anywhere; font-size: 13px; font-variant-numeric: tabular-nums; }
-.ops-order-alerts-controls .ops-button[aria-pressed="true"] { border-color: var(--sb-action); }
-.ops-order-alerts :where(button, a):focus-visible { outline-width: 3px; }
-@media (max-width: 600px) {
-  .ops-order-alerts-controls .ops-button, .ops-order-alerts-pending .ops-button { min-height: 44px; }
-  .ops-topbar { flex-wrap: wrap; }
-  .ops-topbar-actions { flex-wrap: wrap; }
 }

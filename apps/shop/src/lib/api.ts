@@ -1,3 +1,5 @@
+import { clearMemory, invalidateMemory } from './memoryCache';
+
 const configuredApiUrl = (import.meta.env?.VITE_API_URL || '').trim();
 
 export function resolveApiUrl(base: string, path: string): string {
@@ -34,8 +36,6 @@ export function errorMessage(error: unknown): string {
 
 const LS = { access: 'sbs.accessToken', refresh: 'sbs.refreshToken', user: 'sbs.user' };
 
-export function getAccessToken(): string | null { return localStorage.getItem(LS.access); }
-
 export const MERCHANT_ROLES = ['MERCHANT_OWNER', 'MERCHANT_STAFF'];
 function merchantToken(token: string | null): boolean {
   if (!token) return false;
@@ -64,10 +64,16 @@ export function isLoggedIn() {
   return merchantToken(localStorage.getItem(LS.access)) && isMerchant(getUser());
 }
 
+export function getAccessToken(): string | null {
+  return localStorage.getItem(LS.access);
+}
+
 export function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
   if (!data?.accessToken || !data?.refreshToken || !merchantToken(data.accessToken) || !isMerchant(data.user)) {
     throw new ApiError('contract', 'The server did not return a merchant session.');
   }
+  const previous = getUser();
+  if (previous?.id !== data.user?.id || previous?.merchant?.id !== data.user?.merchant?.id) clearMemory();
   localStorage.setItem(LS.access, data.accessToken);
   localStorage.setItem(LS.refresh, data.refreshToken);
   localStorage.setItem(LS.user, JSON.stringify(data.user));
@@ -75,6 +81,7 @@ export function storeAuth(data: { accessToken: string; refreshToken: string; use
 }
 
 export function clearSession() {
+  clearMemory();
   localStorage.removeItem(LS.access);
   localStorage.removeItem(LS.refresh);
   localStorage.removeItem(LS.user);
@@ -89,7 +96,7 @@ export async function logout() {
     // Server revocation may be unreachable; still remove the local session.
   } finally {
     clearSession();
-    location.assign('/login');
+    location.assign('/sign-in');
   }
 }
 
@@ -140,7 +147,54 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     if (res.status === 403) throw new ApiError('permission', `Your merchant account does not have permission for this action. ${msg}`, 403);
     throw new ApiError('http', msg, res.status);
   }
+  if (method !== 'GET') invalidateAfterMutation(path);
   return data;
+}
+
+function invalidateAfterMutation(path: string) {
+  if (path === '/pos/sales') {
+    invalidateMemory('products:', 'catalog:', 'dashboard');
+    window.dispatchEvent(new Event('sb:products'));
+  } else if (path.startsWith('/merchant/orders/')) {
+    invalidateMemory('orders:', 'dashboard', 'earnings', 'products:');
+    window.dispatchEvent(new Event('sb:orders'));
+    window.dispatchEvent(new Event('sb:products'));
+  } else if (path.startsWith('/merchant/products')) {
+    invalidateMemory('products:', 'catalog:', 'dashboard');
+    window.dispatchEvent(new Event('sb:products'));
+  } else if (path.startsWith('/merchant/riders')) {
+    invalidateMemory('riders', 'dashboard');
+    window.dispatchEvent(new Event('sb:riders'));
+  } else if (path.startsWith('/merchant/')) {
+    invalidateMemory('dashboard', 'merchant:profile');
+    window.dispatchEvent(new Event('sb:merchant'));
+  }
+}
+
+async function authenticatedFileRequest(path: string, init: RequestInit): Promise<Response> {
+  const token = localStorage.getItem(LS.access);
+  const headers = new Headers(init.headers);
+  if (token) headers.set('authorization', `Bearer ${token}`);
+  const response = await fetchWithTimeout(apiEndpoint(path), { ...init, headers });
+  if (!response.ok) {
+    let data: any = null;
+    try { data = await response.json(); } catch { /* non-JSON response */ }
+    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${response.status})`;
+    if (response.status === 401) throw new ApiError('unauthorized', 'Your session needs to be renewed. Sign in again before retrying.', 401);
+    if (response.status === 403) throw new ApiError('permission', `Your merchant account does not have permission for this action. ${message}`, 403);
+    throw new ApiError('http', message, response.status);
+  }
+  return response;
+}
+
+async function upload(path: string, form: FormData) {
+  const response = await authenticatedFileRequest(path, { method: 'POST', body: form });
+  return response.json();
+}
+
+async function download(path: string) {
+  const response = await authenticatedFileRequest(path, { method: 'GET' });
+  return response.blob();
 }
 
 let refreshPromise: Promise<'ok' | 'invalid' | 'unavailable'> | null = null;
@@ -170,9 +224,12 @@ async function tryRefresh(): Promise<'ok' | 'invalid' | 'unavailable'> {
 
 export const api = {
   get: (p: string) => request('GET', p),
+  getParsed: async <T>(p: string, parse: (value: unknown) => T): Promise<T> => parse(await request('GET', p)),
   post: (p: string, b?: unknown) => request('POST', p, b),
   put: (p: string, b?: unknown) => request('PUT', p, b),
   del: (p: string) => request('DELETE', p),
+  upload,
+  download,
 };
 
 export function pkr(paisa: number | null | undefined): string {

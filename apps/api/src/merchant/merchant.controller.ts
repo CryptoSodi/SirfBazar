@@ -1,5 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { MerchantService } from './merchant.service';
 import { MerchantProductsService } from './merchant-products.service';
 import { MerchantPeopleService } from './merchant-people.service';
@@ -16,6 +18,7 @@ import {
   UpdateMerchantProfileDto,
   UpdateRiderDto,
   UpdateStaffDto,
+  UploadDocumentDto,
 } from './merchant.dto';
 
 /** Onboarding is open to any authenticated user (typically a fresh OTP login). */
@@ -57,6 +60,34 @@ export class MerchantController {
     return this.merchant.addDocument(user.userId, dto);
   }
 
+  @Post('documents/upload')
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_request, file, callback) => {
+      const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype);
+      callback(allowed ? null : new BadRequestException('Only PDF, JPG, PNG and WebP documents are allowed'), allowed);
+    },
+  }))
+  uploadDocument(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UploadDocumentDto,
+    @UploadedFile() file: any,
+  ) {
+    return this.merchant.uploadDocument(user.userId, dto.documentType, file);
+  }
+
+  @Get('documents/:id/file')
+  async documentFile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Res() response: Response,
+  ) {
+    const file = await this.merchant.documentFile(user.userId, id);
+    response.type(file.mimeType);
+    response.setHeader('Content-Disposition', `inline; filename="${file.downloadName}"`);
+    return response.sendFile(file.path);
+  }
+
   @Post('online')
   online(@CurrentUser() user: AuthUser) {
     return this.merchant.setOnline(user.userId, true);
@@ -95,6 +126,13 @@ export class MerchantController {
   // ── Products & inventory ───────────────────────────────────────────────────
 
   @Get('products')
+  @ApiOperation({ summary: 'List own shop products', description: 'Returns {items,total,page,pageSize,totalPages}.' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Maximum 100.' })
+  @ApiQuery({ name: 'q', required: false, type: String })
+  @ApiQuery({ name: 'lowStock', required: false, type: Boolean })
+  @ApiQuery({ name: 'isAvailable', required: false, type: Boolean })
+  @ApiQuery({ name: 'minStock', required: false, type: Number, description: 'Non-negative integer stock quantity.' })
   listProducts(@CurrentUser() user: AuthUser, @Query() query: any) {
     return this.products.list(user.userId, query);
   }

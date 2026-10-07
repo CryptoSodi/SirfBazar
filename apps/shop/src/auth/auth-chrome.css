@@ -1,0 +1,81 @@
+.auth-page {
+  --auth-identity: #009966;
+  --auth-action: #007a52;
+  --auth-hover: #006442;
+  --auth-ink: #071f18;
+  --auth-page-bg: #f7f5ef;
+  --auth-mint: #eaf7f0;
+  --auth-muted: #587168;
+  --auth-divider: #dbe3dc;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--auth-page-bg);
+  color: var(--auth-ink);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.auth-skip {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-start: 16px;
+  z-index: 30;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--auth-action);
+  transform: translateY(-160%);
+}
+.auth-skip:focus-visible { transform: translateY(0); }
+
+.auth-header {
+  flex-shrink: 0;
+  background: #fff;
+  border-bottom: 1px solid var(--auth-divider);
+}
+.auth-header-inner {
+  max-width: 1200px;
+  min-height: 72px;
+  margin-inline: auto;
+  padding-inline: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.auth-logo { display: inline-flex; align-items: center; border-radius: 8px; }
+.auth-logo img { display: block; width: 146px; height: auto; }
+.auth-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--auth-muted);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 140ms, color 140ms;
+}
+.auth-help:hover { background: var(--auth-mint); color: var(--auth-action); }
+.auth-page :is(.auth-logo, .auth-help):focus-visible { outline: 2px solid var(--auth-action); outline-offset: 3px; }
+
+.auth-footer {
+  flex-shrink: 0;
+  margin-block-start: auto;
+  padding: 14px 24px;
+  color: var(--auth-muted);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
+
+@media (max-width: 420px) {
+  .auth-header-inner { min-height: 64px; padding-inline: 16px; }
+  .auth-logo img { width: 124px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-help, .auth-skip { transition: none; }
+}

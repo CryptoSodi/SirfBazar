@@ -30,6 +30,13 @@ export type DashboardSummary = {
   preparingOrders: number;
   readyOrders: number;
   activeDeliveries: number;
+  completedToday: number;
+  cancelledToday: number;
+  todaySalesPaisa: number;
+  weekSalesPaisa: number;
+  monthSalesPaisa: number;
+  commissionPaisa: number;
+  netEarningsPaisa: number;
   lowStockProducts: number;
   isOnline: boolean;
   isOpen: boolean;
@@ -39,7 +46,9 @@ export type DashboardSummary = {
 export function readDashboard(value: unknown): DashboardSummary {
   if (!record(value) || !number(value.todayOrders) || !number(value.pendingOrders) ||
       !number(value.preparingOrders) || !number(value.readyOrders) || !number(value.activeDeliveries) ||
-      !number(value.lowStockProducts) || typeof value.isOnline !== 'boolean' ||
+      !number(value.completedToday) || !number(value.cancelledToday) || !number(value.todaySalesPaisa) ||
+      !number(value.weekSalesPaisa) || !number(value.monthSalesPaisa) || !number(value.commissionPaisa) ||
+      !number(value.netEarningsPaisa) || !number(value.lowStockProducts) || typeof value.isOnline !== 'boolean' ||
       typeof value.isOpen !== 'boolean' || !string(value.approvalStatus)) invalid('dashboard');
   return value as DashboardSummary;
 }
@@ -52,7 +61,7 @@ export type MerchantOrder = {
   totalAmountPaisa: number;
   subtotalPaisa: number;
   deliveryFeePaisa: number;
-  items: Array<{ id: string; quantity: number; productNameSnapshot: string; totalPricePaisa: number; itemStatus?: string }>;
+  items: Array<{ id: string; quantity: number; productNameSnapshot: string; totalPricePaisa: number; itemStatus?: string; merchantProductId?: string | null }>;
   customer?: { user?: { fullName?: string | null; phoneNumber?: string | null } };
   rider?: { id: string; fullName: string; phoneNumber?: string | null } | null;
   deliveryAddress?: { label?: string | null; fullAddress?: string | null; city?: string | null; contactName?: string | null; contactPhone?: string | null; instructions?: string | null } | null;
@@ -71,6 +80,41 @@ export function readOrder(value: unknown): MerchantOrder {
 export function readOrders(value: unknown): MerchantOrder[] {
   if (!Array.isArray(value)) invalid('order list');
   return value.map(readOrder);
+}
+
+export type Paged<T> = { items: T[]; total: number; page: number; pageSize: number; totalPages: number };
+export function readPaged<T>(value: unknown, name: string, readItem: (item: unknown) => T): Paged<T> {
+  if (!record(value) || !Array.isArray(value.items) || !number(value.total) || !number(value.page) ||
+      !number(value.pageSize) || !number(value.totalPages)) invalid(name);
+  return { items: value.items.map(readItem), total: value.total, page: value.page,
+    pageSize: value.pageSize, totalPages: value.totalPages };
+}
+
+export type MerchantListing = {
+  id: string;
+  pricePaisa: number;
+  discountPricePaisa?: number | null;
+  stockQuantity: number;
+  lowStockThreshold: number;
+  merchantSku?: string | null;
+  isAvailable: boolean;
+  product: { id: string; name: string; brand?: string | null; size?: string | null; unit?: string | null;
+    imageUrl?: string | null; category?: { id: string; name: string } | null };
+};
+
+export function readListing(value: unknown): MerchantListing {
+  if (!record(value) || !string(value.id) || !number(value.pricePaisa) || !number(value.stockQuantity) ||
+      !number(value.lowStockThreshold) || typeof value.isAvailable !== 'boolean' || !record(value.product) ||
+      !string(value.product.id) || !string(value.product.name)) invalid('product listing');
+  return value as MerchantListing;
+}
+
+export function readListingsPage(value: unknown): Paged<MerchantListing> {
+  return readPaged(value, 'product listings', readListing);
+}
+
+export function readOrdersPage(value: unknown): Paged<MerchantOrder> {
+  return readPaged(value, 'paged orders', readOrder);
 }
 
 export type MerchantRider = {

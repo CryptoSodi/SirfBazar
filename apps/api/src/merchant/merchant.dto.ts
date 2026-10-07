@@ -8,6 +8,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   Min,
   ValidateNested,
@@ -245,7 +246,11 @@ export class AddDocumentDto {
   @IsIn(['BUSINESS_REGISTRATION', 'IDENTITY', 'BANK_DETAILS', 'OTHER'])
   documentType: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   documentUrl: string;
+}
+
+export class UploadDocumentDto {
+  @IsIn(['BUSINESS_REGISTRATION', 'IDENTITY', 'BANK_DETAILS', 'OTHER'])
+  documentType: string;
 }

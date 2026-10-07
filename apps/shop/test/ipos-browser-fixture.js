@@ -12,12 +12,27 @@ async (page) => {
   const user = { id: 'ipos-test-cashier', fullName: 'Test cashier', merchant: { id: profile.id, shopName: profile.shopName } };
   const sales = new Map();
   let dropNext = false;
+  let capabilitiesMode = 'supported';
+  // The merged merchant shell starts notification polling and Socket.IO. Keep
+  // every API request inside this fixture, including shell requests. Block
+  // every other origin so a future shell dependency cannot reach a live host.
+  await page.context().route('**/*', route => {
+    if (new URL(route.request().url()).origin === 'http://127.0.0.1:5184') return route.continue();
+    return route.abort();
+  });
+  await page.context().route('**/socket.io/**', route => route.abort());
+  if (page.context().routeWebSocket) await page.context().routeWebSocket('**/socket.io/**', socket => socket.close());
   await page.context().route('**/api/**', async (route) => {
     const request = route.request(); const url = new URL(request.url()); const path = url.pathname.replace(/^\/api/, '');
     const send = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (request.method() === 'OPTIONS') return send({});
     if (path === '/auth/me') return send(user);
     if (path === '/merchant/profile') return send(profile);
+    if (path === '/notifications') return send([]);
+    if (path === '/merchant/orders') return send([]);
+    if (path === '/__fixture/capabilities') { capabilitiesMode = url.searchParams.get('mode') || 'supported'; return send({ mode: capabilitiesMode }); }
+    if (path === '/pos/capabilities' && capabilitiesMode === 'unsupported') return send({ message: 'POS is unavailable on this API.' }, 404);
+    if (path === '/pos/capabilities' && capabilitiesMode === 'error') return send({ message: 'Service temporarily unavailable.' }, 503);
     if (path === '/pos/capabilities') return send({ version: 2, merchantId: profile.id, idempotentSales: true, barcodeLookup: true, paymentMethods: ['CASH'], offlineSales: false });
     if (path === '/__fixture/drop-next') { dropNext = true; return send({ armed: true }); }
     if (path === '/__fixture/stats') return send({ sales: sales.size });
@@ -44,10 +59,16 @@ async (page) => {
     return send({ message: `Unmocked route: ${path}` }, 404);
   });
   await page.context().addInitScript(({ user }) => {
+    if (localStorage.getItem('sb.fixture.authDisabled') === 'true') {
+      localStorage.removeItem('sbs.accessToken');
+      localStorage.removeItem('sbs.refreshToken');
+      localStorage.removeItem('sbs.user');
+      return;
+    }
     localStorage.setItem('sbs.accessToken', `test.${btoa(JSON.stringify({ role: 'MERCHANT_STAFF' }))}.test`);
     localStorage.setItem('sbs.refreshToken', 'test-only');
     localStorage.setItem('sbs.user', JSON.stringify(user));
   }, { user });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto('http://127.0.0.1:5178/ipos');
+  await page.goto('http://127.0.0.1:5184/ipos');
 }

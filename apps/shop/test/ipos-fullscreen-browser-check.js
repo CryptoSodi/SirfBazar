@@ -1,12 +1,50 @@
 // playwright-cli run-code: load the all-API-mocked fixture first, in a fresh context.
 async (page) => {
   const results = [];
+  const layoutIssues = [];
   const check = (ok, message) => { if (!ok) throw Error(message); results.push(message); };
   const state = () => page.evaluate(() => JSON.parse(localStorage.getItem('sb.ipos.v1:ipos-test-shop:ipos-test-cashier')));
   const mode = () => page.evaluate(() => document.documentElement.dataset.iposFullscreen || 'off');
   const waitMode = value => page.waitForFunction(value => (document.documentElement.dataset.iposFullscreen || 'off') === value, value);
   const button = () => page.getByRole('button', { name: 'Full screen', exact: true });
+  const sidebar = () => page.locator('.merchant-workspace .sidebar, .ops-shell .ops-sidebar');
+  const topbar = () => page.locator('.merchant-workspace .topbar, .ops-shell .ops-topbar');
+  const contrast = selectors => page.evaluate(selectors => {
+    const channels = color => (color.match(/[\d.]+/g) || []).map(Number);
+    const luminance = color => channels(color).slice(0, 3).map(value => {
+      const linear = value / 255;
+      return linear <= 0.04045 ? linear / 12.92 : ((linear + 0.055) / 1.055) ** 2.4;
+    }).reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    return selectors.map(selector => {
+      const element = document.querySelector(selector);
+      if (!element) throw Error(`Missing contrast target: ${selector}`);
+      let background = 'rgb(255, 255, 255)';
+      for (let node = element; node; node = node.parentElement) {
+        const color = getComputedStyle(node).backgroundColor;
+        if (channels(color)[3] === 1 || channels(color).length === 3) { background = color; break; }
+      }
+      const foreground = getComputedStyle(element).color;
+      const light = luminance(foreground), dark = luminance(background);
+      return { selector, foreground, background, ratio: Number(((Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05)).toFixed(2)) };
+    });
+  }, selectors);
   if (!await page.evaluate(async () => { const r = await fetch('/api/__fixture/stats'); return r.ok && Number.isInteger((await r.json()).sales); })) throw Error('Mock fixture required');
+  check(await page.getByRole('link', { name: 'iPOS', exact: true }).getAttribute('href') === '/ipos', 'Merchant navigation exposes the iPOS route');
+  check(await sidebar().isVisible() && await topbar().isVisible(), 'Authenticated merchant shell surrounds iPOS');
+  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+  check(await page.getByRole('link', { name: 'iPOS', exact: true }).isVisible() && await page.getByRole('link', { name: 'Team', exact: true }).isVisible() && await page.getByRole('link', { name: 'Help & support', exact: true }).isVisible(), 'Collapsed desktop navigation keeps iPOS, Team and Support reachable');
+  await page.getByRole('button', { name: 'Use light appearance', exact: true }).click();
+  const lightContrast = await contrast(['.ipos-heading h1', '.ipos-muted', '.ipos-command-grid .ops-button', '.ipos-totals strong']);
+  check(lightContrast.every(pair => pair.ratio >= 4.5), `Modern light text contrast meets 4.5:1: ${JSON.stringify(lightContrast)}`);
+  await page.getByRole('button', { name: 'Use dark appearance', exact: true }).click();
+  check(await page.evaluate(() => document.documentElement.dataset.theme === 'dark'), 'Merchant dark appearance reaches iPOS');
+  const modernContrast = await contrast(['.ipos-heading h1', '.ipos-muted', '.ipos-command-grid .ops-button', '.ipos-totals strong']);
+  check(modernContrast.every(pair => pair.ratio >= 4.5), `Modern dark text contrast meets 4.5:1: ${JSON.stringify(modernContrast)}`);
+  const reclaim = page.getByRole('button', { name: 'Use this tab', exact: true });
+  if (await reclaim.isVisible()) {
+    await reclaim.click();
+    check(await page.getByRole('button', { name: /^Fresh milk 1 litre/ }).isEnabled(), 'Cashier can reclaim a read-only counter in the isolated fixture');
+  }
   await page.evaluate(() => localStorage.removeItem('sb.ipos.v1:ipos-test-shop:ipos-test-cashier'));
   await page.reload();
   await page.getByRole('button', { name: /^Fresh milk 1 litre/ }).click();
@@ -17,21 +55,29 @@ async (page) => {
   await page.keyboard.press('Enter');
   await waitMode('browser');
   check(await page.evaluate(() => document.fullscreenElement === document.documentElement), 'Button enters actual native document fullscreen');
-  check(await page.locator('.ops-sidebar').isHidden() && await page.locator('.ops-topbar').isHidden(), 'Dashboard sidebar and topbar are hidden');
+  check(await sidebar().isHidden() && await topbar().isHidden(), 'Merchant sidebar and topbar are hidden');
   check(JSON.stringify((await state()).draft) === bill, 'Entering full screen preserves unpaid bill');
   await page.keyboard.press('F10');
   await page.getByRole('dialog', { name: 'Cash payment', exact: true }).waitFor();
   await page.getByRole('textbox', { name: 'Cash received', exact: true }).fill('500');
   check(await page.getByRole('dialog').evaluate(el => document.fullscreenElement.contains(el)), 'Payment portal remains inside the fullscreen document');
+  const paymentContrast = await contrast(['.ipos-payment', '.ipos-payment .ipos-field', '.ipos-payment > small']);
+  check(paymentContrast.every(pair => pair.ratio >= 4.5), `Payment dialog dark text contrast meets 4.5:1: ${JSON.stringify(paymentContrast)}`);
   await page.getByRole('button', { name: 'Close Cash payment', exact: true }).click();
   await page.getByRole('button', { name: /^Classic appearance/ }).click();
   check(await mode() === 'browser', 'Classic switch does not exit or remount full-screen mode');
+  const classicHeaderContrast = await contrast(['.ipos-classic-table th']);
+  check(classicHeaderContrast.every(pair => pair.ratio >= 4.5), `Classic table header text meets 4.5:1 in dark dashboard: ${JSON.stringify(classicHeaderContrast)}`);
   await page.screenshot({ path: 'output/playwright/ipos-fullscreen-classic.png', fullPage: true });
   await page.getByRole('button', { name: 'Exit full screen', exact: true }).click();
   await waitMode('off');
-  check(await page.locator('.ops-sidebar').isVisible() && await page.locator('.ops-topbar').isVisible(), 'Exit button restores dashboard chrome');
+  check(await sidebar().isVisible() && await topbar().isVisible(), 'Exit button restores merchant chrome');
   await page.waitForFunction(() => document.activeElement?.textContent?.trim() === 'Full screen');
   check(true, 'Exit returns keyboard focus to toggle');
+  await page.getByRole('button', { name: 'Use light appearance', exact: true }).click();
+  const classicLightHeaderContrast = await contrast(['.ipos-classic-table th']);
+  check(classicLightHeaderContrast.every(pair => pair.ratio >= 4.5), `Classic table header text meets 4.5:1 in light dashboard: ${JSON.stringify(classicLightHeaderContrast)}`);
+  await page.getByRole('button', { name: 'Use dark appearance', exact: true }).click();
   await button().click(); await waitMode('browser');
   await page.evaluate(() => document.exitFullscreen()); await waitMode('off');
   check(await button().isVisible(), 'Browser-initiated fullscreen exit synchronizes button label');
@@ -40,9 +86,11 @@ async (page) => {
   await button().click(); await waitMode('window');
   check((await page.locator('.ipos-fullscreen-hint').innerText()).includes('unavailable'), 'Unsupported browser gets explicitly labeled expanded-window fallback');
   await page.setViewportSize({ width: 320, height: 844 });
-  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Expanded Classic has no overflow at 320px');
+  if (await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)) results.push('Expanded Classic has no overflow at 320px');
+  else layoutIssues.push('Expanded Classic overflows at 320px');
   await page.getByRole('button', { name: /^Classic appearance/ }).click();
-  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Expanded Modern has no overflow at 320px');
+  if (await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)) results.push('Expanded Modern has no overflow at 320px');
+  else layoutIssues.push('Expanded Modern overflows at 320px');
   await page.keyboard.press('F10');
   await page.getByRole('dialog', { name: 'Cash payment', exact: true }).waitFor();
   await page.keyboard.press('Escape');
@@ -50,6 +98,9 @@ async (page) => {
   await page.screenshot({ path: 'output/playwright/ipos-fullscreen-mobile.png', fullPage: true });
   await page.keyboard.press('Escape'); await waitMode('off');
   check(await button().evaluate(el => el === document.activeElement), 'Fallback Escape restores mode and toggle focus');
+  await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+  check(await page.getByRole('link', { name: 'iPOS', exact: true }).isVisible() && await page.getByRole('link', { name: 'Team', exact: true }).isVisible() && await page.getByRole('link', { name: 'Help & support', exact: true }).isVisible(), '320px mobile navigation exposes all added and existing links');
+  await page.getByRole('button', { name: 'Close navigation', exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.evaluate(() => { delete document.fullscreenEnabled; document.documentElement.requestFullscreen = () => Promise.reject(new Error('Simulated browser denial')); });
   await button().click(); await waitMode('window');
@@ -67,11 +118,33 @@ async (page) => {
   check(JSON.stringify(await state()) === pending, 'Full-screen toggles leave the entire unresolved sale state unchanged');
   await page.getByRole('button', { name: 'Check saved sale', exact: true }).click();
   await page.getByRole('dialog', { name: 'Saved sale receipt', exact: true }).waitFor();
+  const salesBeforePrint = await page.evaluate(async () => (await (await fetch('/api/__fixture/stats')).json()).sales);
+  await page.evaluate(() => { window.__iposPrintCalls = 0; window.print = () => { window.__iposPrintCalls += 1; }; });
+  await page.getByRole('button', { name: 'Open print dialog', exact: true }).click();
+  check(await page.evaluate(() => window.__iposPrintCalls === 1), 'Receipt print action calls the browser print dialog');
+  check(await page.locator('#ipos-receipt').isVisible(), 'Saved receipt remains available after print action');
+  check(await page.evaluate(async () => (await (await fetch('/api/__fixture/stats')).json()).sales) === salesBeforePrint, 'Printing creates no second sale');
+  await page.emulateMedia({ media: 'print' });
+  check(await page.locator('#ipos-receipt').isVisible() && await page.locator('#root').isHidden(), 'Print layout isolates the receipt from merchant chrome');
+  await page.emulateMedia({ media: 'screen' });
   await page.getByRole('button', { name: 'Back to counter', exact: true }).click();
   await button().click(); await waitMode('browser');
   await page.getByRole('link', { name: 'Manage products', exact: true }).click();
   await page.waitForURL('**/products');
   await page.waitForFunction(() => !document.fullscreenElement && !document.documentElement.dataset.iposFullscreen);
-  check(await page.locator('.ops-sidebar').isVisible(), 'Leaving iPOS exits owned fullscreen and removes layout overrides');
+  check(await sidebar().isVisible(), 'Leaving iPOS exits owned fullscreen and removes layout overrides');
+  await page.evaluate(() => fetch('/api/__fixture/capabilities?mode=unsupported'));
+  await page.goto('http://127.0.0.1:5184/ipos');
+  await page.getByRole('button', { name: 'Retry connection', exact: true }).waitFor();
+  check(await page.getByRole('alert').isVisible(), 'Unsupported POS API shows a recoverable error');
+  await page.evaluate(() => fetch('/api/__fixture/capabilities?mode=supported'));
+  await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
+  await button().waitFor();
+  check(await button().isVisible(), 'Retry recovers the counter after API support returns');
+  await page.evaluate(() => localStorage.setItem('sb.fixture.authDisabled', 'true'));
+  await page.goto('http://127.0.0.1:5184/ipos');
+  await page.waitForURL('**/sign-in');
+  check(await page.getByRole('main').isVisible(), 'Unauthenticated iPOS route redirects to public sign-in');
+  if (layoutIssues.length) throw Error(layoutIssues.join('; '));
   return { results, data: 'Mock sales only; no real stock or account changes' };
 }

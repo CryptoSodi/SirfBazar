@@ -17,6 +17,7 @@ model User {
   fullName        String?
   phoneNumber     String?   @unique
   email           String?   @unique
+  cnic            String?   @unique
   passwordHash    String?
   role            String // CUSTOMER | MERCHANT_OWNER | MERCHANT_STAFF | RIDER | ADMIN | SUPER_ADMIN | SUPPORT_AGENT | FINANCE_ADMIN
   profileImageUrl String?
@@ -35,6 +36,7 @@ model User {
   refreshTokens RefreshToken[]
   notifications Notification[]
   pushTokens    PushToken[]
+  webPushSubscriptions WebPushSubscription[]
   auditLogs     AuditLog[]
 }
 
@@ -44,6 +46,22 @@ model PushToken {
   userId    String
   token     String   @unique // ExponentPushToken[...]
   platform  String   @default("android") // android | ios
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/** Browser Web Push subscription for the merchant/customer desktop PWA. */
+model WebPushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

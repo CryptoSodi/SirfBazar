@@ -1,6 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { api, pkr } from '../lib/api';
-import { Badge, Stat, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
+import { Badge, Modal, Stat, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
+import { useThemeStudio, type ThemeMode } from '../components/ThemeStudio';
+import { ReferenceIcon } from '../components/ReferenceIcon';
+import { PageSkeleton } from '../components/Skeleton';
+import { readMemory, writeMemory } from '../lib/memoryCache';
 const ShopMapPicker = lazy(() => import('../components/ShopMapPicker'));
 
 /** Editable fields accepted by PUT /merchant/profile (UpdateMerchantProfileDto). */
@@ -69,24 +73,31 @@ const Field = ({ label, hint, children }: { label: string; hint?: string; childr
 );
 
 export default function Profile() {
-  const [merchant, setMerchant] = useState<any>(null);
-  const [form, setForm] = useState<Form>(blank);
-  const [loading, setLoading] = useState(true);
+  const initialMerchant = readMemory<any>('merchant:profile');
+  const [merchant, setMerchant] = useState<any>(initialMerchant ?? null);
+  const [form, setForm] = useState<Form>(initialMerchant ? toForm(initialMerchant) : blank);
+  const [loading, setLoading] = useState(!initialMerchant);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [stateBusy, setStateBusy] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [documentOpen, setDocumentOpen] = useState(false);
+  const [documentType, setDocumentType] = useState('BUSINESS_REGISTRATION');
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const { toast, node } = useToast();
+  const { mode, setMode } = useThemeStudio();
 
   const set = (k: keyof Form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const load = async () => {
-    setLoading(true);
+    setLoading(!readMemory('merchant:profile'));
     setError('');
     try {
       const m = await api.get('/merchant/profile');
       setMerchant(m);
       setForm(toForm(m));
+      writeMemory('merchant:profile', m);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -125,7 +136,9 @@ export default function Profile() {
 
       const updated = await api.put('/merchant/profile', body);
       setMerchant((m: any) => ({ ...m, ...updated }));
+      writeMemory('merchant:profile', updated);
       setForm(toForm(updated));
+      setEditing(false);
       window.dispatchEvent(new Event('sb:shop-status'));
       toast('Shop details saved');
     } catch (e: any) {
@@ -149,7 +162,43 @@ export default function Profile() {
     }
   };
 
-  if (loading) return <p className="text-sm text-slate-400">Loading shop settings…</p>;
+  const addDocument = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!documentFile) return;
+    setSaving(true);
+    try {
+      const form = new FormData();
+      form.append('documentType', documentType);
+      form.append('file', documentFile);
+      await api.upload('/merchant/documents/upload', form);
+      setDocumentOpen(false); setDocumentFile(null); await load();
+      toast('Merchant document submitted for verification');
+    } catch (e: any) { toast(e.message, false); }
+    finally { setSaving(false); }
+  };
+
+  const openDocument = async (document: any) => {
+    try {
+      if (!String(document.documentUrl || '').startsWith('/api/merchant/documents/')) {
+        const legacyUrl = new URL(String(document.documentUrl || ''));
+        if (!['http:', 'https:'].includes(legacyUrl.protocol)) {
+          throw new Error('This legacy document link uses an unsupported protocol.');
+        }
+        window.open(legacyUrl.toString(), '_blank', 'noopener,noreferrer');
+        return;
+      }
+      const blob = await api.download(`/merchant/documents/${encodeURIComponent(document.id)}/file`);
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement('a');
+      anchor.href = url;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e: any) { toast(e.message, false); }
+  };
+
+  if (loading && !merchant) return <PageSkeleton variant="settings" label="Loading shop settings" />;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!merchant) return <p className="text-sm text-slate-400">No shop found.</p>;
 
@@ -157,14 +206,36 @@ export default function Profile() {
   const isOpen = !!merchant.isOpen;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">Shop settings</h1>
-        <Badge value={merchant.approvalStatus} />
+    <div>
+      <section className="page-heading"><div><div className="kicker">Store management</div><h1>Shop settings</h1><p>Your shop identity, storefront controls and workspace preferences.</p></div></section>
+      {!canEdit && <div className="state-banner warning"><ReferenceIcon name="lock" /><div><b>Read-only settings</b><p>You do not have the Store permission to edit shop details or storefront controls.</p></div></div>}
+      <div className="settings-grid">
+        <section className="panel panel-pad">
+          <div className="between"><h2>Shop details</h2><button type="button" className="btn tiny" disabled={!canEdit} onClick={() => setEditing(true)}>Edit details <ReferenceIcon name="edit" size="sm" /></button></div>
+          <div className="section-divider" />
+          <div className="row"><span className="store-monogram" style={{ width: 52, height: 52 }} aria-hidden="true">{String(merchant.shopName || 'SB').slice(0, 2).toUpperCase()}</span><div><h3>{merchant.shopName}</h3><p className="small muted">{[merchant.area, merchant.city].filter(Boolean).join(', ')}</p></div><Badge value={merchant.approvalStatus} /></div>
+          <div className="definition" style={{ marginTop: 18 }}><span>Address</span><b>{merchant.address || '—'}</b></div>
+          <div className="definition"><span>Contact</span><b>{merchant.phoneNumber || '—'}</b></div>
+          <div className="definition"><span>Opening hours</span><b>{merchant.openingTime && merchant.closingTime ? `${merchant.openingTime} – ${merchant.closingTime}` : 'Not set'}</b></div>
+          <div className="definition"><span>Preparation time</span><b>{merchant.averagePreparationMinutes ?? '—'} min</b></div>
+          <div className="definition"><span>Service radius</span><b>{merchant.serviceRadiusKm ?? '—'} km</b></div>
+          <div className="definition"><span>Minimum order</span><b>{pkr(merchant.minimumOrderValuePaisa)}</b></div>
+          <div className="section-divider" /><h2>Appearance</h2><p className="small muted" style={{ marginTop: 6 }}>Choose what feels comfortable. Your shop’s data stays unchanged.</p>
+          <div className="swatch-row">{(['light', 'dark', 'system'] as ThemeMode[]).map((choice) => <button type="button" key={choice} className={`theme-swatch ${choice}`} aria-pressed={mode === choice} onClick={() => setMode(choice)}><span aria-hidden="true" /><b>{choice[0].toUpperCase() + choice.slice(1)}</b><small>{choice === 'system' ? 'Follow device' : `Always ${choice}`}</small></button>)}</div>
+        </section>
+        <section className="panel panel-pad"><h2>Storefront controls</h2><p className="small muted" style={{ marginTop: 5 }}>Separate settings. Separate API actions.</p>
+          <div className="setting-line"><div><b>Shop open</b><p>{isOpen ? 'Open' : 'Closed'} for new orders.</p></div><button type="button" className="btn tiny" disabled={!canEdit || stateBusy} onClick={() => toggleState(isOpen ? 'close' : 'open', isOpen ? 'Shop closed' : 'Shop opened')}>{isOpen ? 'Close shop' : 'Open shop'}</button></div>
+          <div className="setting-line"><div><b>Shop online</b><p>{isOnline ? 'Online' : 'Offline'} in customer-facing availability.</p></div><button type="button" className="btn tiny" disabled={!canEdit || stateBusy} onClick={() => toggleState(isOnline ? 'offline' : 'online', isOnline ? 'Shop is now offline' : 'Shop is now online')}>{isOnline ? 'Go offline' : 'Go online'}</button></div>
+          <p className="small muted" style={{ marginTop: 18 }}>Changing these flags does not record a delivery, cancel an order or prove storefront availability.</p>
+          <div className="section-divider" /><h3>Approval status</h3><p className="small muted" style={{ marginTop: 7 }}>This status is supplied by the backend.</p><div style={{ marginTop: 12 }}><Badge value={merchant.approvalStatus} /></div>
+          <div className="section-divider" /><div className="definition"><span>Rating</span><b>{(merchant.ratingAverage ?? 0).toFixed(1)} / 5 · {merchant.ratingCount ?? 0} reviews</b></div><div className="definition"><span>Commission</span><b>{merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}</b></div><div className="definition"><span>Shop type</span><b>{String(merchant.shopType ?? '—').replace(/_/g, ' ')}</b></div>
+        </section>
       </div>
 
+      <section className="panel" style={{ marginTop: 20 }}><div className="panel-head"><div><h2>Merchant documents</h2><p>Verification files attached to this merchant profile.</p></div><button type="button" className="btn primary" disabled={!canEdit} onClick={() => setDocumentOpen(true)}><ReferenceIcon name="upload" size="sm" /> Add document</button></div><div className="table-wrap"><table><thead><tr><th>Document</th><th>Status</th><th>Submitted</th><th>File</th></tr></thead><tbody>{(merchant.documents ?? []).map((document: any) => <tr key={document.id}><td>{String(document.documentType).replace(/_/g, ' ')}</td><td><Badge value={document.verificationStatus} /></td><td>{new Date(document.createdAt).toLocaleDateString()}</td><td><button type="button" className="btn tiny" onClick={() => void openDocument(document)}>Open</button></td></tr>)}{(merchant.documents ?? []).length === 0 && <tr><td colSpan={4}>No merchant documents have been submitted.</td></tr>}</tbody></table></div></section>
+
       {/* Live state controls */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div hidden className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-start justify-between">
             <div>
@@ -207,7 +278,7 @@ export default function Profile() {
       </div>
 
       {/* Read-only summary */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div hidden className="grid gap-4 sm:grid-cols-3">
         <Stat label="Rating" value={`${(merchant.ratingAverage ?? 0).toFixed(1)} ★`} hint={`${merchant.ratingCount ?? 0} reviews`} />
         <Stat
           label="Commission"
@@ -217,14 +288,14 @@ export default function Profile() {
         <Stat label="Shop type" value={String(merchant.shopType ?? '—').replace(/_/g, ' ')} hint={merchant.email ?? 'No email on file'} />
       </div>
 
-      {!canEdit && (
+      {false && !canEdit && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
           You do not have the Store permission, so shop details are read-only.
         </p>
       )}
 
       {/* Editable form */}
-      <form onSubmit={save} className="space-y-5 rounded-xl border border-slate-200 bg-white p-5">
+      {editing && <Modal title="Edit shop details" onClose={() => setEditing(false)}><form onSubmit={save} className="dialog-body space-y-5">
         <fieldset disabled={!canEdit || saving} className="space-y-5">
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-slate-700">Shop details</h2>
@@ -306,8 +377,9 @@ export default function Profile() {
             </button>
           </div>
         </fieldset>
-      </form>
+      </form></Modal>}
 
+      {documentOpen && <Modal title="Add merchant document" onClose={() => { setDocumentOpen(false); setDocumentFile(null); }}><form className="dialog-body space-y-3" onSubmit={addDocument}><label className="field">Document type<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="BUSINESS_REGISTRATION">Business registration</option><option value="IDENTITY">Identity</option><option value="BANK_DETAILS">Bank details</option><option value="OTHER">Other</option></select></label><label className="field">Document file<input type="file" required accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setDocumentFile(event.target.files?.[0] || null)} /><small>PDF, JPG, PNG or WebP, up to 10 MB. Files are kept outside the public static directory and require an authenticated merchant session to open.</small></label><div className="row"><button type="button" className="btn" onClick={() => { setDocumentOpen(false); setDocumentFile(null); }}>Cancel</button><button className="btn primary" disabled={saving || !documentFile}>{saving ? 'Submitting…' : 'Upload document'}</button></div></form></Modal>}
       {node}
       {mapOpen && <Suspense fallback={<div role="status">Loading map…</div>}><ShopMapPicker initial={form.latitude && form.longitude ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null} onClose={() => setMapOpen(false)} onConfirm={(point) => { setForm((previous) => ({ ...previous, latitude: String(point.latitude), longitude: String(point.longitude) })); setMapOpen(false); toast('Shop pin selected. Save changes to publish it.'); }} /></Suspense>}
     </div>

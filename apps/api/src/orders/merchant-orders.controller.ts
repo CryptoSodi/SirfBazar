@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { MerchantOrdersService } from './merchant-orders.service';
 import { AssignRiderDto, ItemUnavailableDto, RejectOrderDto } from './orders.dto';
 import { AuthUser, CurrentUser, Roles } from '../common/decorators';
@@ -12,8 +12,13 @@ export class MerchantOrdersController {
   constructor(private readonly service: MerchantOrdersService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
-    return this.service.list(user.userId, status);
+  @ApiOperation({ summary: 'List own online orders', description: 'Explicit page/pageSize returns {items,total,page,pageSize,totalPages}; omitting both preserves the legacy newest-100 array.' })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'attention', required: false, type: Boolean, description: 'When true and status is absent, include actionable merchant statuses.' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Maximum 100.' })
+  list(@CurrentUser() user: AuthUser, @Query() query: { status?: string; attention?: string; page?: string; pageSize?: string }) {
+    return this.service.list(user.userId, query);
   }
 
   @Get(':id')

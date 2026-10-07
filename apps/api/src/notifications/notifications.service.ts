@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ExpoPushService } from './expo-push.service';
+import { WebPushService } from './web-push.service';
 
 export interface NotifyInput {
   userId: string;
@@ -24,6 +25,7 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
     private readonly expoPush: ExpoPushService,
+    private readonly webPush: WebPushService,
   ) {}
 
   async notify(input: NotifyInput) {
@@ -43,6 +45,16 @@ export class NotificationsService {
         title: input.title,
         body: input.body,
         data: { type: input.type, referenceId: input.referenceId ?? null },
+      });
+      void this.webPush.sendToUser(input.userId, {
+        title: input.title,
+        body: input.body,
+        tag: notification.id,
+        data: {
+          type: input.type,
+          referenceId: input.referenceId ?? null,
+          url: input.type.toUpperCase().includes('ORDER') ? '/orders' : '/workspace',
+        },
       });
       return notification;
     } catch (err) {
