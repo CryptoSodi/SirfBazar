@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { api, isLoggedIn, logoutLocal } from '@/lib/api';
-import { formatPKR } from '@/lib/format';
+import { ApiError, api, isLoggedIn, logoutLocal } from '@/lib/api';
 import { LoginSheet } from '@/components/LoginSheet';
 import { AddressForm } from '@/components/AddressForm';
 
@@ -14,27 +13,65 @@ export default function ProfilePage() {
   const [addresses, setAddresses] = useState<any[]>([]);
   const [needLogin, setNeedLogin] = useState(false);
   const [name, setName] = useState('');
+  const [appearance, setAppearance] = useState<'light' | 'dark' | 'system'>('system');
   const [editing, setEditing] = useState<any | 'new' | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [addressError, setAddressError] = useState('');
+  const [signInMessage, setSignInMessage] = useState('');
+
+  const recoverFromWrongRole = (error: Error) => {
+    if (!(error instanceof ApiError) || error.status !== 403) return false;
+    logoutLocal();
+    setProfile(null);
+    setAddresses([]);
+    setSignInMessage('Your session needs updating. Sign in again to view your customer profile.');
+    setNeedLogin(true);
+    return true;
+  };
 
   const load = () => {
     if (!isLoggedIn()) {
       setNeedLogin(true);
+      setProfile(null);
+      setLoadError('');
+      setAddressError('');
       return;
     }
     setNeedLogin(false);
+    setLoadError('');
+    setAddressError('');
     api.get('/customer/profile').then((p) => {
       setProfile(p);
       setName(p.fullName ?? '');
-    }).catch(() => undefined);
-    api.get('/customer/addresses').then(setAddresses).catch(() => undefined);
+    }).catch((e: Error) => {
+      if (!isLoggedIn()) { setProfile(null); setNeedLogin(true); }
+      else if (recoverFromWrongRole(e)) return;
+      else setLoadError(e.message);
+    });
+    api.get('/customer/addresses').then(setAddresses).catch((e: Error) => {
+      if (!isLoggedIn()) { setProfile(null); setNeedLogin(true); }
+      else if (recoverFromWrongRole(e)) return;
+      else setAddressError(e.message);
+    });
   };
 
   useEffect(load, []);
+  useEffect(() => {
+    const stored = localStorage.getItem('sb.theme');
+    setAppearance(stored === 'light' || stored === 'dark' ? stored : 'system');
+  }, []);
+
+  const chooseAppearance = (value: 'light' | 'dark' | 'system') => {
+    localStorage.setItem('sb.theme', value);
+    setAppearance(value);
+    window.dispatchEvent(new Event('sb:theme'));
+  };
 
   if (needLogin) {
-    return <LoginSheet title="Login to your account" onClose={() => router.push('/')} onSuccess={load} />;
+    return <LoginSheet title="Sign in to your customer account" description={signInMessage || 'Sign in to view your profile and saved addresses.'} onClose={() => router.push('/')} onSuccess={() => { setSignInMessage(''); load(); }} />;
   }
-  if (!profile) return <p className="text-stone-500">Loading profile…</p>;
+  if (loadError && !profile) return <div role="alert" className="card p-5"><p>Unable to load your profile: {loadError}</p><button className="btn-secondary mt-3" onClick={load}>Retry</button></div>;
+  if (!profile) return <p role="status" className="text-stone-500">Loading profile…</p>;
 
   const saveName = async () => {
     try {
@@ -47,6 +84,7 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
+      {addressError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Unable to load saved addresses: {addressError} <button className="underline" onClick={load}>Retry</button></p>}
       <h1 className="text-xl font-bold">Your account</h1>
 
       <section className="card p-5">
@@ -57,9 +95,6 @@ export default function ProfilePage() {
           <div>
             <div className="font-bold">{profile.fullName ?? 'Customer'}</div>
             <div className="text-sm text-stone-500">{profile.phoneNumber ?? profile.email}</div>
-            <div className="mt-1 text-xs text-emerald-700">
-              👛 Wallet: {formatPKR(profile.customer?.walletBalancePaisa ?? 0)}
-            </div>
           </div>
         </div>
         <div className="mt-4 flex gap-2">
@@ -122,6 +157,8 @@ export default function ProfilePage() {
           {addresses.length === 0 && editing !== 'new' && <p className="text-sm text-stone-500">No saved addresses yet.</p>}
         </div>
       </section>
+
+      <section className="card p-5"><h2 className="mb-3 font-bold">Appearance</h2><div className="flex flex-wrap gap-2">{(['light', 'dark', 'system'] as const).map((option) => <button key={option} type="button" className={appearance === option ? 'sb-appearance-option selected' : 'sb-appearance-option'} aria-pressed={appearance === option} onClick={() => chooseAppearance(option)}>{option === 'light' ? '☼' : option === 'dark' ? '☾' : '▣'} {option[0].toUpperCase() + option.slice(1)}</button>)}</div><p className="sb-muted mt-3">System follows your device. Changing appearance keeps your basket.</p></section>
 
       <section className="card p-5">
         <h2 className="mb-3 font-bold">Quick links</h2>

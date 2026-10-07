@@ -3,7 +3,7 @@ import { ProsePage } from '@/components/ProsePage';
 
 export const metadata: Metadata = {
   title: 'About SirfBazar',
-  description: 'SirfBazar is your nearby bazar, now online — powered by trusted local shops.',
+  description: 'SirfBazar connects customers with trusted local shops and their own delivery riders.',
 };
 
 export default function Page() {

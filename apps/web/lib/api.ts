@@ -16,6 +16,8 @@ const LS = {
   location: 'sb.location',
 };
 
+let refreshPromise: Promise<boolean> | null = null;
+
 export interface SbLocation {
   latitude: number;
   longitude: number;
@@ -48,6 +50,18 @@ export function isLoggedIn() {
   return typeof window !== 'undefined' && !!localStorage.getItem(LS.access);
 }
 
+/** Reading the site header must not create a guest session. */
+export function hasCartSession() {
+  return typeof window !== 'undefined' && (isLoggedIn() || !!localStorage.getItem(LS.guest));
+}
+
+/** Use only after the person accepts losing an unrecoverable expired guest basket. */
+export function startNewGuestBasket() {
+  if (isLoggedIn()) return;
+  localStorage.removeItem(LS.guest);
+  window.dispatchEvent(new Event('sb:cart'));
+}
+
 async function ensureGuestToken(): Promise<string> {
   let token = localStorage.getItem(LS.guest);
   if (token) return token;
@@ -62,6 +76,9 @@ async function ensureGuestToken(): Promise<string> {
     }),
   });
   const data = await res.json();
+  if (!res.ok || !data?.sessionToken) {
+    throw new ApiError(res.status, data?.message || 'Unable to start your basket. Try again.');
+  }
   token = data.sessionToken as string;
   localStorage.setItem(LS.guest, token);
   return token;
@@ -75,21 +92,9 @@ export class ApiError extends Error {
   }
 }
 
-function isPublicRead(method: string, path: string) {
-  if (method !== 'GET') return false;
-  if (path.startsWith('/products/recommended')) return false;
-  return ['/products', '/merchants', '/location', '/coupons'].some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`),
-  );
-}
-
 async function rawRequest(method: string, path: string, body?: unknown, retry = true): Promise<any> {
-  const headers: Record<string, string> = {};
-  if (body != null) headers['content-type'] = 'application/json';
-
-  // Storefront discovery is anonymous. Do not let a stale login token block
-  // catalog browsing or trigger an unnecessary CORS preflight.
-  const access = isPublicRead(method, path) ? null : localStorage.getItem(LS.access);
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  const access = localStorage.getItem(LS.access);
   if (access) headers.authorization = `Bearer ${access}`;
   if (path.startsWith('/guest')) headers['x-guest-session'] = await ensureGuestToken();
 
@@ -100,7 +105,7 @@ async function rawRequest(method: string, path: string, body?: unknown, retry = 
   });
 
   if (res.status === 401 && access && retry) {
-    const refreshed = await tryRefresh();
+    const refreshed = await refreshOnce();
     if (refreshed) return rawRequest(method, path, body, false);
     logoutLocal();
   }
@@ -116,6 +121,13 @@ async function rawRequest(method: string, path: string, body?: unknown, retry = 
     throw new ApiError(res.status, msg);
   }
   return data;
+}
+
+function refreshOnce(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = tryRefresh().finally(() => { refreshPromise = null; });
+  }
+  return refreshPromise;
 }
 
 async function tryRefresh(): Promise<boolean> {
@@ -179,17 +191,27 @@ export async function updateCartItem(itemId: string, quantity: number) {
   return view;
 }
 
-/** After OTP/Google login at checkout: merge guest cart, refresh user signal. */
+/** A merge can have partly completed. Never retry it automatically. */
+export class CartMergeUncertainError extends Error {
+  constructor() {
+    super('Your account is ready, but we could not confirm your guest basket was saved. Check your basket before continuing.');
+    this.name = 'CartMergeUncertainError';
+  }
+}
+
+/** After OTP/Google login: merge once, then require an explicit basket review. */
 export async function afterLogin(auth: { accessToken: string; refreshToken: string; user: any }) {
   storeAuth(auth);
+  window.dispatchEvent(new Event('sb:auth'));
   const guest = localStorage.getItem(LS.guest);
   if (guest) {
     try {
       await rawRequest('POST', '/guest/cart/merge-after-login');
+      localStorage.removeItem(LS.guest);
     } catch {
-      /* empty guest cart is fine */
+      window.dispatchEvent(new Event('sb:cart'));
+      throw new CartMergeUncertainError();
     }
   }
-  window.dispatchEvent(new Event('sb:auth'));
   window.dispatchEvent(new Event('sb:cart'));
 }

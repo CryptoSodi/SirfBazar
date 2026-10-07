@@ -8,7 +8,7 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@sirfbazar.pk');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -44,41 +44,41 @@ export default function Login() {
   };
 
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-900 p-4">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-lg font-black text-white">SB</span>
-          <div>
-            <div className="font-extrabold">SirfBazar Admin</div>
-            <div className="text-xs text-slate-400">Marketplace operations console</div>
-          </div>
+    <main className="grid min-h-screen place-items-center bg-slate-900 p-4">
+      <form onSubmit={submit} className="sb-admin-login w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
+        <div className="mb-6">
+          <img src="/brand/sirfbazar-primary.svg" alt="SirfBazar — بازار وہی۔ طریقہ نیا۔" className="h-auto w-56" />
+          <div className="mt-2 text-sm font-semibold text-slate-600">Admin console</div>
         </div>
-        <label className="mb-1 block text-xs font-semibold text-slate-500">Email</label>
-        <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
-        <label className="mb-1 mt-3 block text-xs font-semibold text-slate-500">Password</label>
+        <label htmlFor="admin-email" className="mb-1 block text-xs font-semibold text-slate-500">Email</label>
+        <input id="admin-email" name="email" type="email" required className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+        <label htmlFor="admin-password" className="mb-1 mt-3 block text-xs font-semibold text-slate-500">Password</label>
         <input
+          id="admin-password"
+          name="password"
+          required
           type="password"
           className={inputCls}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
         />
-        {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <button className={`${btnCls} mt-5 w-full py-2.5`} disabled={busy || !password}>
+        {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <button className={`${btnCls} mt-5 w-full py-2.5`} disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
         {GOOGLE_CLIENT_ID && (
           <>
-            <div className="my-4 text-center text-[11px] uppercase tracking-wide text-slate-400">or</div>
+            <div className="my-4 text-center text-[11px] uppercase tracking-wide text-slate-500">or</div>
             <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
               <div className="flex justify-center">
-                <GoogleLogin onSuccess={(cr) => onGoogle(cr.credential)} onError={() => setError('Google sign-in failed')} />
+                <GoogleLogin onSuccess={(cr) => onGoogle(cr.credential)} onError={() => setError('Google sign-in failed. Try again or use your email and password.')} />
               </div>
             </GoogleOAuthProvider>
           </>
         )}
-        <p className="mt-3 text-center text-[11px] text-slate-400">Dev: admin@sirfbazar.pk / Admin@12345 · or Google (admins only)</p>
+        <p className="mt-3 text-center text-[11px] text-slate-500">Authorized administrators only.</p>
       </form>
-    </div>
+    </main>
   );
 }

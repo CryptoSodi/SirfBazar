@@ -1,128 +1,67 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { locationQuery, useLocation } from '@/lib/location';
+import { FALLBACK_LOCATION, locationQuery, useLocation } from '@/lib/location';
 import { ProductCard, ProductCardData } from '@/components/ProductCard';
-import { formatPKR, CATEGORY_EMOJI } from '@/lib/format';
+import { CATEGORY_EMOJI } from '@/lib/format';
+import { Icon } from '@/components/Icons';
+import { CoverageNotice } from '@/components/CoverageNotice';
 
 export default function HomePage() {
-  const { location, resolved } = useLocation();
+  const { location, resolved, choose } = useLocation();
   const [categories, setCategories] = useState<any[]>([]);
   const [shops, setShops] = useState<any[]>([]);
   const [products, setProducts] = useState<ProductCardData[]>([]);
-  const [coupons, setCoupons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     if (!resolved || !location) return;
-    const lq = locationQuery(location);
-    setLoading(true);
+    let active = true;
+    const query = locationQuery(location);
+    setLoading(true); setLoadError(false);
     Promise.allSettled([
-      api.get(`/products/categories?${lq}`),
-      api.get(`/merchants/nearby?${lq}`),
-      api.get(`/products/nearby?${lq}&pageSize=24`),
-      api.get('/coupons'),
-    ]).then(([c, s, p, co]) => {
-      if (c.status === 'fulfilled') setCategories(c.value ?? []);
-      if (s.status === 'fulfilled') setShops(s.value.items ?? s.value ?? []);
-      if (p.status === 'fulfilled') setProducts(p.value.items ?? []);
-      if (co.status === 'fulfilled') setCoupons(co.value ?? []);
+      api.get(`/products/categories?${query}`),
+      api.get(`/merchants/nearby?${query}`),
+      api.get(`/products/nearby?${query}&pageSize=24`),
+    ]).then(([categoryResult, shopResult, productResult]) => {
+      if (!active) return;
+      if (categoryResult.status === 'fulfilled') setCategories(categoryResult.value ?? []);
+      if (shopResult.status === 'fulfilled') setShops(shopResult.value.items ?? shopResult.value ?? []);
+      if (productResult.status === 'fulfilled') setProducts(productResult.value.items ?? []);
+      setLoadError(shopResult.status === 'rejected' || productResult.status === 'rejected');
       setLoading(false);
     });
-  }, [resolved, location?.latitude, location?.longitude]);
+    return () => { active = false; };
+  }, [resolved, location?.latitude, location?.longitude, reload]);
 
-  return (
-    <div className="space-y-8">
-      {/* Hero */}
-      <section className="card overflow-hidden bg-gradient-to-r from-emerald-600 to-emerald-500 p-6 text-white sm:p-8">
-        <h1 className="text-2xl font-extrabold sm:text-3xl">
-          Order from trusted local shops near you
-        </h1>
-        <p className="mt-1 text-emerald-50">
-          Groceries, pharmacy, bakery, fruits & more — delivered fast by your neighbourhood stores.
-        </p>
-        {coupons.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {coupons.slice(0, 3).map((c) => (
-              <span key={c.id} className="chip bg-white/20 text-white">
-                🎟️ {c.code} — {c.title}
-              </span>
-            ))}
-          </div>
-        )}
-      </section>
+  const noShopsInArea = !loading && !loadError && shops.length === 0 && products.length === 0;
+  const inExampleArea = location?.label === FALLBACK_LOCATION.label;
 
-      {/* Categories */}
-      <section>
-        <h2 className="mb-3 text-lg font-bold">Shop by category</h2>
-        <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 lg:grid-cols-12">
-          {categories.map((c) => (
-            <Link
-              key={c.id}
-              href={`/category/${c.id}?name=${encodeURIComponent(c.name)}`}
-              className="card flex flex-col items-center gap-1.5 p-3 text-center hover:border-emerald-300"
-            >
-              <span className="text-2xl">{c.iconUrl || CATEGORY_EMOJI[c.slug] || '🛍️'}</span>
-              <span className="text-[11px] font-medium leading-tight text-stone-600">{c.name}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
+  return <div className="sb-home">
+    <section className="sb-home-hero" aria-labelledby="home-hero-title">
+      <div className="sb-home-hero-copy"><span className="sb-home-eyebrow">Familiar shops. Easier shopping.</span><h1 id="home-hero-title">Your everyday<br />essentials.<br /><em>Closer than ever.</em></h1><p>Fill your basket from local shops. They prepare your order and deliver it to your door.</p><div className="sb-hero-actions"><Link href="/search" className="btn-primary">Shop essentials&nbsp; →</Link><Link href="/search?type=shops">Explore shops</Link></div></div>
+      <div className="sb-hero-art" aria-hidden="true"><span className="sb-hero-orbit" /><Image className="sb-hero-bread" src="/design/product-bread.svg" alt="" width={150} height={180} /><Image className="sb-hero-banana" src="/design/product-banana.svg" alt="" width={155} height={140} /><div className="sb-hero-bag"><span>YOUR DAILY<br />GOOD THINGS</span></div><Image className="sb-hero-milk" src="/design/product-milk.svg" alt="" width={140} height={185} /><Image className="sb-hero-tomato" src="/design/product-tomato.svg" alt="" width={125} height={100} /></div>
+      <div className="sb-hero-note">From their shelves.<br /><strong>To your doorstep.</strong></div>
+    </section>
 
-      {/* Nearby shops */}
-      <section>
-        <h2 className="mb-3 text-lg font-bold">Shops near you</h2>
-        {shops.length === 0 && !loading && (
-          <p className="text-sm text-stone-500">No shops nearby yet — try changing your location.</p>
-        )}
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {shops.map((s) => (
-            <Link key={s.id} href={`/shop/${s.id}`} className="card w-56 shrink-0 p-4 hover:border-emerald-300">
-              <div className="mb-2 grid h-12 w-12 place-items-center rounded-xl bg-emerald-50 text-xl">
-                {s.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.logoUrl} alt="" className="h-12 w-12 rounded-xl object-cover" />
-                ) : (
-                  '🏪'
-                )}
-              </div>
-              <div className="truncate font-semibold">{s.shopName}</div>
-              <div className="mt-0.5 text-xs text-stone-500">
-                ⭐ {s.ratingAverage?.toFixed?.(1) ?? '–'} · {s.distanceKm != null ? `${s.distanceKm} km` : s.city}
-              </div>
-              <div className="mt-1 text-xs text-stone-400">
-                {s.estimatedDeliveryMinutes ? `~${s.estimatedDeliveryMinutes} min` : ''}
-                {s.minimumOrderValuePaisa ? ` · min ${formatPKR(s.minimumOrderValuePaisa)}` : ''}
-              </div>
-              <span
-                className={`chip mt-2 ${s.isOnline && s.isOpen ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}
-              >
-                {s.isOnline && s.isOpen ? '● Open now' : 'Closed'}
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+    {noShopsInArea && <CoverageNotice className="mt-6" inExampleArea={inExampleArea} onBrowseExample={() => choose(FALLBACK_LOCATION)} onRetry={() => setReload((value) => value + 1)} />}
 
-      {/* Popular products */}
-      <section>
-        <h2 className="mb-3 text-lg font-bold">Popular near you</h2>
-        {loading ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="card h-56 animate-pulse bg-stone-100" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {products.map((p) => (
-              <ProductCard key={p.merchantProductId} card={p} />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
+    {!noShopsInArea && <section className="sb-home-section"><div className="sb-home-section-heading"><div><h2>Everyday essentials</h2><p>A useful place to start. Choose a product, see its shop.</p></div><Link href="/search">See all&nbsp; →</Link></div>
+      {loading ? <div className="sb-product-grid" aria-label="Loading products">{Array.from({ length: 6 }).map((_, index) => <div key={index} className="card sb-product-skeleton" />)}</div> : products.length ? <div className="sb-product-grid">{products.slice(0, 6).map((product) => <ProductCard key={product.merchantProductId} card={product} />)}</div> : !loadError && <p className="sb-muted">No nearby products for this area yet. Choose another area to see what shops offer.</p>}
+    </section>}
+
+    {loadError && <div className="sb-load-error" role="alert"><p>We couldn’t load all local shops and products. Your basket stays in place.</p><button className="btn-secondary" onClick={() => setReload((value) => value + 1)}>Try again</button></div>}
+
+    {categories.length > 0 && <section className="sb-home-section"><div className="sb-home-section-heading"><div><h2>What’s on your list?</h2><p>Browse by category.</p></div><Link href="/search">Browse all&nbsp; →</Link></div><div className="sb-home-categories">{categories.map((category) => <Link key={category.id} href={`/category/${category.id}?name=${encodeURIComponent(category.name)}`} className="sb-home-category"><span aria-hidden="true">{category.iconUrl || CATEGORY_EMOJI[category.slug] || '▦'}</span><strong>{category.name}</strong></Link>)}</div></section>}
+
+    {!noShopsInArea && <section className="sb-home-section"><div className="sb-home-section-heading"><div><h2>Your neighbourhood, online</h2><p>Shops prepare and deliver their own orders.</p></div><Link href="/search?type=shops">Explore shops&nbsp; →</Link></div><div className="sb-home-shops">{shops.map((shop) => <Link key={shop.id} href={`/shop/${shop.id}`} className="sb-home-shop"><span className="sb-shop-mark"><Icon name="shop" size={27} /></span><span><strong>{shop.shopName}</strong><small>{shop.category?.name || shop.city || 'Local shop'}</small><small>{shop.isOnline && shop.isOpen ? 'Open' : 'Closed'}{shop.estimatedDeliveryMinutes ? ` · ${shop.estimatedDeliveryMinutes} min estimate` : ''}</small></span><span aria-hidden="true">›</span></Link>)}</div>{!loading && !loadError && shops.length === 0 && <p className="sb-muted">No shops available for this area yet. Choose another delivery area to explore.</p>}</section>}
+
+    {products.length > 6 && <section className="sb-home-section"><div className="sb-home-section-heading"><div><h2>A little more for your basket</h2><p>Fresh picks and household favourites.</p></div><Link href="/search">View all&nbsp; →</Link></div><div className="sb-product-grid">{products.slice(6, 12).map((product) => <ProductCard key={product.merchantProductId} card={product} />)}</div></section>}
+    <section className="sb-home-reassurance"><p><strong>Know your shop</strong><span>See who is preparing and delivering your order.</span></p><p><strong>Browse first, sign in later</strong><span>Start shopping. We’ll ask you to sign in at checkout.</span></p><p><strong>Clear before you confirm</strong><span>Review each shop, delivery charge and the full total.</span></p></section>
+  </div>;
 }
