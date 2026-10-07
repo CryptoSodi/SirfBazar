@@ -1,9 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
+@import "../shared/design/operations.css";
+@import "leaflet/dist/leaflet.css";
+
+.ops-live-status { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 5px 10px; border: 1px solid var(--sb-border); border-radius: 9px; color: var(--sb-text); text-decoration: none; white-space: nowrap; font-size: 12px; font-weight: 700; }
+.ops-live-status small { font-size: 10px; font-weight: 500; }
+.ops-live-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #95a4a0; }
+.ops-live-dot.is-online { background: #009966; box-shadow: 0 0 0 3px #00996624; }
+@media (max-width: 600px) { .ops-live-status small { display: none; } }
+@media (max-width: 600px) {
+  .ops-topbar { gap: 6px; }
+  .ops-topbar-actions { gap: 5px; }
+  .ops-topbar-actions > .ops-button:has(svg) { min-width: 40px; width: 40px; padding-inline: 9px; font-size: 0; justify-content: center; }
+  .ops-topbar > div:first-child strong { font-size: 13px; }
+}
+
+@theme {
+  --color-emerald-50: #EAF7F0;
+  --color-emerald-100: #D8F0E2;
+  --color-emerald-200: #AFE0C5;
+  --color-emerald-300: #7BCCAA;
+  --color-emerald-400: #30AD7F;
+  --color-emerald-500: #009966;
+  --color-emerald-600: #007A52;
+  --color-emerald-700: #006442;
+  --color-emerald-800: #075536;
+  --color-emerald-900: #06432C;
+  --color-slate-50: #FCFBF8;
+  --color-slate-100: #F7F5EF;
+  --color-slate-200: #DBE3DC;
+  --color-slate-300: #B9CBC0;
+  --color-slate-400: #6C867A;
+  --color-slate-500: #587168;
+  --color-slate-600: #405B4E;
+  --color-slate-700: #29463A;
+  --color-slate-800: #17372B;
+  --color-slate-900: #071F18;
+  --radius-xl: 10px;
+  --radius-2xl: 18px;
+}
+
+:root {
+  --sb-green: #009966;
+  --sb-action: #007A52;
+  --sb-ink: #071F18;
+  --sb-paper: #F7F5EF;
+  --sb-mint: #EAF7F0;
+  --sb-white: #FFFFFF;
+  --sb-text-secondary: #587168;
+  --sb-border: #DBE3DC;
+}
 
 html {
   color-scheme: light;
 }
 
 body {
-  @apply bg-slate-100 text-slate-900 antialiased;
+  @apply antialiased;
+  background: var(--sb-canvas);
+  color: var(--sb-text);
+  font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
+}
+
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid #4762CC;
+  outline-offset: 2px;
 }

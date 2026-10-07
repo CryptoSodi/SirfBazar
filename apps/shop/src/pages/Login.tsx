@@ -14,9 +14,9 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // Only merchant owners/staff may use this panel.
   const finish = (auth: any) => {
-    // The backend (context: 'merchant') guarantees only merchant accounts reach here.
+    // Session validation checks the linked merchant/staff record, not User.role:
+    // one backend user can hold customer and merchant capabilities at once.
     storeAuth(auth);
     navigate('/');
   };
@@ -62,26 +62,24 @@ export default function Login() {
   return (
     <div className="grid min-h-screen place-items-center bg-slate-900 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-lg font-black text-white">SB</span>
-          <div>
-            <div className="font-extrabold">SirfBazar Merchant</div>
-            <div className="text-xs text-slate-400">Your shop dashboard</div>
-          </div>
+        <div className="mb-6">
+          <img src="/brand/sirfbazar-primary.svg" alt="SirfBazar — بازار وہی۔ طریقہ نیا۔" className="h-auto w-56" />
+          <div className="mt-2 text-sm font-semibold text-slate-600">Merchant portal</div>
         </div>
 
         {step === 'phone' ? (
           <>
-            <label className="mb-1 block text-xs font-semibold text-slate-500">Phone number</label>
-            <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+92 3xx xxxxxxx" />
+            <label htmlFor="shop-phone" className="mb-1 block text-xs font-semibold text-slate-500">Phone number</label>
+            <input id="shop-phone" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+92 3xx xxxxxxx" />
             <button className={`${btnCls} mt-4 w-full py-2.5`} onClick={sendOtp} disabled={busy || phone.trim().length < 10}>
               {busy ? 'Sending…' : 'Send code'}
             </button>
           </>
         ) : (
           <>
-            <label className="mb-1 block text-xs font-semibold text-slate-500">6-digit code sent to {phone}</label>
+            <label htmlFor="shop-code" className="mb-1 block text-xs font-semibold text-slate-500">6-digit code sent to {phone}</label>
             <input
+              id="shop-code"
               className={`${inputCls} text-center text-xl tracking-[0.4em]`}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -109,7 +107,7 @@ export default function Login() {
         )}
 
         {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <p className="mt-3 text-center text-[11px] text-slate-400">Dev: +923010000001 / 123456 · or Google (merchants only)</p>
+        <p className="mt-3 text-center text-[11px] text-slate-400">Use your registered merchant account. New-shop onboarding is not available from this sign-in screen yet.</p>
       </div>
     </div>
   );

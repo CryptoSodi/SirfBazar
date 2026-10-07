@@ -1,19 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
+import { readMemory, writeMemory } from './memoryCache';
+
+type PagedCache = { items: any[]; total: number; totalPages: number };
 
 /** Fetches a paged endpoint ({items,total,...} or a plain array) with filters. */
 export function usePaged(path: string, filters: Record<string, string | undefined>) {
-  const [items, setItems] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
+  const initialKey = `paged:${path}:1:${JSON.stringify(filters)}`;
+  const initial = readMemory<PagedCache>(initialKey);
+  const [items, setItems] = useState<any[]>(initial?.items ?? []);
+  const [total, setTotal] = useState(initial?.total ?? 0);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [totalPages, setTotalPages] = useState(initial?.totalPages ?? 1);
+  const [loading, setLoading] = useState(!initial);
   const [error, setError] = useState('');
 
   const filterKey = JSON.stringify(filters);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const cacheKey = `paged:${path}:${page}:${filterKey}`;
+    const cached = readMemory<PagedCache>(cacheKey);
+    if (cached) { setItems(cached.items); setTotal(cached.total); setTotalPages(cached.totalPages); }
+    setLoading(!cached);
     setError('');
     try {
       const qs = new URLSearchParams({ page: String(page), pageSize: '20' });
@@ -23,10 +31,13 @@ export function usePaged(path: string, filters: Record<string, string | undefine
         setItems(res);
         setTotal(res.length);
         setTotalPages(1);
+        writeMemory<PagedCache>(cacheKey, { items: res, total: res.length, totalPages: 1 });
       } else {
-        setItems(res.items ?? []);
-        setTotal(res.total ?? 0);
-        setTotalPages(res.totalPages ?? 1);
+        const next = { items: res.items ?? [], total: res.total ?? 0, totalPages: res.totalPages ?? 1 };
+        setItems(next.items);
+        setTotal(next.total);
+        setTotalPages(next.totalPages);
+        writeMemory<PagedCache>(cacheKey, next);
       }
     } catch (e: any) {
       setError(e.message);
