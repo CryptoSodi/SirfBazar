@@ -377,11 +377,10 @@ export class AuthService {
   // ── Tokens ────────────────────────────────────────────────────────────────
 
   async issueTokens(userId: string, role: UserRole) {
-    const accessToken = await this.jwtService.signAsync({ sub: userId, role });
     const refreshToken = generateToken(32);
     const refreshTtlDays = Number(process.env.JWT_REFRESH_TTL_DAYS || 30);
 
-    await this.prisma.refreshToken.create({
+    const session = await this.prisma.refreshToken.create({
       data: {
         userId,
         tokenHash: sha256(refreshToken),
@@ -389,6 +388,7 @@ export class AuthService {
         expiresAt: new Date(Date.now() + refreshTtlDays * 86400_000),
       },
     });
+    const accessToken = await this.jwtService.signAsync({ sub: userId, role, sid: session.id });
     await this.prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
 
     const user = await this.getMe(userId);
@@ -403,7 +403,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
     const user = await this.prisma.user.findUnique({ where: { id: stored.userId } });
-    if (!user || user.status === 'SUSPENDED') throw new UnauthorizedException('Invalid refresh token');
+    if (!user || user.status !== 'ACTIVE') throw new UnauthorizedException('Invalid refresh token');
 
     // Rotate: revoke the old token, issue a fresh pair.
     await this.prisma.refreshToken.update({

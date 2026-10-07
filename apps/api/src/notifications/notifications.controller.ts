@@ -65,7 +65,7 @@ export class NotificationsController {
 
   @Post('push-token')
   saveToken(@CurrentUser() user: AuthUser, @Body() dto: PushTokenDto) {
-    return this.expoPush.saveToken(user.userId, dto.token, dto.platform);
+    return this.expoPush.saveToken(user.userId, user.sessionId, dto.token, dto.platform);
   }
 
   @Post('push-token/remove')

@@ -10,6 +10,7 @@
     "start:prod": "node dist/main",
     "typecheck": "tsc --noEmit",
     "test:pos": "node -r ts-node/register/transpile-only --test test/pos-counter.test.cjs",
+    "test:remediation": "node -r ts-node/register/transpile-only --test --test-concurrency=1 test/remediation-database.test.cjs test/remediation-upload.test.cjs test/remediation-realtime.test.cjs",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "ts-node prisma/seed.ts",
@@ -51,6 +52,9 @@
     "socket.io": "^4.8.1",
     "@types/web-push": "^3.6.4",
     "web-push": "^3.6.7"
+  },
+  "overrides": {
+    "multer": "^2.4.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.9",

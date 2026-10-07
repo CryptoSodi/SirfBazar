@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   api:
@@ -41,17 +42,23 @@ jobs:
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run build
-      - name: Push schema + seed
+      - run: npm run test:pos
+      - run: npm run test:waha
+      - run: npm run test:whatsapp
+      - name: Initialize disposable smoke database
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f prisma/remediation-disposable-fixture.sql
+      - run: npm run seed
+      - name: Run seeded HTTP smoke journey
+        shell: bash
         run: |
-          npx prisma db push --skip-generate
-          npm run seed
-      - name: Boot API + run e2e smoke test (44 checks)
-        run: |
-          node dist/main &
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:3001/api/products/categories > /dev/null 2>&1; then break; fi
+          npm run start:prod > "$RUNNER_TEMP/api-smoke.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3001/api/products/categories > /dev/null; then break; fi
             sleep 1
           done
+          curl -fsS http://127.0.0.1:3001/api/products/categories > /dev/null
           npm run smoke
 
   web:
@@ -68,6 +75,7 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm test
 
   admin:
     runs-on: ubuntu-latest
@@ -83,3 +91,124 @@ jobs:
           cache-dependency-path: apps/admin/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  remaining-clients:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: shop
+            check: build
+          - app: pos
+            check: build
+          - app: customer-app
+            check: typecheck
+          - app: merchant-app
+            check: typecheck
+          - app: rider-app
+            check: typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+      - run: npm ci
+        working-directory: apps/${{ matrix.app }}
+      - run: npm run ${{ matrix.check }}
+        working-directory: apps/${{ matrix.app }}
+      - if: matrix.app == 'pos'
+        run: npm test
+        working-directory: apps/pos
+      - if: matrix.app == 'shop'
+        run: npm run test:ipos && npm run test:alerts && npm run test:bulk
+        working-directory: apps/shop
+      - if: contains(fromJSON('["customer-app","merchant-app","rider-app"]'), matrix.app)
+        run: npm test
+        working-directory: apps/${{ matrix.app }}
+
+  browser-journeys:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: http://127.0.0.1:3001/api
+      BROWSER_WEB_URL: http://127.0.0.1:3000
+      BROWSER_POS_URL: http://127.0.0.1:4173
+      BROWSER_SHOP_URL: http://127.0.0.1:4174
+      PLAYWRIGHT_MODULE_PATH: ${{ github.workspace }}/apps/web/node_modules/playwright
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm ci
+        working-directory: apps/pos
+      - run: npm ci
+        working-directory: apps/shop
+      - run: npm install --no-save --package-lock=false playwright@1.58.2
+        working-directory: apps/web
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/pos
+      - run: npm run build
+        working-directory: apps/shop
+      - name: Run isolated browser fixtures
+        shell: bash
+        run: |
+          npm --prefix apps/web run start -- -p 3000 > "$RUNNER_TEMP/remediation-web.log" 2>&1 &
+          web_pid=$!
+          npm --prefix apps/pos run preview -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/remediation-pos.log" 2>&1 &
+          pos_pid=$!
+          npm --prefix apps/shop run preview -- --host 127.0.0.1 --port 4174 > "$RUNNER_TEMP/remediation-shop.log" 2>&1 &
+          shop_pid=$!
+          trap 'kill "$web_pid" "$pos_pid" "$shop_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS "$BROWSER_WEB_URL/checkout" >/dev/null && curl -fsS "$BROWSER_POS_URL" >/dev/null && curl -fsS "$BROWSER_SHOP_URL/products" >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS "$BROWSER_WEB_URL/checkout" >/dev/null
+          curl -fsS "$BROWSER_POS_URL" >/dev/null
+          curl -fsS "$BROWSER_SHOP_URL/products" >/dev/null
+          node scripts/verify-remediation.mjs --browser
+
+  database-regressions:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: remediation
+          POSTGRES_PASSWORD: remediation-ci-only
+          POSTGRES_DB: sirfbazar_remediation_test
+        ports:
+          - 15437:5432
+        options: >-
+          --health-cmd "pg_isready -U remediation -d sirfbazar_remediation_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      REMEDIATION_DATABASE_URL: postgresql://remediation:remediation-ci-only@127.0.0.1:15437/sirfbazar_remediation_test
+      JWT_SECRET: ci-only-remediation-secret
+      OTP_PROVIDER: mock
+      GOOGLE_AUTH_PROVIDER: mock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci
+        working-directory: apps/api
+      - run: npx prisma generate
+        working-directory: apps/api
+      - name: Initialize disposable schema from checked-in fixture
+        run: psql "$REMEDIATION_DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/remediation-disposable-fixture.sql
+      - run: node scripts/verify-remediation.mjs --database

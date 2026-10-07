@@ -1,5 +1,6 @@
 /** Guarded local persistence checks for merchant product, rider and staff mutations. */
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 
 const prisma = new PrismaClient();
 const API_URL = process.env.API_URL || 'http://127.0.0.1:3001/api';
@@ -46,9 +47,13 @@ async function main() {
   const category = await prisma.category.findFirst({ orderBy: { createdAt: 'asc' } });
   assert(category, 'No category exists for the bulk product check.');
   const productName = `[LOCAL QA] Mutation Product ${suffix}`;
-  const bulk = await request('POST', '/merchant/products/bulk-upload', token, {
-    items: [{ name: productName, categoryId: category.id, unit: 'piece', pricePaisa: 12_300, stockQuantity: 9 }],
-  });
+  const importRequest = {
+    requestId: randomUUID(), mode: 'ADD_MISSING' as const,
+    items: [{ rowId: `product-${suffix}`, name: productName, categoryId: category.id, unit: 'piece', pricePaisa: 12_300, stockQuantity: 9 }],
+  };
+  const preview = await request('POST', '/merchant/products/bulk-preview', token, importRequest);
+  assert(preview.rows?.[0]?.status === 'NEW' && preview.previewToken, `Bulk preview was not ready: ${JSON.stringify(preview)}`);
+  const bulk = await request('POST', '/merchant/products/bulk-upload', token, { ...importRequest, previewToken: preview.previewToken });
   assert(bulk.created === 1 && bulk.failed.length === 0, `Bulk product result was not successful: ${JSON.stringify(bulk)}`);
   let products = await request('GET', `/merchant/products?q=${encodeURIComponent(productName)}&pageSize=20`, token);
   const listing = products.items?.find((item: any) => item.product?.name === productName);

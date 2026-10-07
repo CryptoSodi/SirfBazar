@@ -4,14 +4,16 @@ import { PaymentMethod } from '../common/constants';
 
 export class PlaceOrderDto {
   /** Stable native checkout ID: retries return the same owned order. */
-  @IsOptional()
   @IsUUID('4')
-  requestId?: string;
+  requestId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  cartId: string;
 
   @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  cartId?: string;
+  approvedQuote?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -27,6 +29,13 @@ export class PlaceOrderDto {
   @IsOptional()
   @IsString()
   couponCode?: string;
+}
+
+export class QuoteOrderDto {
+  @IsString() @IsNotEmpty() cartId: string;
+  @IsString() @IsNotEmpty() deliveryAddressId: string;
+  @IsIn([PaymentMethod.COD]) paymentMethod: string;
+  @IsOptional() @IsString() couponCode?: string;
 }
 
 export class CancelOrderDto {

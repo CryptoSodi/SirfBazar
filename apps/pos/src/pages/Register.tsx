@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, pkr } from '../lib/api';
+import { api, getUser, pkr } from '../lib/api';
+import { SaleRecovery, clearSaleRecovery, isDefinitiveSaleRejection, readSaleRecovery, receiptMatches, saveSaleRecovery } from '../lib/sale-recovery';
 import { btnCls, btnGhost, inputCls, Modal, useToast } from '../components/ui';
 
 type Product = {
@@ -22,10 +23,24 @@ export default function Register() {
   const [cart, setCart] = useState<Record<string, Line>>({});
   const [charging, setCharging] = useState(false);
   const [tendered, setTendered] = useState('');
+  const [tenderError, setTenderError] = useState('');
   const [receipt, setReceipt] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  const [recovery, setRecovery] = useState<SaleRecovery | null>(null);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [definitiveFailure, setDefinitiveFailure] = useState(false);
+  const [merchantId, setMerchantId] = useState('');
   const { toast, node } = useToast();
   const first = useRef(true);
+  const chargeTrigger = useRef<HTMLButtonElement>(null);
+  const owner = getUser()?.id as string | undefined;
+
+  useEffect(() => {
+    if (!owner) return;
+    try { setRecovery(readSaleRecovery(owner)); }
+    catch (cause: any) { setRecoveryError(cause.message); }
+    void api.get('/pos/capabilities').then((value) => setMerchantId(value.merchantId)).catch((cause) => setRecoveryError(cause.message));
+  }, [owner]);
 
   const load = (query = q) => {
     setLoading(true);
@@ -80,7 +95,9 @@ export default function Register() {
       return { ...c, [id]: { ...l, qty } };
     });
 
-  const tenderedPaisa = tendered ? Math.round(parseFloat(tendered) * 100) : 0;
+  const tenderedPaisa = tendered ? /^\d+(?:\.\d{1,2})?$/.test(tendered)
+    ? (() => { const [rupees, paisa = ''] = tendered.split('.'); return Number(rupees) * 100 + Number(paisa.padEnd(2, '0')); })()
+    : NaN : 0;
   const changePaisa = tenderedPaisa - subtotalPaisa;
 
   const openCharge = () => {
@@ -90,22 +107,55 @@ export default function Register() {
   };
 
   const complete = async () => {
+    if (tendered && (!Number.isSafeInteger(tenderedPaisa) || tenderedPaisa < subtotalPaisa)) {
+      setTenderError('Enter cash in rupees with up to two decimal places, at least the total due.');
+      return;
+    }
+    if (!owner || !merchantId || recovery || recoveryError) { setRecoveryError('Check the saved sale and account before charging.'); return; }
     setBusy(true);
+    let saved: SaleRecovery | null = null;
+    let persisted = false;
     try {
-      const sale = await api.post('/pos/sales', {
-        items: lines.map((l) => ({ merchantProductId: l.p.merchantProductId, quantity: l.qty })),
+      saved = { version: 1, owner, merchantId, payload: {
+        requestId: crypto.randomUUID(),
+        items: lines.map((l) => ({ merchantProductId: l.p.merchantProductId, quantity: l.qty, expectedUnitPricePaisa: l.p.pricePaisa })),
         amountTenderedPaisa: tendered ? tenderedPaisa : undefined,
-      });
+      } };
+      saveSaleRecovery(saved); persisted = true; setRecovery(saved);
+      const sale = await api.post('/pos/sales', saved.payload);
+      if (!receiptMatches(saved, sale)) throw new Error('Sale receipt did not match the saved bill. Keep its reference and contact support.');
+      clearSaleRecovery(saved); setRecovery(null);
       setReceipt(sale);
       setCharging(false);
       setCart({});
       setTendered('');
       load(); // refresh stock after the sale
     } catch (e: any) {
-      toast(e.message, false);
+      if (!persisted) setRecoveryError(e.message || 'Unable to save this sale before charging.');
+      else if (isDefinitiveSaleRejection(e?.status)) {
+        clearSaleRecovery(saved!); setRecovery(null);
+        setRecoveryError(`${e.message} Review the bill before a new attempt.`);
+        setDefinitiveFailure(true);
+      } else setRecoveryError('The sale response is unconfirmed. Check this saved reference before charging again.');
     } finally {
       setBusy(false);
     }
+  };
+
+  const reconcileSale = async (retry = false) => {
+    if (!recovery || recovery.owner !== owner || recovery.merchantId !== merchantId) return;
+    setBusy(true); setRecoveryError('');
+    try {
+      const sale = retry ? await api.post('/pos/sales', recovery.payload) : await api.get(`/pos/sales/${recovery.payload.requestId}`);
+      if (!receiptMatches(recovery, sale)) throw new Error('Sale receipt did not match the saved bill. Contact support with its reference.');
+      clearSaleRecovery(recovery); setRecovery(null); setCharging(false); setCart({}); setReceipt(sale); load();
+    } catch (cause: any) {
+      if (retry && isDefinitiveSaleRejection(cause?.status)) {
+        clearSaleRecovery(recovery); setRecovery(null); setCharging(false);
+        setRecoveryError(`${cause.message || 'Sale was not saved.'} Review the bill before a new attempt.`);
+        setDefinitiveFailure(true);
+      } else setRecoveryError(cause?.status === 404 ? 'No saved sale was found yet. Retry only this saved request and reference.' : cause.message || 'Unable to confirm this sale. Keep its reference.');
+    } finally { setBusy(false); }
   };
 
   const quickCash = useMemo(() => {
@@ -120,6 +170,7 @@ export default function Register() {
 
   return (
     <div className="flex h-[calc(100vh-57px)] min-h-0">
+      {(recovery || recoveryError) && <div className="fixed inset-x-4 top-16 z-40 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm shadow-lg" role="status"><strong>{recovery ? 'Check saved sale before charging again' : 'Register needs attention'}</strong>{recovery && <p className="mt-1">Reference: <code>{recovery.payload.requestId}</code></p>}{recoveryError && <p className="mt-1 text-red-800">{recoveryError}</p>}{recovery && <div className="mt-3 flex gap-2"><button className={btnCls} disabled={busy} onClick={() => void reconcileSale()}>Check saved sale</button><button className={btnGhost} disabled={busy} onClick={() => void reconcileSale(true)}>Retry saved request</button></div>}{definitiveFailure && <button className={`${btnGhost} mt-3`} onClick={() => { setRecoveryError(''); setDefinitiveFailure(false); setCharging(false); }}>Review bill again</button>}</div>}
       {/* Product catalogue */}
       <section className="flex min-w-0 flex-1 flex-col p-4">
         <input
@@ -205,7 +256,7 @@ export default function Register() {
             <span className="text-sm text-slate-500">{itemCount} item{itemCount === 1 ? '' : 's'}</span>
             <span className="text-2xl font-black">{pkr(subtotalPaisa)}</span>
           </div>
-          <button className={`${btnCls} w-full py-3 text-base`} onClick={openCharge} disabled={!lines.length}>
+          <button ref={chargeTrigger} className={`${btnCls} w-full py-3 text-base`} onClick={openCharge} disabled={!lines.length}>
             Charge {pkr(subtotalPaisa)}
           </button>
         </div>
@@ -213,21 +264,25 @@ export default function Register() {
 
       {/* Charge (cash) modal */}
       {charging && (
-        <Modal title="Cash payment" onClose={() => setCharging(false)}>
+        <Modal title="Cash payment" onClose={() => setCharging(false)} returnFocus={chargeTrigger.current}>
           <div className="mb-3 flex items-center justify-between rounded-lg bg-slate-50 px-4 py-3">
             <span className="text-sm text-slate-500">Total due</span>
             <span className="text-xl font-black">{pkr(subtotalPaisa)}</span>
           </div>
 
-          <label className="mb-1 block text-xs font-semibold text-slate-500">Cash received</label>
+          <label htmlFor="pos-cash-received" className="mb-1 block text-xs font-semibold text-slate-500">Cash received</label>
           <input
+            id="pos-cash-received"
+            aria-invalid={!!tendered && !Number.isSafeInteger(tenderedPaisa)}
+            aria-describedby={tenderError || (tendered && !Number.isSafeInteger(tenderedPaisa)) ? 'pos-cash-error' : undefined}
             className={`${inputCls} text-lg`}
             value={tendered}
-            onChange={(e) => setTendered(e.target.value.replace(/[^\d.]/g, ''))}
+            onChange={(e) => { setTendered(e.target.value.replace(/[^\d.]/g, '')); setTenderError(''); }}
             placeholder="0"
             inputMode="decimal"
             autoFocus
           />
+          {(tenderError || (tendered && !Number.isSafeInteger(tenderedPaisa))) && <p id="pos-cash-error" role="alert" className="mt-2 text-sm text-red-700">{tenderError || 'Enter rupees with up to two decimal places.'}</p>}
           <div className="mt-2 flex flex-wrap gap-2">
             {quickCash.map((r) => (
               <button key={r} className={btnGhost} onClick={() => setTendered(String(r))}>
@@ -239,14 +294,14 @@ export default function Register() {
           <div className="mt-4 flex items-center justify-between rounded-lg bg-emerald-50 px-4 py-3">
             <span className="text-sm font-medium text-emerald-800">Change</span>
             <span className={`text-xl font-black ${changePaisa < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-              {changePaisa < 0 ? '—' : pkr(changePaisa)}
+              {!Number.isFinite(changePaisa) || changePaisa < 0 ? '—' : pkr(changePaisa)}
             </span>
           </div>
 
           <button
             className={`${btnCls} mt-4 w-full py-3 text-base`}
             onClick={complete}
-            disabled={busy || (tendered !== '' && changePaisa < 0)}
+            disabled={busy || (tendered !== '' && (!Number.isSafeInteger(tenderedPaisa) || changePaisa < 0))}
           >
             {busy ? 'Completing…' : 'Complete sale'}
           </button>

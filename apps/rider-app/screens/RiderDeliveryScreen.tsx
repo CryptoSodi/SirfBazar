@@ -1,11 +1,12 @@
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import * as Location from 'expo-location';
 import type { RootStackParamList } from '../App';
 import { Badge, Body, Button, Card, CashCard, CheckRow, Divider, Dock, H1, H2, Icon, IconBox, Label, LinkButton, Note, Page, Progress, Sheet } from '../components/RiderUI';
-import { api, ApiError, isLoggedIn, pkr } from '../lib/api';
+import { api, ApiError, getAuthVersion, isLoggedIn, pkr } from '../lib/api';
 import { useRiderTheme } from '../lib/appearance';
 import { customerName, customerPhone, destination, paymentInstruction, withoutDeliveryCode } from '../lib/rider-orders';
 import type { RiderOrder } from '../lib/rider-orders';
@@ -38,6 +39,14 @@ export default function RiderDeliveryScreen() {
   const [code, setCode] = useState('');
   const [pickupSheet, setPickupSheet] = useState(false);
   const [uncertainAction, setUncertainAction] = useState<'arrived-shop' | 'picked-up' | 'arrived-customer' | 'delivered'>('delivered');
+  const [focused, setFocused] = useState(false);
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  const [locationError, setLocationError] = useState('');
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
+    return () => listener.remove();
+  }, []);
 
   const refresh = useCallback(async (keepStale = true): Promise<RiderOrder | null> => {
     try {
@@ -54,6 +63,29 @@ export default function RiderDeliveryScreen() {
     } finally { setLoading(false); }
   }, [id, order]);
   useEffect(() => { setOrder(null); setLoading(true); void refresh(false); }, [id]);
+
+  // This is the foreground behavior of the former DeliveryScreen, scoped to the
+  // mounted, focused route and its assigned active order. No background task runs.
+  useEffect(() => {
+    const active = ['RIDER_ASSIGNED', 'RIDER_ARRIVED_AT_SHOP', 'PICKED_UP', 'ON_THE_WAY', 'RIDER_ARRIVED_AT_CUSTOMER'];
+    if (!focused || !appActive || !order || !active.includes(order.status) || step === 'expired' || step === 'unknown') return;
+    const generation = getAuthVersion();
+    let stopped = false;
+    let subscription: Location.LocationSubscription | null = null;
+    void (async () => {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (stopped || generation !== getAuthVersion()) return;
+      if (permission.status !== 'granted') { setLocationError('Location permission is off. Enable it to share your position during this delivery.'); return; }
+      setLocationError('');
+      subscription = await Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 15000, distanceInterval: 20 }, (position) => {
+        if (stopped || generation !== getAuthVersion() || AppState.currentState !== 'active') return;
+        void api.post('/rider/location', { orderId: id, latitude: position.coords.latitude, longitude: position.coords.longitude,
+          speed: position.coords.speed ?? undefined, heading: position.coords.heading ?? undefined }).catch(() => undefined);
+      });
+      if (stopped) subscription.remove();
+    })().catch(() => { if (!stopped) setLocationError('Location is unavailable. Check device settings and reconnect.'); });
+    return () => { stopped = true; subscription?.remove(); };
+  }, [focused, appActive, order?.id, order?.status, step, id]);
 
   const payment = order ? paymentInstruction(order) : 'check';
   const amount = pkr(order?.totalAmountPaisa);
@@ -126,6 +158,7 @@ export default function RiderDeliveryScreen() {
     <Progress count={step === 'assigned' || step === 'pickup' ? 1 : step === 'on-way' ? 2 : 3} />
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><Label>ORDER {order.orderNumber}</Label><Badge tone={step === 'assigned' || step === 'on-way' ? 'blue' : step === 'code' && payment === 'collect' ? 'amber' : 'green'}>{step === 'assigned' ? 'Assigned to you' : step === 'pickup' ? 'At the shop' : step === 'on-way' ? 'On the way' : step === 'code' && payment === 'collect' ? 'Cash on delivery' : 'At the customer'}</Badge></View>
     {!!message && <Note tone="red" style={{ marginTop: 14 }}>{message}</Note>}
+    {!!locationError && <Note tone="amber" style={{ marginTop: 14 }}>{locationError}</Note>}
     {step === 'assigned' && <Assigned order={order} shop={shop} person={person} address={address} navigateShop={navigateShop} callShop={callShop} />}
     {step === 'pickup' && <Pickup order={order} shop={shop} picked={picked} setPicked={setPicked} />}
     {step === 'on-way' && <OnWay order={order} person={person} address={address} payment={payment} amount={amount} navigateCustomer={navigateCustomer} callCustomer={callCustomer} />}

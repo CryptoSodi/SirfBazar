@@ -20,9 +20,9 @@ export class AccessService {
   async merchantContext(userId: string): Promise<MerchantContext> {
     const merchant = await this.prisma.merchant.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, user: { select: { status: true } } },
     });
-    if (merchant) {
+    if (merchant && merchant.user.status === 'ACTIVE') {
       return {
         merchantId: merchant.id,
         isOwner: true,
@@ -30,12 +30,16 @@ export class AccessService {
       };
     }
     const staff = await this.prisma.merchantStaff.findFirst({
-      where: { userId, status: 'ACTIVE' },
+      where: { userId, status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } },
+      include: { user: { select: { status: true } } },
     });
-    if (staff) {
+    if (staff?.user.status === 'ACTIVE') {
       let permissions: StaffPermission[] = [];
       try {
-        permissions = JSON.parse(staff.permissions);
+        const parsed: unknown = JSON.parse(staff.permissions);
+        permissions = Array.isArray(parsed)
+          ? parsed.filter((value): value is StaffPermission => Object.values(StaffPermission).includes(value))
+          : [];
       } catch {
         permissions = [];
       }

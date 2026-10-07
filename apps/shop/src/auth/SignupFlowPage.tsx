@@ -75,6 +75,7 @@ export default function SignupFlowPage() {
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [verificationDeliveryMessage, setVerificationDeliveryMessage] = useState('')
   const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState('')
   const [busy, setBusy] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [photoError, setPhotoError] = useState('')
@@ -192,16 +193,21 @@ export default function SignupFlowPage() {
     } finally { setBusy(false) }
   }
   async function verifyAndCreate() {
-    if (!attemptId || !/^\d{6}$/.test(code)) { setRequestError('Enter the six-digit verification code.'); return }
+    if (!attemptId || !/^\d{6}$/.test(code)) { setCodeError('Enter the six-digit verification code.'); document.getElementById('registration-code')?.focus(); return }
+    setCodeError('')
     setRequestError('')
     setBusy(true)
+    let verified = false
     try {
       const session = await merchantApi.verifyRegistration(attemptId, code)
+      verified = true
       saveSession(session)
       setAttemptId(null)
       await createShop(session.token)
     } catch (error) {
-      setRequestError(error instanceof ApiError ? error.message : 'Could not verify or create your shop. Please try again.')
+      const message = error instanceof ApiError ? error.message : 'Could not verify or create your shop. Please try again.'
+      if (verified) setRequestError(message)
+      else { setCodeError(message); document.getElementById('registration-code')?.focus() }
     } finally { setBusy(false) }
   }
 
@@ -277,7 +283,7 @@ export default function SignupFlowPage() {
 
           <div className="signup-actions signup-shop-actions">{getSession()?.role !== 1 && <button type="button" className="signup-back" onClick={() => setStep(1)}><ArrowLeft size={18} />Back to Owner Details (Step 1)</button>}<div><button type="submit" className="signup-primary" disabled={busy || Boolean(attemptId)}>{busy ? 'Working…' : 'Create Shop & Open Workspace'}<ArrowRight size={20} /></button></div></div>
           {!attemptId && <p className="signup-end-note"><CircleHelp size={16} />After you submit, enter the verification code provided by the merchant service. Google sign-up remains unavailable.</p>}
-          {attemptId && <div className="signup-verification" role="group" aria-label="Verify merchant contact"><strong>Verify your {ownerForm.getValues('channel') === 'email' ? 'email' : 'mobile number'}</strong><p>{verificationDeliveryMessage} Enter the code to create your owner account, then we will save your shop.</p><label htmlFor="registration-code">Verification code</label><input id="registration-code" inputMode="numeric" maxLength={6} autoComplete="one-time-code" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} /><button type="button" className="signup-primary" disabled={busy} onClick={verifyAndCreate}>{busy ? 'Verifying…' : 'Verify & Create Shop'}</button></div>}
+          {attemptId && <div className="signup-verification" role="group" aria-label="Verify merchant contact"><strong>Verify your {ownerForm.getValues('channel') === 'email' ? 'email' : 'mobile number'}</strong><p>{verificationDeliveryMessage} Enter the code to create your owner account, then we will save your shop.</p><label htmlFor="registration-code">Verification code</label><input id="registration-code" className="field-control" type="text" name="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" disabled={busy} aria-invalid={!!codeError} aria-describedby={codeError ? 'registration-code-error' : undefined} value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '')); setCodeError('') }} />{codeError && <small className="signup-field-error" id="registration-code-error">{codeError}</small>}<button type="button" className="signup-primary" disabled={busy} onClick={verifyAndCreate}>{busy ? 'Verifying…' : 'Verify & Create Shop'}</button></div>}
           {requestError && <div className="signup-unavailable" role="alert"><Info size={18} /><span>{requestError}</span></div>}
         </form>}
       </div>

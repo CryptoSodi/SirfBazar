@@ -11,6 +11,7 @@ export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
 export interface AuthUser {
   userId: string;
   role: UserRole;
+  sessionId?: string;
 }
 
 /** Injects the decoded JWT payload ({ userId, role }) into a handler param. */

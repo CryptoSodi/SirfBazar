@@ -4,6 +4,7 @@ import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GOOGLE_MAPS_API_KEY } from '@/lib/maps';
+import { useModalFocus } from './useModalFocus';
 
 const FALLBACK = { lat: 31.5204, lng: 74.3587 }; // Gulberg, Lahore
 const GPS_OPTS: PositionOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
@@ -20,10 +21,12 @@ export function MapPicker({
   initial,
   onConfirm,
   onClose,
+  returnFocusTo,
 }: {
   initial?: PickedPoint | null;
   onConfirm: (p: PickedPoint) => void;
   onClose: () => void;
+  returnFocusTo?: HTMLElement | null;
 }) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'sb-google-maps',
@@ -34,6 +37,9 @@ export function MapPicker({
     initial ? { lat: initial.latitude, lng: initial.longitude } : FALLBACK,
   );
   const [locating, setLocating] = useState(false);
+  const [chosen, setChosen] = useState(Boolean(initial));
+  const [error, setError] = useState('');
+  const focus = useModalFocus<HTMLDivElement>(true, onClose, returnFocusTo);
 
   // Keep `center` in sync with wherever the user panned the map to.
   const syncCenter = () => {
@@ -48,11 +54,12 @@ export function MapPicker({
       (p) => {
         const c = { lat: p.coords.latitude, lng: p.coords.longitude };
         setCenter(c);
+        setChosen(true);
         mapRef.current?.panTo(c);
         mapRef.current?.setZoom(17);
         setLocating(false);
       },
-      () => setLocating(false),
+      () => { setError('Location access failed. Move the map or use the map center controls.'); setLocating(false); },
       GPS_OPTS,
     );
   };
@@ -60,12 +67,14 @@ export function MapPicker({
   const ui = (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/50" onClick={onClose}>
       <div
+        ref={focus.ref}
+        role="dialog" aria-modal="true" aria-labelledby="google-map-title" tabIndex={-1} onKeyDown={focus.onKeyDown}
         className="mt-auto flex h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white sm:m-auto sm:h-[80vh] sm:max-w-lg sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-stone-200 p-4">
-          <h3 className="font-bold">Pin your exact location</h3>
-          <button className="text-sm text-stone-500" onClick={onClose}>
+          <h3 id="google-map-title" className="font-bold">Pin your exact location</h3>
+          <button type="button" className="text-sm text-stone-500" onClick={onClose}>
             Close
           </button>
         </div>
@@ -102,6 +111,7 @@ export function MapPicker({
 
               <button
                 type="button"
+                aria-label="Use my current location"
                 onClick={recenterToGps}
                 className="absolute bottom-4 right-4 z-10 grid h-11 w-11 place-items-center rounded-full border border-stone-200 bg-white text-lg shadow-lg"
                 title="Use my current location"
@@ -115,9 +125,12 @@ export function MapPicker({
         </div>
 
         <div className="border-t border-stone-200 p-4">
-          <p className="mb-2 text-xs text-stone-500">Move the map so the pin sits on your doorstep.</p>
+          <p className="mb-2 text-xs text-stone-500">Move the map so the pin sits on your doorstep. Use the map keyboard controls, then select its center.</p>
+          {error && <p role="alert" className="mb-2 text-sm text-red-700">{error}</p>}
+          <button type="button" className="btn-secondary mb-2 w-full" onClick={() => { syncCenter(); setChosen(true); }}>Select map center</button>
           <button
             className="btn-primary w-full"
+            disabled={!chosen}
             onClick={() => onConfirm({ latitude: center.lat, longitude: center.lng })}
           >
             Confirm this location

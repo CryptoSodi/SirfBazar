@@ -140,7 +140,7 @@ The repository currently contains one backend and seven client applications:
 - Assigned-order queue and completed-delivery history.
 - Delivery detail with merchant and customer destination information.
 - Arrived-at-shop, picked-up, arrived-at-customer, and delivered actions.
-- Periodic GPS updates during an active delivery.
+- Foreground GPS updates on the focused active-delivery screen while the app is active and location permission is granted. Tracking stops on terminal status, background, logout, or screen exit; no background tracking is implemented.
 - Customer delivery-code verification before completion.
 - Delivery issue reporting.
 - Rider access is restricted to orders assigned to that rider.
@@ -156,6 +156,7 @@ The repository currently contains one backend and seven client applications:
 - Today, seven-day, and thirty-day sales views.
 - POS revenue and receipt history.
 - POS orders use `channel=POS`, carry zero marketplace commission, and reduce the same stock used by online orders.
+- The standalone browser POS saves a cashier- and merchant-scoped sale request before posting, then checks the same ID and receipt details after a lost response or reload.
 
 ## Implemented admin capabilities
 

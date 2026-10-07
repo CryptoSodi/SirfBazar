@@ -9,6 +9,7 @@
  * multi-merchant split order → online payment → cancellation+refund →
  * admin dashboard + settlement.
  */
+import { randomUUID } from 'crypto';
 const BASE = process.env.API_URL || 'http://localhost:3001/api';
 
 let passed = 0;
@@ -65,6 +66,19 @@ async function loginOtp(phone: string, context?: 'customer' | 'merchant' | 'ride
 
 const LAT = 31.5204;
 const LNG = 74.3587;
+
+async function placeApprovedCod(token: string, deliveryAddressId: string, customerNote?: string) {
+  const cart = await api('GET', '/cart', { token, expect: 200 });
+  check('active basket has an ID', !!cart.data.id);
+  const input = { cartId: cart.data.id, deliveryAddressId, paymentMethod: 'COD' };
+  const quote = await api('POST', '/orders/quote', { token, body: input, expect: 201 });
+  check('COD quote signed', !!quote.data.approvedQuote && quote.data.quote?.totalAmountPaisa > 0);
+  const request = { ...input, requestId: randomUUID(), approvedQuote: quote.data.approvedQuote, ...(customerNote ? { customerNote } : {}) };
+  const created = await api('POST', '/orders', { token, body: request, expect: 201 });
+  const replay = await api('POST', '/orders', { token, body: request, expect: 201 });
+  check('same checkout request recovers exact order ID', replay.data.id === created.data.id);
+  return created;
+}
 
 async function main() {
   console.log(`Smoke-testing ${BASE}\n`);
@@ -162,11 +176,7 @@ async function main() {
 
   // ── 4. COD order, full lifecycle ─────────────────────────────────────────
   console.log('4. COD order lifecycle');
-  const order = await api('POST', '/orders', {
-    token: customer.accessToken,
-    body: { deliveryAddressId: addr.data.id, paymentMethod: 'COD', customerNote: 'Ring the bell' },
-    expect: 201,
-  });
+  const order = await placeApprovedCod(customer.accessToken, addr.data.id, 'Ring the bell');
   const orderId = order.data.id as string;
   check('order placed', !!orderId);
   check('order sent to merchant', order.data.status === 'SENT_TO_MERCHANT', order.data.status);
@@ -258,38 +268,34 @@ async function main() {
   // Quantity 5 keeps every shop's group above its minimum order value.
   await api('POST', '/cart/items', { token: customer.accessToken, body: { merchantProductId: m1Items[0].merchantProductId, quantity: 5 }, expect: 201 });
   await api('POST', '/cart/items', { token: customer.accessToken, body: { merchantProductId: m2Items[0].merchantProductId, quantity: 5 }, expect: 201 });
-  const multi = await api('POST', '/orders', {
-    token: customer.accessToken,
-    body: { deliveryAddressId: addr.data.id, paymentMethod: 'COD' },
-    expect: 201,
-  });
+  const multi = await placeApprovedCod(customer.accessToken, addr.data.id);
   check('parent order created', multi.data.isParent === true);
   check('one child per merchant', (multi.data.children ?? []).length === 2, multi.data.children?.length);
 
   // ── 6. Online payment flow ───────────────────────────────────────────────
-  console.log('6. Online payment');
+  console.log('6. Digital payment fail-closed');
   await api('POST', '/cart/items', { token: customer.accessToken, body: { merchantProductId: m1Items[1].merchantProductId, quantity: 5 }, expect: 201 });
-  const online = await api('POST', '/orders', {
+  const activeCart = await api('GET', '/cart', { token: customer.accessToken, expect: 200 });
+  const beforeDigital = await api('GET', '/orders', { token: customer.accessToken, expect: 200 });
+  const onlineQuote = await api('POST', '/orders/quote', {
     token: customer.accessToken,
-    body: { deliveryAddressId: addr.data.id, paymentMethod: 'JAZZCASH' },
-    expect: 201,
+    body: { cartId: activeCart.data.id, deliveryAddressId: addr.data.id, paymentMethod: 'JAZZCASH' },
+    expect: 400,
   });
-  check('online order awaits payment', online.data.status === 'PAYMENT_PENDING', online.data.status);
-  const init = await api('POST', `/payments/order/${online.data.id}/initiate`, { token: customer.accessToken, expect: 201 });
-  await api('POST', `/payments/${init.data.paymentId}/confirm`, { token: customer.accessToken, body: {}, expect: 201 });
-  const afterPay = await api('GET', `/orders/${online.data.id}`, { token: customer.accessToken, expect: 200 });
-  check('paid order sent to merchant', afterPay.data.status === 'SENT_TO_MERCHANT', afterPay.data.status);
-  check('payment status PAID', afterPay.data.paymentStatus === 'PAID', afterPay.data.paymentStatus);
+  check('JAZZCASH quote rejected', onlineQuote.status === 400);
+  const initiate = await api('POST', `/payments/order/${orderId}/initiate`, { token: customer.accessToken, expect: 400 });
+  const confirm = await api('POST', `/payments/${randomUUID()}/confirm`, { token: customer.accessToken, body: {}, expect: 400 });
+  const failPayment = await api('POST', `/payments/${randomUUID()}/fail`, { token: customer.accessToken, body: {}, expect: 400 });
+  check('customer mock payment routes reject', [initiate, confirm, failPayment].every((result) => result.status === 400));
+  const afterDigital = await api('GET', '/orders', { token: customer.accessToken, expect: 200 });
+  check('rejected digital payment creates no order', JSON.stringify(afterDigital.data) === JSON.stringify(beforeDigital.data));
+  await api('DELETE', '/cart/clear', { token: customer.accessToken, expect: 200 });
 
   // ── 7. Cancellation + auto refund ────────────────────────────────────────
   console.log('7. Cancellation & refund');
   const stockBefore = await merchantProductStock(m1Items[0].merchantProductId, customer.accessToken, m1Items[0].productId);
   await api('POST', '/cart/items', { token: customer.accessToken, body: { merchantProductId: m1Items[0].merchantProductId, quantity: 5 }, expect: 201 });
-  const toCancel = await api('POST', '/orders', {
-    token: customer.accessToken,
-    body: { deliveryAddressId: addr.data.id, paymentMethod: 'COD' },
-    expect: 201,
-  });
+  const toCancel = await placeApprovedCod(customer.accessToken, addr.data.id);
   const cancelled = await api('POST', `/orders/${toCancel.data.id}/cancel`, {
     token: customer.accessToken,
     body: { reason: 'Changed my mind' },

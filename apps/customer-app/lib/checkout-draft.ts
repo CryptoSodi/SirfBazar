@@ -136,7 +136,7 @@ export function hasUsableCheckoutQuote(cart: any): boolean {
 
 /** Timeouts/conflicts may follow a committed write; retain their recovery markers. */
 export function isDefinitiveCheckoutRejection(status: unknown) {
-    return typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 409;
+    return typeof status === 'number' && status >= 400 && status < 500 && status !== 401 && status !== 408 && status !== 409;
 }
 
 /** Recovery may reuse the payload only for the original cart and unchanged saved address. */

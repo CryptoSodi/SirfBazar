@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "test:alerts": "node --test test/order-alerts.test.mjs",
     "test:ipos": "node --test test/ipos.test.mjs test/ipos-api-integration.test.mjs",
+    "test:bulk": "node --test test/bulk-import.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

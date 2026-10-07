@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { hasMapsKey } from '@/lib/maps';
 import type { PickedPoint } from './MapPicker';
@@ -46,6 +46,7 @@ export function AddressForm({
       : defaultCoords ?? null,
   );
   const [showMap, setShowMap] = useState(false);
+  const mapTrigger = useRef<HTMLButtonElement>(null);
   const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,9 +80,14 @@ export function AddressForm({
     );
   };
 
+  const closeMap = () => {
+    setShowMap(false);
+    requestAnimationFrame(() => mapTrigger.current?.focus());
+  };
+
   const onPinned = async (p: PickedPoint) => {
     setCoords(p);
-    setShowMap(false);
+    closeMap();
     await fillFromCoords(p.latitude, p.longitude);
   };
 
@@ -122,7 +128,7 @@ export function AddressForm({
         <button type="button" className="btn-secondary text-sm" onClick={useCurrentLocation} disabled={locating}>
           {locating ? 'Locating…' : '📍 Use current location'}
         </button>
-        <button type="button" className="btn-secondary text-sm" onClick={() => setShowMap(true)}>Pin on map</button>
+        <button ref={mapTrigger} type="button" className="btn-secondary text-sm" onClick={() => setShowMap(true)}>Pin on map</button>
         {coords && (
           <span className="self-center text-xs text-emerald-700">
             Pinned: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
@@ -179,7 +185,7 @@ export function AddressForm({
         </button>
       </div>
 
-      {showMap && (hasMapsKey ? <MapPicker initial={coords} onConfirm={onPinned} onClose={() => setShowMap(false)} /> : <OpenMapPicker initial={coords} onConfirm={onPinned} onClose={() => setShowMap(false)} />)}
+      {showMap && (hasMapsKey ? <MapPicker initial={coords} onConfirm={onPinned} onClose={closeMap} returnFocusTo={mapTrigger.current} /> : <OpenMapPicker initial={coords} onConfirm={onPinned} onClose={closeMap} returnFocusTo={mapTrigger.current} />)}
     </div>
   );
 }

@@ -1,6 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +11,7 @@ import { AccessService } from '../common/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { OrderStatusService } from '../orders/order-status.service';
+import { serializable } from '../common/transaction';
 import { AuthService } from '../auth/auth.service';
 import {
   ACTIVE_ORDER_STATUSES,
@@ -20,6 +24,7 @@ import {
 
 @Injectable()
 export class RiderService {
+  private readonly logger = new Logger(RiderService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
@@ -28,6 +33,11 @@ export class RiderService {
     private readonly statusService: OrderStatusService,
     private readonly auth: AuthService,
   ) {}
+
+  private async afterCommit(effect: () => Promise<unknown>) {
+    try { await effect(); }
+    catch (error) { this.logger.warn(`Post-commit notification failed: ${error instanceof Error ? error.message : String(error)}`); }
+  }
 
   // ── Rider self-onboarding (apply to a shop) ─────────────────────────────────
 
@@ -131,33 +141,22 @@ export class RiderService {
     userId: string,
     input: { latitude: number; longitude: number; speed?: number; heading?: number; orderId?: string },
   ) {
-    const rider = await this.access.riderByUser(userId);
-
-    let orderId = input.orderId ?? rider.currentOrderId ?? null;
-    if (orderId) {
-      const order = await this.prisma.order.findFirst({
-        where: { id: orderId, riderId: rider.id },
-        select: { id: true, status: true, merchantId: true },
-      });
-      // Only track against an order while the delivery is actually active.
-      orderId = order && (ACTIVE_ORDER_STATUSES as string[]).includes(order.status) ? order.id : null;
+    if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude) || Math.abs(input.latitude) > 90 || Math.abs(input.longitude) > 180) {
+      throw new BadRequestException('Choose a valid location');
     }
-
-    await this.prisma.rider.update({
-      where: { id: rider.id },
-      data: { latitude: input.latitude, longitude: input.longitude },
+    const rider = await this.access.riderByUser(userId);
+    if (!rider.isActive || rider.approvalStatus !== 'APPROVED') throw new ForbiddenException('Rider is not active');
+    const orderId = input.orderId ?? rider.currentOrderId;
+    if (!orderId) throw new BadRequestException('An active assigned delivery is required');
+    await serializable(this.prisma, async (tx) => {
+      const order = await tx.order.findFirst({ where: { id: orderId, riderId: rider.id }, select: { status: true } });
+      if (!order || ![OrderStatus.RIDER_ASSIGNED, OrderStatus.RIDER_ARRIVED_AT_SHOP, OrderStatus.ON_THE_WAY, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER].includes(order.status as any)) {
+        throw new ForbiddenException('Location is allowed only for your active assigned delivery');
+      }
+      await tx.rider.update({ where: { id: rider.id }, data: { latitude: input.latitude, longitude: input.longitude } });
+      await tx.riderLocationUpdate.create({ data: { riderId: rider.id, orderId, latitude: input.latitude, longitude: input.longitude, speed: input.speed ?? null, heading: input.heading ?? null } });
     });
-    if (orderId) {
-      await this.prisma.riderLocationUpdate.create({
-        data: {
-          riderId: rider.id,
-          orderId,
-          latitude: input.latitude,
-          longitude: input.longitude,
-          speed: input.speed ?? null,
-          heading: input.heading ?? null,
-        },
-      });
+    {
       const payload = {
         riderId: rider.id,
         orderId,
@@ -226,16 +225,14 @@ export class RiderService {
 
   async arrivedAtShop(userId: string, orderId: string, location?: { latitude?: number; longitude?: number }) {
     const { rider, order } = await this.ownedActiveOrder(userId, orderId, [OrderStatus.RIDER_ASSIGNED]);
-    await this.prisma.rider.update({
-      where: { id: rider.id },
-      data: { currentStatus: RiderStatus.PICKING_UP },
+    const changed = await serializable(this.prisma, async (tx) => {
+      const claim = await tx.rider.updateMany({ where: { id: rider.id, currentOrderId: order.id }, data: { currentStatus: RiderStatus.PICKING_UP } });
+      if (claim.count !== 1) throw new ConflictException('Delivery assignment changed');
+      return this.statusService.applyInTransaction(tx, order.id, OrderStatus.RIDER_ARRIVED_AT_SHOP, {
+        userId, role: 'RIDER', latitude: location?.latitude, longitude: location?.longitude,
+      }, {}, [OrderStatus.RIDER_ASSIGNED]);
     });
-    await this.statusService.apply(order.id, OrderStatus.RIDER_ARRIVED_AT_SHOP, {
-      userId,
-      role: 'RIDER',
-      latitude: location?.latitude,
-      longitude: location?.longitude,
-    });
+    this.statusService.broadcastStatus(changed);
     return { ok: true, status: OrderStatus.RIDER_ARRIVED_AT_SHOP };
   }
 
@@ -244,28 +241,25 @@ export class RiderService {
       OrderStatus.RIDER_ASSIGNED,
       OrderStatus.RIDER_ARRIVED_AT_SHOP,
     ]);
-    await this.prisma.rider.update({
-      where: { id: rider.id },
-      data: { currentStatus: RiderStatus.DELIVERING },
+    const changed = await serializable(this.prisma, async (tx) => {
+      const claim = await tx.rider.updateMany({ where: { id: rider.id, currentOrderId: order.id }, data: { currentStatus: RiderStatus.DELIVERING } });
+      if (claim.count !== 1) throw new ConflictException('Delivery assignment changed');
+      await this.statusService.appendTimeline(order.id, OrderStatus.PICKED_UP, {
+        userId, role: 'RIDER', latitude: location?.latitude, longitude: location?.longitude,
+      }, tx);
+      return this.statusService.applyInTransaction(tx, order.id, OrderStatus.ON_THE_WAY, {
+        userId, role: 'RIDER',
+      }, { pickedUpAt: new Date() }, [OrderStatus.RIDER_ASSIGNED, OrderStatus.RIDER_ARRIVED_AT_SHOP]);
     });
-    await this.statusService.appendTimeline(order.id, OrderStatus.PICKED_UP, {
-      userId,
-      role: 'RIDER',
-      latitude: location?.latitude,
-      longitude: location?.longitude,
-    });
-    await this.statusService.apply(order.id, OrderStatus.ON_THE_WAY, {
-      userId,
-      role: 'RIDER',
-    }, { pickedUpAt: new Date() });
+    this.statusService.broadcastStatus(changed);
 
-    await this.notifications.notify({
+    await this.afterCommit(() => this.notifications.notify({
       userId: order.customer.userId,
       title: 'Order picked up',
       body: `Your order ${order.orderNumber} is on the way. Share the delivery code with the rider on arrival.`,
       type: NotificationType.ORDER_PICKED_UP,
       referenceId: order.id,
-    });
+    }));
     return { ok: true, status: OrderStatus.ON_THE_WAY };
   }
 
@@ -277,13 +271,13 @@ export class RiderService {
       latitude: location?.latitude,
       longitude: location?.longitude,
     });
-    await this.notifications.notify({
+    await this.afterCommit(() => this.notifications.notify({
       userId: order.customer.userId,
       title: 'Rider has arrived',
       body: `Your rider is at your door with order ${order.orderNumber}.`,
       type: NotificationType.RIDER_NEARBY,
       referenceId: order.id,
-    });
+    }));
     return { ok: true, status: OrderStatus.RIDER_ARRIVED_AT_CUSTOMER };
   }
 
@@ -298,59 +292,56 @@ export class RiderService {
       OrderStatus.RIDER_ARRIVED_AT_CUSTOMER,
     ]);
 
-    const masterOk = (process.env.OTP_PROVIDER || 'mock') === 'mock' && input.otp === '123456';
+    const masterOk = process.env.NODE_ENV !== 'production' && (process.env.OTP_PROVIDER || 'mock') === 'mock' && input.otp === '123456';
     if (!masterOk && input.otp !== order.deliveryOtp) {
       throw new BadRequestException('Incorrect delivery code — ask the customer for the code in their app');
     }
 
-    await this.statusService.apply(order.id, OrderStatus.DELIVERED, {
-      userId,
-      role: 'RIDER',
-      notes: input.note ?? (input.photoUrl ? `Photo: ${input.photoUrl}` : undefined),
-    }, { deliveredAt: new Date() });
-
-    // COD: rider collected cash on the doorstep.
-    if (order.paymentMethod === 'COD') {
-      await this.prisma.order.update({
-        where: { id: order.id },
-        data: { paymentStatus: PaymentStatus.CASH_COLLECTED },
+    const changed = await serializable(this.prisma, async (tx) => {
+      const claimedRider = await tx.rider.updateMany({
+        where: { id: rider.id, currentOrderId: order.id },
+        data: { currentStatus: RiderStatus.IDLE, currentOrderId: null },
       });
-      const anchorId = order.parentOrderId ?? order.id;
-      const siblingsPending = order.parentOrderId
-        ? await this.prisma.order.count({
-            where: {
-              parentOrderId: order.parentOrderId,
-              status: { not: OrderStatus.DELIVERED },
-              id: { not: order.id },
-            },
-          })
-        : 0;
-      if (siblingsPending === 0) {
-        await this.prisma.payment.updateMany({
-          where: { orderId: anchorId, status: PaymentStatus.CASH_PENDING },
-          data: { status: PaymentStatus.CASH_COLLECTED },
+      if (claimedRider.count !== 1) throw new ConflictException('Delivery assignment changed');
+      const result = await this.statusService.applyInTransaction(tx, order.id, OrderStatus.DELIVERED, {
+        userId,
+        role: 'RIDER',
+        notes: input.note ?? (input.photoUrl ? `Photo: ${input.photoUrl}` : undefined),
+      }, { deliveredAt: new Date() }, [OrderStatus.ON_THE_WAY, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER]);
+      // COD collection and delivery must never be visible independently.
+      if (order.paymentMethod === 'COD') {
+        await tx.order.updateMany({
+          where: { id: order.id, paymentStatus: PaymentStatus.CASH_PENDING },
+          data: { paymentStatus: PaymentStatus.CASH_COLLECTED },
         });
+        if (!order.parentOrderId) {
+          const currentOrder = await tx.order.findUniqueOrThrow({ where: { id: order.id }, select: { totalAmountPaisa: true } });
+          const collected = await tx.payment.updateMany({
+            where: { orderId: order.id, status: PaymentStatus.CASH_PENDING },
+            data: { status: PaymentStatus.CASH_COLLECTED, amountPaisa: currentOrder.totalAmountPaisa },
+          });
+          if (collected.count !== 1) throw new ConflictException('COD collection record changed');
+        }
       }
-    }
-
-    await this.prisma.rider.update({
-      where: { id: rider.id },
-      data: { currentStatus: RiderStatus.IDLE, currentOrderId: null },
+      return result;
     });
+    this.statusService.broadcastStatus(changed);
 
-    await this.notifications.notify({
-      userId: order.customer.userId,
-      title: 'Order delivered',
-      body: `Order ${order.orderNumber} was delivered. Enjoy! You can rate your experience in the app.`,
-      type: NotificationType.ORDER_DELIVERED,
-      referenceId: order.id,
-    });
-    const merchantUserIds = await this.access.merchantUserIds(order.merchantId!);
-    await this.notifications.notifyMany(merchantUserIds, {
-      title: 'Order delivered',
-      body: `Order ${order.orderNumber} was delivered by ${rider.fullName}.`,
-      type: NotificationType.ORDER_DELIVERED,
-      referenceId: order.id,
+    await this.afterCommit(async () => {
+      await this.notifications.notify({
+        userId: order.customer.userId,
+        title: 'Order delivered',
+        body: `Order ${order.orderNumber} was delivered. Enjoy! You can rate your experience in the app.`,
+        type: NotificationType.ORDER_DELIVERED,
+        referenceId: order.id,
+      });
+      const merchantUserIds = await this.access.merchantUserIds(order.merchantId!);
+      await this.notifications.notifyMany(merchantUserIds, {
+        title: 'Order delivered',
+        body: `Order ${order.orderNumber} was delivered by ${rider.fullName}.`,
+        type: NotificationType.ORDER_DELIVERED,
+        referenceId: order.id,
+      });
     });
     return { ok: true, status: OrderStatus.DELIVERED };
   }

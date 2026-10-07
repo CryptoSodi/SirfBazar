@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
+    "test": "node --test test/checkout-recovery.test.cjs",
     "start": "next start"
   },
   "dependencies": {

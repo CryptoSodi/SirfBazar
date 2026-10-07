@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
 export function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: string }) {
   return (
@@ -29,16 +29,41 @@ export function Table({ headers, children }: { headers: string[]; children: Reac
   );
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, returnFocus }: { title: string; onClose: () => void; children: ReactNode; returnFocus?: HTMLElement | null }) {
+  const titleId = useId();
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const trigger = returnFocus?.isConnected ? returnFocus : active && !panel.current?.contains(active) ? active : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    (panel.current?.querySelector<HTMLElement>('input') ?? panel.current?.querySelector<HTMLElement>('button, [href]'))?.focus();
+    return () => { document.body.style.overflow = previousOverflow; if (trigger?.isConnected) trigger.focus(); };
+  }, []);
+  const keys = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') { event.preventDefault(); onClose(); return; }
+    if (event.key !== 'Tab') return;
+    const controls = Array.from(panel.current?.querySelectorAll<HTMLElement>('input:not(:disabled), button:not(:disabled), [href]') ?? []);
+    if (!controls.length) { event.preventDefault(); panel.current?.focus(); return; }
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={onClose}>
       <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={keys}
         className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button className="text-slate-400 hover:text-slate-600" onClick={onClose}>
+          <h2 id={titleId} className="text-lg font-bold">{title}</h2>
+          <button aria-label="Close dialog" className="text-slate-400 hover:text-slate-600" onClick={onClose}>
             ✕
           </button>
         </div>

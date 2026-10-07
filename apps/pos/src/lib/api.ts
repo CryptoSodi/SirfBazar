@@ -32,6 +32,10 @@ export function logout() {
   location.href = '/login';
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 async function request(method: string, path: string, body?: unknown, retry = true): Promise<any> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   const token = localStorage.getItem(LS.access);
@@ -57,7 +61,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   }
   if (!res.ok) {
     const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
-    throw new Error(msg);
+    throw new ApiError(msg, res.status);
   }
   return data;
 }

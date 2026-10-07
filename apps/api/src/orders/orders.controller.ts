@@ -5,6 +5,7 @@ import {
   CancelOrderDto,
   OrderTicketDto,
   PlaceOrderDto,
+  QuoteOrderDto,
   RateOrderDto,
   ReplacementResponseDto,
 } from './orders.dto';
@@ -16,6 +17,11 @@ import { UserRole } from '../common/constants';
 @Controller('orders')
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
+
+  @Post('quote')
+  quote(@CurrentUser() user: AuthUser, @Body() dto: QuoteOrderDto) {
+    return this.orders.quoteOrder(user.userId, dto);
+  }
 
   @Post()
   place(@CurrentUser() user: AuthUser, @Body() dto: PlaceOrderDto) {
