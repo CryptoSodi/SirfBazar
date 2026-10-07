@@ -1,3 +1,4 @@
+import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api, errorMessage, pkr, statusLabel } from '../lib/api';
@@ -126,7 +127,7 @@ export default function Orders() {
       }
 
       <div className="panel-foot"><span>{result?.total ?? 0} matching orders · {orders.length} on this page</span><span>{updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : 'Newest first'}</span></div></section>
-      {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Order pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}>← Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next →</button></nav>}
+      {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Order pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}><UiIcon name="back" /> Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next <UiIcon name="arrow" /></button></nav>}
 
       {selectedId && (
         <OrderModal
@@ -407,7 +408,7 @@ function UnavailableItemModal({ orderId, item, onClose, onSaved }: { orderId: st
       </label>
       {loadingProducts && <p className="small muted" role="status">Loading eligible products…</p>}
       {!loadingProducts && products.length === 0 && !error && <p className="small muted">No eligible products match this search.</p>}
-      {totalPages > 1 && <nav className="catalog-pagination" aria-label="Replacement product pages"><button type="button" className="btn" disabled={page <= 1 || loadingProducts} onClick={() => { setPage(page - 1); setReplacementId(''); }}>← Previous</button><span>Page {page} of {totalPages}</span><button type="button" className="btn" disabled={page >= totalPages || loadingProducts} onClick={() => { setPage(page + 1); setReplacementId(''); }}>Next →</button></nav>}
+      {totalPages > 1 && <nav className="catalog-pagination" aria-label="Replacement product pages"><button type="button" className="btn" disabled={page <= 1 || loadingProducts} onClick={() => { setPage(page - 1); setReplacementId(''); }}><UiIcon name="back" /> Previous</button><span>Page {page} of {totalPages}</span><button type="button" className="btn" disabled={page >= totalPages || loadingProducts} onClick={() => { setPage(page + 1); setReplacementId(''); }}>Next <UiIcon name="arrow" /></button></nav>}
       {error && <div className="inline-error" role="alert">{error}</div>}
       <div className="row"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn primary" disabled={busy || loadingProducts} onClick={() => void submit()}>{busy ? 'Updating…' : replacementId ? 'Suggest replacement' : 'Mark unavailable'}</button></div>
     </div>

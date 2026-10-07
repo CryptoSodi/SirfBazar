@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Barcode, CheckCircle2, History, Keyboard, Monitor, Pause, Plus, Printer, RefreshCw, Search, Settings, ShoppingBasket, Trash2, Wallet } from 'lucide-react';
 import { api, ApiError, errorMessage, getUser } from '../lib/api';
 import { readProfile, type MerchantProfile } from '../lib/merchant-contracts';
-import { Modal } from '../components/ui';
+import { Modal, useToast } from '../components/ui';
 import IPosSettings from '../components/IPosSettings';
 import IPosClassicBill from '../components/IPosClassicBill';
 import IPosFullscreen from '../components/IPosFullscreen';
@@ -57,7 +57,10 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
   const [dialog, setDialog] = useState<Dialog>(null);
   const [receipt, setReceipt] = useState<PosSale | null>(null);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNoticeState] = useState<{ text: string } | null>(null);
+  const setNotice = (text: string) => setNoticeState({ text });
+  const { toast, node: toastNode } = useToast();
+  useEffect(() => { if (notice) toast(notice.text); }, [notice, toast]);
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [query, setQuery] = useState('');
   const [catalogueError, setCatalogueError] = useState('');
@@ -332,7 +335,7 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
     {!ownsCounter && <div className="ipos-notice" role="status"><strong>Read-only counter</strong><p>Another tab may be using this cashier’s counter. Close it before continuing here.</p><button className="ops-button" onClick={() => setLockAttempt((v) => v + 1)}>Use this tab</button></div>}
     {state.pending && <section className="ipos-notice ipos-pending"><h2>Sale result needs confirmation</h2><p>Do not charge again or create another bill. This request is saved in this browser.</p><p className="ipos-code">Reference: {state.pending.requestId}</p><div className="ipos-actions"><button className="ops-button ops-button-primary" disabled={busy || !ownsCounter} onClick={() => void checkPending()}>Check saved sale</button><button className="ops-button" disabled={busy || !ownsCounter} onClick={() => void sendSale(state.pending!)}>Retry same request</button></div></section>}
     {error && <div className="ipos-error" role="alert">{error}<button type="button" className="ops-button" onClick={() => setError('')}>Dismiss message</button></div>}
-    <p className="ipos-feedback" role="status">{scanCount ? `Looking up ${scanCount} scan${scanCount === 1 ? '' : 's'}…` : notice}</p>
+    <p className="ipos-feedback" role="status">{scanCount ? `Looking up ${scanCount} scan${scanCount === 1 ? '' : 's'}…` : ''}</p>
 
     {view === 'register' && <>
       {(voidMode || nextQuantity !== 1) && <div className="ipos-notice ipos-mode-notice" role="status"><strong>{voidMode ? 'VOID MODE — unpaid bill only' : `Next addition: ${nextQuantity} units`}</strong><p>{voidMode ? 'Scan or select a bill item. Confirm before one unit is removed. Paid sales cannot be refunded here.' : 'Applies to the next successful scan or product selection, then returns to one unit.'}</p><button className="ops-button" disabled={locked} onClick={() => { setVoidMode(false); setNextQuantity(1); }}>Return to normal sale</button></div>}
@@ -390,6 +393,7 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
     {dialog === 'exit' && <Modal title="Leave the counter?" onClose={() => setDialog(null)}><p>Your unpaid draft and held bills stay in this browser. This returns to the dashboard; it does not sign out or close the browser.</p><div className="ipos-actions"><button className="ops-button" onClick={() => setDialog(null)}>Stay at counter</button><button className="ops-button" disabled={locked} onClick={() => { if (commit(state)) navigate('/'); }}>Leave counter</button></div></Modal>}
     {dialog === 'help' && <Modal title="Counter commands" onClose={() => setDialog(null)}><p className="ipos-muted">{shortcutProfiles.find((profile) => profile.id === state.settings.shortcutProfile)?.label}. {state.settings.shortcuts ? 'Keys run only on the register with no dialog open.' : 'Keyboard shortcuts are disabled.'} Browser/system shortcuts can take priority. Use the visible buttons if a key is intercepted.</p><dl className="ipos-shortcuts">{currentCommands.map((command) => <div key={command.id}><dt><kbd>{state.settings.shortcuts ? command.key || 'Button only' : 'Keys off'}</kbd> {command.action}</dt><dd>{command.detail}</dd></div>)}</dl><div className="ipos-notice"><strong>Not yet available</strong><p>F6 Refund, cashier discounts, price overrides, shift closing, split payments, customer credit, scales and offline sales are not implemented. The reference profiles are partial, not full iPOS compatibility.</p></div></Modal>}
     {receipt && <Receipt sale={receipt} settings={state.settings} shopName={profile.shopName} onClose={() => setReceipt(null)} />}
+    {toastNode}
   </div>;
 }
 

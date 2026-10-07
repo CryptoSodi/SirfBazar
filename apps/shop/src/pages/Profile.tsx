@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { Badge, Modal, Stat, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
 import { useThemeStudio, type ThemeMode } from '../components/ThemeStudio';
 import { ReferenceIcon } from '../components/ReferenceIcon';
 import { PageSkeleton } from '../components/Skeleton';
 import { readMemory, writeMemory } from '../lib/memoryCache';
-const ShopMapPicker = lazy(() => import('../components/ShopMapPicker'));
+import ShopMapPicker from '../components/ShopMapPicker';
 
 /** Editable fields accepted by PUT /merchant/profile (UpdateMerchantProfileDto). */
 type Form = {
@@ -81,6 +81,7 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [stateBusy, setStateBusy] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const mapTrigger = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState(false);
   const [documentOpen, setDocumentOpen] = useState(false);
   const [documentType, setDocumentType] = useState('BUSINESS_REGISTRATION');
@@ -279,7 +280,7 @@ export default function Profile() {
 
       {/* Read-only summary */}
       <div hidden className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Rating" value={`${(merchant.ratingAverage ?? 0).toFixed(1)} ★`} hint={`${merchant.ratingCount ?? 0} reviews`} />
+        <Stat label="Rating" value={<>{(merchant.ratingAverage ?? 0).toFixed(1)} <ReferenceIcon name="star" /></>} hint={`${merchant.ratingCount ?? 0} reviews`} />
         <Stat
           label="Commission"
           value={merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}
@@ -326,7 +327,7 @@ export default function Profile() {
               </Field>
             </div>
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <button type="button" className={btnGhost} disabled={!canEdit} onClick={() => setMapOpen(true)}>Pin shop on map</button>
+              <button ref={mapTrigger} type="button" className={btnGhost} disabled={!canEdit} onClick={() => setMapOpen(true)}>Pin shop on map</button>
               <span className="text-xs text-slate-500">{form.latitude && form.longitude ? `Pinned at ${Number(form.latitude).toFixed(5)}, ${Number(form.longitude).toFixed(5)}` : 'No shop location pinned yet'}</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -381,7 +382,7 @@ export default function Profile() {
 
       {documentOpen && <Modal title="Add merchant document" onClose={() => { setDocumentOpen(false); setDocumentFile(null); }}><form className="dialog-body space-y-3" onSubmit={addDocument}><label className="field">Document type<select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="BUSINESS_REGISTRATION">Business registration</option><option value="IDENTITY">Identity</option><option value="BANK_DETAILS">Bank details</option><option value="OTHER">Other</option></select></label><label className="field">Document file<input type="file" required accept="application/pdf,image/jpeg,image/png,image/webp" onChange={(event) => setDocumentFile(event.target.files?.[0] || null)} /><small>PDF, JPG, PNG or WebP, up to 10 MB. Files are kept outside the public static directory and require an authenticated merchant session to open.</small></label><div className="row"><button type="button" className="btn" onClick={() => { setDocumentOpen(false); setDocumentFile(null); }}>Cancel</button><button className="btn primary" disabled={saving || !documentFile}>{saving ? 'Submitting…' : 'Upload document'}</button></div></form></Modal>}
       {node}
-      {mapOpen && <Suspense fallback={<div role="status">Loading map…</div>}><ShopMapPicker initial={form.latitude && form.longitude ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null} onClose={() => setMapOpen(false)} onConfirm={(point) => { setForm((previous) => ({ ...previous, latitude: String(point.latitude), longitude: String(point.longitude) })); setMapOpen(false); toast('Shop pin selected. Save changes to publish it.'); }} /></Suspense>}
+      {mapOpen && <ShopMapPicker initial={form.latitude && form.longitude ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null} returnFocusTo={mapTrigger.current} onClose={() => setMapOpen(false)} onConfirm={(point) => { setForm((previous) => ({ ...previous, latitude: String(point.latitude), longitude: String(point.longitude) })); setMapOpen(false); toast('Shop pin selected. Save changes to publish it.'); }} />}
     </div>
   );
 }
