@@ -8,6 +8,7 @@ import type { PickedPoint } from './MapPicker';
 
 // Google Maps is browser-only — load the picker lazily, never during SSR.
 const MapPicker = dynamic(() => import('./MapPicker').then((m) => m.MapPicker), { ssr: false });
+const OpenMapPicker = dynamic(() => import('./OpenMapPicker').then((m) => m.OpenMapPicker), { ssr: false });
 
 const LABELS: { key: string; icon: string }[] = [
   { key: 'Home', icon: '🏠' },
@@ -121,11 +122,7 @@ export function AddressForm({
         <button type="button" className="btn-secondary text-sm" onClick={useCurrentLocation} disabled={locating}>
           {locating ? 'Locating…' : '📍 Use current location'}
         </button>
-        {hasMapsKey && (
-          <button type="button" className="btn-secondary text-sm" onClick={() => setShowMap(true)}>
-            🗺️ Pin on map
-          </button>
-        )}
+        <button type="button" className="btn-secondary text-sm" onClick={() => setShowMap(true)}>Pin on map</button>
         {coords && (
           <span className="self-center text-xs text-emerald-700">
             Pinned: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
@@ -182,7 +179,7 @@ export function AddressForm({
         </button>
       </div>
 
-      {showMap && <MapPicker initial={coords} onConfirm={onPinned} onClose={() => setShowMap(false)} />}
+      {showMap && (hasMapsKey ? <MapPicker initial={coords} onConfirm={onPinned} onClose={() => setShowMap(false)} /> : <OpenMapPicker initial={coords} onConfirm={onPinned} onClose={() => setShowMap(false)} />)}
     </div>
   );
 }

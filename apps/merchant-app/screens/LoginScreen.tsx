@@ -1,7 +1,7 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, storeAuth } from '../lib/api';
@@ -70,7 +70,12 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={[s.screen, { backgroundColor: colors.dark }]}>
       <View style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
-        <Text style={{ color: '#fff', fontSize: 28, fontWeight: '900' }}>SirfBazar</Text>
+        <Image
+          source={require('../assets/brand/sirfbazar-reverse.png')}
+          style={{ width: 240, height: 72, marginBottom: 8 }}
+          resizeMode="contain"
+          accessibilityLabel="SirfBazar — بازار وہی۔ طریقہ نیا۔"
+        />
         <Text style={{ color: '#94a3b8', marginBottom: 28 }}>Merchant — run your shop from your pocket</Text>
 
         <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>

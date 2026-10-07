@@ -1,65 +1,77 @@
 'use client';
 
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { locationQuery, useLocation } from '@/lib/location';
+import { FALLBACK_LOCATION, locationQuery, useLocation } from '@/lib/location';
 import { ProductCard, ProductCardData } from '@/components/ProductCard';
+import { Icon } from '@/components/Icons';
+import { CoverageNotice } from '@/components/CoverageNotice';
 
 function SearchResults() {
   const params = useSearchParams();
-  const q = params.get('q') ?? '';
-  const { location, resolved } = useLocation();
+  const q = params.get('q')?.trim() || '';
+  const category = params.get('category') || '';
+  const shopsOnly = params.get('type') === 'shops';
+  const { location, resolved, choose } = useLocation();
   const [items, setItems] = useState<ProductCardData[]>([]);
-  const [sort, setSort] = useState('relevance');
+  const [shops, setShops] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [sort, setSort] = useState('price_asc');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [noCoverage, setNoCoverage] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     if (!resolved) return;
-    setLoading(true);
-    api
-      .get(`/products/search?q=${encodeURIComponent(q)}&sort=${sort}&pageSize=48&${locationQuery(location)}`)
-      .then((res) => setItems(res.items ?? []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
-  }, [q, sort, resolved, location?.latitude]);
+    let active = true;
+    const query = locationQuery(location);
+    setLoading(true); setError(''); setNoCoverage(false);
+    (async () => {
+      try {
+        const cats = await api.get(`/products/categories?${query}`);
+        if (!active) return;
+        setCategories(cats ?? []);
+        const selected = (cats ?? []).find((entry: any) => entry.slug === category || entry.id === category);
+        const categoryParam = selected ? `&categoryId=${encodeURIComponent(selected.id)}` : '';
+        let hasResults = false;
+        if (shopsOnly) {
+          const response = await api.get(`/merchants/nearby?${query}${categoryParam}`);
+          hasResults = (response.items ?? response ?? []).length > 0;
+          if (active) setShops(response.items ?? response ?? []);
+        } else {
+          const response = await api.get(`/products/search?q=${encodeURIComponent(q)}&sort=${sort}&pageSize=48&${query}${categoryParam}`);
+          hasResults = (response.items ?? []).length > 0;
+          if (active) setItems(response.items ?? []);
+        }
+        if (!hasResults) {
+          const nearby = await api.get(`/merchants/nearby?${query}&pageSize=1`);
+          if (active) setNoCoverage((nearby.total ?? nearby.items?.length ?? 0) === 0);
+        }
+      } catch (cause: any) {
+        if (active) setError(cause.message || 'Unable to load local results. Try again.');
+      } finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
+  }, [q, category, shopsOnly, sort, resolved, location?.latitude, location?.longitude, reload]);
 
-  return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold">
-          {q ? <>Results for “{q}”</> : 'Search'}
-          {!loading && <span className="ml-2 text-sm font-normal text-stone-400">{items.length} items</span>}
-        </h1>
-        <select className="input w-auto" value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="relevance">Most relevant</option>
-          <option value="price_asc">Price: low to high</option>
-          <option value="price_desc">Price: high to low</option>
-          <option value="rating">Shop rating</option>
-          <option value="distance">Nearest first</option>
-        </select>
-      </div>
-      {loading ? (
-        <p className="text-stone-500">Searching…</p>
-      ) : items.length === 0 ? (
-        <div className="card p-10 text-center text-stone-500">
-          Nothing found nearby for “{q}”. Try a different word or change your location.
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {items.map((p) => (
-            <ProductCard key={p.merchantProductId} card={p} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  const filterHref = (slug: string) => {
+    const next = new URLSearchParams();
+    if (q) next.set('q', q);
+    if (shopsOnly) next.set('type', 'shops');
+    if (slug) next.set('category', slug);
+    return `/search${next.size ? `?${next.toString()}` : ''}`;
+  };
+  const filters = <div className="sb-browse-filter-content"><h2>Categories</h2><Link className={!category ? 'selected' : ''} href={filterHref('')}>○ All essentials</Link>{categories.map((entry) => <Link key={entry.id} className={category === entry.slug || category === entry.id ? 'selected' : ''} href={filterHref(entry.slug)}>○ {entry.name}</Link>)}<p>Prices belong to the selected shop. Check alternatives on each product page.</p></div>;
+
+  return <div className="sb-browse"><nav className="sb-breadcrumb" aria-label="Breadcrumb"><Link href="/">Home</Link><span aria-hidden="true">›</span><span>{shopsOnly ? 'Local shops' : 'All essentials'}</span></nav><h1>{shopsOnly ? 'Your neighbourhood shops' : q ? `Results for “${q}”` : 'Find your everyday essentials'}</h1><p className="sb-muted">{shopsOnly ? 'Shops prepare and deliver their own orders.' : 'Shop by product. Keep your local shop in view.'}</p>
+    <div className="sb-browse-tabs"><Link href="/search" className={!shopsOnly ? 'active' : ''}>Products</Link><Link href="/search?type=shops" className={shopsOnly ? 'active' : ''}>Local shops</Link></div>
+    <div className="sb-browse-grid"><aside className="card sb-browse-filters"><h2>Refine your list</h2>{filters}</aside><div className="sb-browse-results"><div className="sb-browse-toolbar"><span>{loading ? 'Loading local results…' : error ? 'Results unavailable' : `${shopsOnly ? shops.length : items.length} nearby ${shopsOnly ? 'shops' : 'products'}`}</span><details className="sb-mobile-filters"><summary>Filters</summary>{filters}</details>{!shopsOnly && <><label className="sr-only" htmlFor="browse-sort">Sort products</label><select id="browse-sort" className="input" value={sort} onChange={(event) => setSort(event.target.value)}><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option><option value="relevance">Most relevant</option><option value="rating">Shop rating</option><option value="distance">Nearest first</option></select></>}</div>
+      {error ? <div role="alert" className="card p-5"><p>{error}</p><button className="btn-secondary mt-3" onClick={() => setReload((value) => value + 1)}>Try again</button></div> : loading ? <div className="sb-product-grid" aria-label="Loading results">{Array.from({ length:8 }).map((_, index) => <div key={index} className="card sb-product-skeleton" />)}</div> : noCoverage ? <CoverageNotice inExampleArea={location?.label === FALLBACK_LOCATION.label} onBrowseExample={() => choose(FALLBACK_LOCATION)} onRetry={() => setReload((value) => value + 1)} /> : shopsOnly ? shops.length ? <div className="sb-browse-shop-grid">{shops.map((shop) => <Link key={shop.id} href={`/shop/${shop.id}`} className="card sb-browse-shop"><Icon name="shop" size={28} /><strong>{shop.shopName}</strong><small>{shop.city || 'Local shop'}</small><small>{shop.isOnline && shop.isOpen ? 'Open' : 'Closed'}{shop.estimatedDeliveryMinutes ? ` · ${shop.estimatedDeliveryMinutes} min estimate` : ''}</small><b>View shop&nbsp; →</b></Link>)}</div> : <p className="card p-6">No shops match these filters. Clear filters to see available shops.</p> : items.length ? <div className="sb-product-grid">{items.map((product) => <ProductCard key={product.merchantProductId} card={product} />)}</div> : <div className="card p-6"><h2 className="font-bold">No nearby products found</h2><p className="sb-muted mt-2">Try another search term, category or delivery area.</p><Link className="btn-secondary mt-4 inline-flex" href="/search">Clear filters</Link></div>}
+    </div></div>
+  </div>;
 }
 
-export default function SearchPage() {
-  return (
-    <Suspense fallback={<p className="text-stone-500">Loading…</p>}>
-      <SearchResults />
-    </Suspense>
-  );
-}
+export default function SearchPage() { return <Suspense fallback={<p role="status">Loading browse…</p>}><SearchResults /></Suspense>; }

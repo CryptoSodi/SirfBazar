@@ -1,14 +1,19 @@
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { isLoggedIn } from './lib/api';
-import { colors } from './lib/theme';
-import LoginScreen from './screens/LoginScreen';
-import OnboardScreen from './screens/OnboardScreen';
-import HomeScreen from './screens/HomeScreen';
-import DeliveryScreen from './screens/DeliveryScreen';
-import HistoryScreen from './screens/HistoryScreen';
+import { AppearanceProvider, useRiderTheme } from './lib/appearance';
+import LoginScreen from './screens/RiderLoginScreen';
+import OnboardScreen from './screens/RiderOnboardScreen';
+import HomeScreen from './screens/RiderHomeScreen';
+import DeliveryScreen from './screens/RiderDeliveryScreen';
+import HistoryScreen from './screens/RiderHistoryScreen';
+import HelpScreen from './screens/RiderHelpScreen';
+import ProfileScreen from './screens/RiderProfileScreen';
+import AppearanceScreen from './screens/RiderAppearanceScreen';
+import PermissionsScreen from './screens/RiderPermissionsScreen';
+import ReportScreen from './screens/RiderReportScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -16,16 +21,21 @@ export type RootStackParamList = {
   Home: undefined;
   Delivery: { orderId: string };
   History: undefined;
+  Help: undefined;
+  Profile: undefined;
+  Appearance: undefined;
+  Permissions: undefined;
+  Report: { orderId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const theme = {
-  ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: colors.bg, primary: colors.primary },
-};
-
 export default function App() {
+  return <AppearanceProvider><AppNavigation /></AppearanceProvider>;
+}
+
+function AppNavigation() {
+  const { palette, mode } = useRiderTheme();
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
 
@@ -33,25 +43,30 @@ export default function App() {
     isLoggedIn().then((ok) => {
       setAuthed(ok);
       setReady(true);
-      // Re-register for order alerts on every app start (push tokens can rotate).
-      if (ok) void import('./lib/push').then((m) => m.registerForPush()).catch(() => undefined);
     });
   }, []);
 
   if (!ready) return null;
+  const base = mode === 'dark' ? DarkTheme : DefaultTheme;
+  const theme = { ...base, colors: { ...base.colors, background: palette.bg, card: palette.surface, text: palette.ink, border: palette.line, primary: palette.accent } };
 
   return (
     <NavigationContainer theme={theme}>
-      <StatusBar style="dark" />
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} backgroundColor={palette.bg} />
       <Stack.Navigator
         initialRouteName={authed ? 'Home' : 'Login'}
-        screenOptions={{ headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' } }}
+        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.bg } }}
       >
-        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Onboard" component={OnboardScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Delivery" component={DeliveryScreen} options={{ title: 'Delivery' }} />
-        <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'History' }} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Onboard" component={OnboardScreen} />
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Delivery" component={DeliveryScreen} />
+        <Stack.Screen name="History" component={HistoryScreen} />
+        <Stack.Screen name="Help" component={HelpScreen} />
+        <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="Appearance" component={AppearanceScreen} />
+        <Stack.Screen name="Permissions" component={PermissionsScreen} />
+        <Stack.Screen name="Report" component={ReportScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

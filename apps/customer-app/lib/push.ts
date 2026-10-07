@@ -28,11 +28,13 @@ async function deviceToken(): Promise<string | null> {
 }
 
 /** Ask permission and register this device for order alerts. Idempotent per app session. */
-export async function registerForPush(): Promise<void> {
+export async function registerForPush(): Promise<boolean> {
   try {
+    if (Platform.OS === 'web') return false;
     // Never re-register mid-logout: a refresh triggered by the remove call would
     // otherwise resubscribe the outgoing user and pin the token to them.
-    if (unregistering || registeredToken) return;
+    if (unregistering) return false;
+    if (registeredToken) return true;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Order alerts',
@@ -45,21 +47,25 @@ export async function registerForPush(): Promise<void> {
     if (status !== 'granted') {
       ({ status } = await Notifications.requestPermissionsAsync());
     }
-    if (status !== 'granted') return;
+    if (status !== 'granted') return false;
     const token = await deviceToken();
-    if (!token) return;
-    await api.post('/notifications/push-token', {
+    if (!token) return false;
+    const result = await api.post('/notifications/push-token', {
       token,
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
     });
+    if (!result.ok) return false;
     registeredToken = token;
+    return true;
   } catch {
     // No push in Expo Go / permission denied / offline — never break the app.
+    return false;
   }
 }
 
 /** Stop alerts to this device (call while still authenticated, before clearing tokens). */
 export async function unregisterPush(): Promise<void> {
+  if (Platform.OS === 'web') return;
   // Re-entrancy guard: if our remove call itself 401s, request() calls clearAuth()
   // which calls back into unregisterPush — without this, that loops forever.
   if (unregistering) return;

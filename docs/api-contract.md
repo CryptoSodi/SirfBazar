@@ -12,10 +12,10 @@ Dev conveniences:
 
 ## Auth (public)
 - `POST /auth/send-otp` `{phoneNumber}` → `{sent, expiresInSeconds}` (429 on resend cooldown)
-- `POST /auth/verify-otp` `{phoneNumber, code, fullName?}` → `{accessToken, refreshToken, user}`
-- `POST /auth/google-login` `{idToken}` → same shape
+- `POST /auth/verify-otp` `{phoneNumber, code, fullName?, context?: customer|admin|merchant|rider}` → `{accessToken, refreshToken, user}`; default context is customer
+- `POST /auth/google-login` `{idToken, context?: customer|admin|merchant|rider}` → same shape; default context is customer
 - `POST /auth/admin-login` `{email, password}` → same shape
-- `POST /auth/refresh-token` `{refreshToken}` → rotated pair
+- `POST /auth/refresh-token` `{refreshToken}` → rotated pair retaining the app-scoped role selected at login; pre-migration tokens without a stored role use the account's base role and may require a fresh sign-in
 - `POST /auth/logout` `{refreshToken}`
 - `GET /auth/me` (any role) → user + linked customer/merchant/rider/staffOf
 
@@ -50,7 +50,7 @@ Dev conveniences:
 **ProductCard**: `{productId, merchantProductId, name, slug, brand, imageUrl, unit, size, categoryId, pricePaisa, discountPricePaisa, merchant:{id, shopName, ratingAverage, distanceKm, estimatedDeliveryMinutes}, stockQuantity, isAvailable}` — one card per (product, cheapest/nearest merchant offer).
 
 ## Location (public)
-- `POST /location/detect` `{latitude?, longitude?, ip?}` → `{city, area, latitude, longitude, serviceable}` (geo lookup from seeded service areas; falls back to nearest city)
+- `POST /location/detect` `{latitude?, longitude?, ip?}` → `{city, area, latitude, longitude, serviceable}` (returns a merchant area only when the supplied point is within an approved merchant's service radius; `city` and `area` are null outside coverage; without coordinates, falls back to the busiest city)
 - `GET /location/service-availability?latitude=&longitude=` → `{serviceable, merchantsInRange}`
 - `GET /location/nearby-areas?city=` → `[{city, area}]` (distinct from approved merchants)
 
@@ -61,7 +61,7 @@ Dev conveniences:
 - `DELETE /customer/account` — soft delete (status DELETED)
 
 ## Orders (role CUSTOMER)
-- `POST /orders` `{deliveryAddressId, paymentMethod: COD|CARD|JAZZCASH|EASYPAISA|WALLET|BANK_TRANSFER, customerNote?, couponCode?}` → order detail. Multi-merchant carts produce a parent order (`isParent: true`) with `children[]` per shop.
+- `POST /orders` `{requestId?: UUIDv4, cartId?, deliveryAddressId, paymentMethod: COD|CARD|JAZZCASH|EASYPAISA|WALLET|BANK_TRANSFER, customerNote?, couponCode?}` → order detail. Multi-merchant carts produce a parent order (`isParent: true`) with `children[]` per shop. Native checkout persists a stable `requestId` before sending; it becomes the standalone/parent order ID. Replays return only the same customer's order with matching address, payment method and note; incompatible/cross-customer reuse returns 409. The active basket is claimed inside the stock/payment transaction, including for older clients. Optional `cartId` binds recovery to the original basket. On a lost response, first `GET /orders/:requestId`; if still unconfirmed, retry with the identical reference and payload rather than a new checkout ID. Deploy the updated backend before shipping this mobile client. Online methods remain development integrations; native checkout enables COD only.
 - `GET /orders?status=` → list (parents/standalone, with items, merchant, children)
 - `GET /orders/:id` → detail (items, timeline, merchant, rider, payments, refunds, children; `deliveryOtp` only revealed while rider is en route)
 - `GET /orders/:id/track` → `{orderId, orderNumber, isParent, status, paymentStatus, totalAmountPaisa, deliveries:[{orderId, orderNumber, status, merchant, rider, riderLocation:{latitude,longitude,heading,createdAt}|null, estimatedDeliveryMinutes, deliveryOtp|null, timeline[]}]}`
@@ -94,6 +94,21 @@ Order statuses: CREATED, PAYMENT_PENDING, SENT_TO_MERCHANT, MERCHANT_ACCEPTED, M
 - Staff: `GET /merchant/staff` · `POST /merchant/staff` `{fullName, phoneNumber, roleName, permissions: string[]}` · `PUT /merchant/staff/:id` · `DELETE /merchant/staff/:id`
 
 ## Merchant orders (roles MERCHANT_OWNER, MERCHANT_STAFF)
+
+### iPOS counter (POS permission required)
+
+- `GET /pos/capabilities` → `{version:2, merchantId, idempotentSales:true, barcodeLookup:true, paymentMethods:['CASH'], offlineSales:false}`. The merchant dashboard requires this version before enabling the counter.
+- `GET /pos/products?q=` → up to 300 merchant-scoped `{merchantProductId,productId,name,imageUrl,unit,barcode,merchantSku,pricePaisa,stockQuantity,isAvailable}` rows. Name search is case-insensitive; barcode/SKU search is exact. Unapproved, restricted and prescription products are not sellable here.
+- `GET /pos/products/lookup?code=` → one exact barcode/shop-SKU match, independent of the 300-row catalogue limit. Codes remain strings, preserving leading zeros. Missing = 404; ambiguous duplicate = 409.
+- `POST /pos/products/review` `{merchantProductIds:string[1..200]}` → current merchant-scoped rows for a bill's explicit IDs; read-only price/stock review, not a reservation.
+- `POST /pos/sales` `{requestId?:UUIDv4,counterName?:string[60],items:[{merchantProductId,quantity:integer[1..100000],expectedUnitPricePaisa?:integer}],amountTenderedPaisa?:integer,note?:string[500]}` → saved cash POS order with `items`, `amountTenderedPaisa`, `changePaisa`, `counterName`, `cashierId`. All money is integer paisa; maximum bill/tender is 2,147,483,647. At most 200 distinct product lines. Stock, availability, approval, tenant and expected price are checked; a confirmed business validation rejection is 400.
+- New clients persist `requestId` and the immutable payload before sending. The ID is the existing Order primary key. Repeat requests return the original receipt only for the same merchant, cashier and fingerprint (items/prices/tender/note/counter); mismatches = 409. Order, stock decrement and `POS_SALE_COMPLETED` audit metadata commit atomically. No new schema fields are required. Legacy requests without IDs remain supported but are not repeat-safe.
+- After an uncertain response: `GET /pos/sales/:requestId` to check, or retry the identical POST. A not-found check is not permission to invent a new sale reference. The dashboard retains the pending request across reloads and does not permit a replacement bill until resolved.
+- `GET /pos/sales?from=&to=` → `{count,totalPaisa,sales}` (latest 200); `GET /pos/sales/:id` → same-shop POS receipt with merchant header and saved tender metadata. Older receipts without audit metadata return null tender/change. `GET /pos/summary?from=&to=` → `{count,totalPaisa}` across the date range.
+- The browser counter supports cash, whole packaged units, local drafts/held bills and browser receipt printing. It does not enable digital tender, fractional scale sales, refunds, fiscal integration, offline sale synchronization or drawer reconciliation. Deploy the matching API before enabling the frontend; no database migration was performed for this addition.
+
+### Online-order workflow
+
 - `GET /merchant/orders?status=` · `GET /merchant/orders/:id`
 - `POST /merchant/orders/:id/accept` · `/reject {reason}` · `/preparing` · `/ready` · `/assign-rider {riderId}` (rider must belong to this merchant; order must be READY_FOR_PICKUP)
 - `POST /merchant/orders/:id/items/:itemId/unavailable` `{replacementMerchantProductId?}`
@@ -123,5 +138,5 @@ Order statuses: CREATED, PAYMENT_PENDING, SENT_TO_MERCHANT, MERCHANT_ACCEPTED, M
 - Refunds: `GET /admin/refunds?status=&page=` · `POST /admin/refunds/:id/approve` · `/reject {notes}` · `/process`
 - Settlements: `GET /admin/settlements?merchantId=&status=` · `POST /admin/settlements/generate {merchantId?, startDate, endDate}` (computes from DELIVERED orders: earnings − refunds) · `POST /admin/settlements/:id/mark-paid {paymentReference}` · `/hold {notes}`
 - Support: `GET /admin/support-tickets?status=&page=` · `GET /admin/support-tickets/:id` · `PUT /admin/support-tickets/:id {status?, priority?, assignedToAdminId?}` · `POST /admin/support-tickets/:id/messages {message}`
-- Analytics: `GET /admin/analytics?from=&to=` → `{ordersByDay:[{date, orders, gmvPaisa}], topProducts:[…], topMerchants:[…], avgDeliveryMinutes, cancellationRate}`
+- Analytics: `GET /admin/analytics?from=&to=` → `{ordersByDay:[{date, orders, gmvPaisa, itemValuePaisa}], topProducts:[…], topMerchants:[…], avgDeliveryMinutes, cancellationRate}`. `itemValuePaisa` is delivered merchandise subtotal; `gmvPaisa` remains the existing collected order total.
 - Audit: `GET /admin/audit-logs?entityType=&page=`

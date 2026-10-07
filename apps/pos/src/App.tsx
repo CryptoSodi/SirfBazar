@@ -18,10 +18,10 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-5 py-3">
         <div className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-600 font-black text-white">₨</span>
+          <img src="/brand/sirfbazar-horizontal-no-slogan.svg" alt="SirfBazar" className="h-9 w-auto" />
           <div className="leading-tight">
-            <div className="text-sm font-extrabold">SirfBazar POS</div>
-            <div className="text-[10px] text-slate-400">{user?.merchant?.shopName ?? 'In-store register'}</div>
+            <div className="text-xs font-semibold">POS</div>
+            <div className="text-[10px] text-slate-500">{user?.merchant?.shopName ?? 'In-store register'}</div>
           </div>
         </div>
         <nav className="flex gap-1">

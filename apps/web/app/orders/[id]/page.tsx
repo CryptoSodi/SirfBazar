@@ -1,7 +1,9 @@
 'use client';
 
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useModalFocus } from '@/components/useModalFocus';
+import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
 import { formatPKR, statusLabel, statusTone, TRACKING_STEPS } from '@/lib/format';
 
@@ -14,7 +16,6 @@ const TONE_CLASSES: Record<string, string> = {
 
 function OrderTracking() {
   const { id } = useParams<{ id: string }>();
-  const wantsPay = useSearchParams().get('pay') === '1';
   const [track, setTrack] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null);
   const [error, setError] = useState('');
@@ -38,19 +39,6 @@ function OrderTracking() {
     timer.current = setInterval(load, 5000); // live tracking via polling
     return () => clearInterval(timer.current);
   }, [load]);
-
-  const payNow = async () => {
-    setBusy(true);
-    try {
-      const init = await api.post(`/payments/order/${id}/initiate`);
-      await api.post(`/payments/${init.paymentId}/confirm`, {});
-      await load();
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const cancel = async () => {
     const reason = prompt('Why are you cancelling? (optional)') ?? undefined;
@@ -113,13 +101,10 @@ function OrderTracking() {
       </div>
 
       {/* Payment pending */}
-      {(wantsPay || track.status === 'PAYMENT_PENDING') && track.status === 'PAYMENT_PENDING' && (
+      {track.status === 'PAYMENT_PENDING' && (
         <div className="card border-amber-300 bg-amber-50 p-5">
           <h2 className="font-bold text-amber-800">Complete your payment</h2>
-          <p className="mt-1 text-sm text-amber-700">Your order is reserved and will be sent to the shop once paid.</p>
-          <button className="btn-primary mt-3" onClick={payNow} disabled={busy}>
-            {busy ? 'Processing…' : `Pay ${formatPKR(track.totalAmountPaisa)} now (demo gateway)`}
-          </button>
+          <p className="mt-1 text-sm text-amber-700">This order has not been sent to the shop. Online payment is unavailable until a live provider is verified. Contact support for help.</p>
         </div>
       )}
 
@@ -175,7 +160,7 @@ function OrderTracking() {
                     target="_blank"
                     href={`https://www.google.com/maps?q=${d.riderLocation.latitude},${d.riderLocation.longitude}`}
                   >
-                    📍 Live location
+                    Last reported location ({new Date(d.riderLocation.createdAt).toLocaleTimeString()})
                   </a>
                 )}
               </div>
@@ -212,7 +197,7 @@ function OrderTracking() {
                 <li key={it.id} className="flex justify-between py-1.5">
                   <span className={it.itemStatus !== 'CONFIRMED' ? 'text-stone-400 line-through' : ''}>
                     {it.quantity} × {it.productNameSnapshot}
-                    {it.itemStatus === 'REPLACEMENT_SUGGESTED' && <ReplacementPrompt orderId={o.id} item={it} onDone={load} />}
+                    {it.itemStatus === 'REPLACEMENT_SUGGESTED' && <ReplacementPrompt orderId={o.id} item={it} original={o.items.find((entry: any) => entry.id === it.replacementForItemId)} onDone={load} />}
                   </span>
                   <span>{formatPKR(it.totalPricePaisa)}</span>
                 </li>
@@ -250,22 +235,32 @@ function OrderTracking() {
   );
 }
 
-function ReplacementPrompt({ orderId, item, onDone }: { orderId: string; item: any; onDone: () => void }) {
+function ReplacementPrompt({ orderId, item, original, onDone }: { orderId: string; item: any; original?: any; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const dialogFocus = useModalFocus<HTMLDivElement>(open, () => { if (!busy) setOpen(false); });
   const respond = async (accept: boolean) => {
+    setBusy(true); setError('');
     try {
       await api.post(`/orders/${orderId}/items/${item.replacementForItemId}/replacement`, { accept });
-      onDone();
-    } catch (e: any) {
-      alert(e.message);
-    }
+      setOpen(false); onDone();
+    } catch (cause: any) { setError(cause.message || 'Unable to send your choice. Try again.'); }
+    finally { setBusy(false); }
   };
-  return (
-    <span className="ml-2 inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
-      replacement suggested:
-      <button className="font-bold text-emerald-700 underline" onClick={() => respond(true)}>accept</button>/
-      <button className="font-bold text-red-600 underline" onClick={() => respond(false)}>reject</button>
-    </span>
-  );
+  return <>
+    <button className="ml-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800" onClick={() => setOpen(true)}>Review replacement</button>
+    {open && createPortal(<div className="sb-modal-backdrop"><div ref={dialogFocus.ref} onKeyDown={dialogFocus.onKeyDown} tabIndex={-1} className="card sb-modal" role="dialog" aria-modal="true" aria-labelledby="replacement-title">
+      <button className="float-right" aria-label="Close replacement review" onClick={() => setOpen(false)}>×</button>
+      <h2 id="replacement-title">Your shop suggested a replacement</h2>
+      <p>Review the item and price before deciding. A suggestion is not approval.</p>
+      <div className="sb-replacement-choice"><small>Original</small><strong>{original?.productNameSnapshot || 'Original item'}</strong><span>{original?.totalPricePaisa != null ? formatPKR(original.totalPricePaisa) : 'Price unavailable'}</span></div>
+      <div className="sb-replacement-choice selected"><small>Suggested replacement</small><strong>{item.productNameSnapshot}</strong><span>{formatPKR(item.totalPricePaisa)}</span></div>
+      <p className="sb-cart-warning">The service must recalculate the final order total and any refund. No automatic refund is promised here.</p>
+      {error && <p role="alert" className="sb-error">{error}</p>}
+      <div className="sb-replacement-actions"><button className="btn-secondary" disabled={busy} onClick={() => void respond(false)}>Decline replacement</button><button className="btn-primary" disabled={busy} onClick={() => void respond(true)}>{busy ? 'Please wait…' : 'Accept replacement'}</button></div>
+    </div></div>, document.body)}
+  </>;
 }
 
 export default function OrderPage() {

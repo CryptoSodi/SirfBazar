@@ -9,10 +9,13 @@
     "dev": "nest start --watch",
     "start:prod": "node dist/main",
     "typecheck": "tsc --noEmit",
+    "test:pos": "node -r ts-node/register/transpile-only --test test/pos-counter.test.cjs",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "seed": "ts-node prisma/seed.ts",
+    "seed:merchant-orders": "ts-node test/seed-merchant-orders.ts",
     "import:catalog": "ts-node prisma/import-catalog.ts",
+    "import:grocerie-demo": "ts-node prisma/import-grocerie-demo.ts",
     "stock:demo": "ts-node prisma/stock-demo-shops.ts",
     "smoke": "ts-node test/smoke.ts"
   },

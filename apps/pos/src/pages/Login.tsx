@@ -62,26 +62,24 @@ export default function Login() {
   return (
     <div className="grid min-h-screen place-items-center bg-slate-900 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-lg font-black text-white">₨</span>
-          <div>
-            <div className="font-extrabold">SirfBazar POS</div>
-            <div className="text-xs text-slate-400">In-store register</div>
-          </div>
+        <div className="mb-6">
+          <img src="/brand/sirfbazar-primary.svg" alt="SirfBazar — بازار وہی۔ طریقہ نیا۔" className="h-auto w-56" />
+          <div className="mt-2 text-sm font-semibold text-slate-600">In-store register</div>
         </div>
 
         {step === 'phone' ? (
           <>
-            <label className="mb-1 block text-xs font-semibold text-slate-500">Phone number</label>
-            <input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+92 3xx xxxxxxx" />
+            <label htmlFor="pos-phone" className="mb-1 block text-xs font-semibold text-slate-500">Phone number</label>
+            <input id="pos-phone" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+92 3xx xxxxxxx" />
             <button className={`${btnCls} mt-4 w-full py-2.5`} onClick={sendOtp} disabled={busy || phone.trim().length < 10}>
               {busy ? 'Sending…' : 'Send code'}
             </button>
           </>
         ) : (
           <>
-            <label className="mb-1 block text-xs font-semibold text-slate-500">6-digit code sent to {phone}</label>
+            <label htmlFor="pos-code" className="mb-1 block text-xs font-semibold text-slate-500">6-digit code sent to {phone}</label>
             <input
+              id="pos-code"
               className={`${inputCls} text-center text-xl tracking-[0.4em]`}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}

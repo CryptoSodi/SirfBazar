@@ -1,7 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /** Defaults to the live production API. Local backend: EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:3001/api */
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.sirfbazar.com/api';
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'https://api.sirfbazar.com/api').replace(/\/+$/, '');
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 const KEYS = { access: 'sbm.accessToken', refresh: 'sbm.refreshToken', user: 'sbm.user' };
 
@@ -25,13 +32,13 @@ async function persistAuth(data: { accessToken: string; refreshToken: string; us
 
 export async function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
   await persistAuth(data);
-  // Register this device for order alerts (dynamic import avoids an api↔push cycle).
-  void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
 }
 
 export async function clearAuth() {
   // Stop alerts to this device while the token is still valid.
   await import('./push').then((m) => m.unregisterPush()).catch(() => undefined);
+  const refreshToken = await AsyncStorage.getItem(KEYS.refresh);
+  if (refreshToken) await request('POST', '/auth/logout', { refreshToken }, false).catch(() => undefined);
   await AsyncStorage.multiRemove([KEYS.access, KEYS.refresh, KEYS.user]);
 }
 
@@ -76,7 +83,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   }
   if (!res.ok) {
     const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
-    throw new Error(msg);
+    throw new ApiError(msg, res.status);
   }
   return data;
 }
@@ -96,7 +103,6 @@ export async function finishOnboarding(tokens: { accessToken: string; refreshTok
   ]);
   const user = await request('GET', '/auth/me');
   await AsyncStorage.setItem(KEYS.user, JSON.stringify(user));
-  void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
   return user;
 }
 

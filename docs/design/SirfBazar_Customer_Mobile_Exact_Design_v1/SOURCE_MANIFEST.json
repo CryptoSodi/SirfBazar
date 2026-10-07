@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-06",
+  "sources": [
+    {
+      "id": "N1",
+      "repository": "CryptoSodi/SirfBazar",
+      "path": "apps/customer-app/package.json",
+      "blob_sha": "73a77f3c04f0060f01b28eaafd5dbd405dc2af87",
+      "ref": "default branch",
+      "readDate": "2026-10-06",
+      "scope": "complete package manifest",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/customer-app/package.json"
+    },
+    {
+      "id": "N2",
+      "repository": "CryptoSodi/SirfBazar",
+      "path": "apps/customer-app/App.tsx",
+      "blob_sha": "c1d4f62ecd60e5ba930cdfdf2641a8b36259875b",
+      "ref": "default branch",
+      "readDate": "2026-10-06",
+      "scope": "complete navigation/root source",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/customer-app/App.tsx"
+    },
+    {
+      "id": "N3",
+      "repository": "CryptoSodi/SirfBazar",
+      "path": "apps/customer-app/lib/api.ts",
+      "blob_sha": "7e8cca9fa1e99aca5d942c398ebf228997f46e32",
+      "ref": "default branch",
+      "readDate": "2026-10-06",
+      "scope": "complete native API client source",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/customer-app/lib/api.ts"
+    },
+    {
+      "id": "N4",
+      "repository": "CryptoSodi/SirfBazar",
+      "path": "apps/customer-app/screens/CheckoutScreen.tsx",
+      "blob_sha": "8d4e6740e56b41d892973eaf7add0a97a0d29757",
+      "ref": "default branch",
+      "readDate": "2026-10-06",
+      "scope": "requested lines 1\u2013230, checkout code returned",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/customer-app/screens/CheckoutScreen.tsx"
+    },
+    {
+      "id": "N5",
+      "repository": "CryptoSodi/SirfBazar",
+      "path": "apps/customer-app/components/LoginSheet.tsx",
+      "blob_sha": "47a40d11279e46d4e83827c00331cb8b86c50734",
+      "ref": "default branch",
+      "readDate": "2026-10-06",
+      "scope": "requested lines 1\u2013160, LoginSheet returned",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/customer-app/components/LoginSheet.tsx"
+    },
+    {
+      "id": "B1",
+      "repository": "CryptoSodi/SirfBazar",
+      "path": "apps/api/src/guest/guest.controller.ts",
+      "blob_sha": "db9c06c27d50d6087ba1397228ddeee3c6359545",
+      "ref": "default branch",
+      "readDate": "2026-10-06",
+      "scope": "complete guest controller",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/guest/guest.controller.ts"
+    },
+    {
+      "id": "B2",
+      "repository": "CryptoSodi/SirfBazar",
+      "path": "apps/api/src/cart/cart.service.ts",
+      "blob_sha": "acac2dcea48144bd642ccd3a0ecc4c8cad1a8e09",
+      "ref": "default branch",
+      "readDate": "2026-10-06",
+      "scope": "selected lines147\u2013362: merge/view/validation; not whole module audit",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/cart/cart.service.ts"
+    },
+    {
+      "id": "E1",
+      "path": "evidence/API_STARTUP_LOG.txt",
+      "sha256": "e2e1798cf248872d955640e7f8f3f7c50787d5fdaf64b530df5a669f2d1d6d1a",
+      "scope": "Owner supplied startup log, dated29September2026, route registration not runtime test"
+    },
+    {
+      "id": "E2",
+      "path": "evidence/website-baseline-API_CONTRACT_MAP.md",
+      "sha256": "66ee8be686493e625bfaa103cae9526fea4b38f31d3fecb31a901ef65998eeec",
+      "scope": "Earlier customer backend review retained as baseline, not a fresh audit of all endpoints"
+    },
+    {
+      "id": "W1",
+      "url": "https://developers.openai.com/codex/cli/reference/",
+      "checked": "2026-10-06",
+      "scope": "Codex initial-prompt command, redirects to current official developer-command documentation"
+    },
+    {
+      "id": "W2",
+      "url": "https://docs.expo.dev/develop/development-builds/introduction/",
+      "checked": "2026-10-06",
+      "scope": "Native development builds and modules"
+    },
+    {
+      "id": "W3",
+      "url": "https://reactnative.dev/docs/dimensions",
+      "checked": "2026-10-06",
+      "scope": "Logical layout/device dimensions"
+    }
+  ],
+  "scope": "Design handoff. Source reads and offline reference QA only. No authenticated production tests, native app build, deployment, or live Stitch generation."
+}

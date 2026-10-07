@@ -46,17 +46,15 @@ export default function Login() {
   return (
     <div className="grid min-h-screen place-items-center bg-slate-900 p-4">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl">
-        <div className="mb-6 flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-600 text-lg font-black text-white">SB</span>
-          <div>
-            <div className="font-extrabold">SirfBazar Admin</div>
-            <div className="text-xs text-slate-400">Marketplace operations console</div>
-          </div>
+        <div className="mb-6">
+          <img src="/brand/sirfbazar-primary.svg" alt="SirfBazar — بازار وہی۔ طریقہ نیا۔" className="h-auto w-56" />
+          <div className="mt-2 text-sm font-semibold text-slate-600">Admin console</div>
         </div>
-        <label className="mb-1 block text-xs font-semibold text-slate-500">Email</label>
-        <input className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
-        <label className="mb-1 mt-3 block text-xs font-semibold text-slate-500">Password</label>
+        <label htmlFor="admin-email" className="mb-1 block text-xs font-semibold text-slate-500">Email</label>
+        <input id="admin-email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+        <label htmlFor="admin-password" className="mb-1 mt-3 block text-xs font-semibold text-slate-500">Password</label>
         <input
+          id="admin-password"
           type="password"
           className={inputCls}
           value={password}

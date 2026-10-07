@@ -1,0 +1,150 @@
+{
+  "scope": "local HTML design only; not native, hosted persistence or live API tests",
+  "results": [
+    {
+      "name": "All 42 scenes render in both themes without horizontal overflow",
+      "pass": true,
+      "detail": {
+        "renders": 84,
+        "failures": []
+      }
+    },
+    {
+      "name": "42 scenes at 320 logical width",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "42 scenes at 360 logical width",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "42 scenes at 412 logical width",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "Guest entry has no authentication or modal",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Adding does not request sign-in",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Second merchant does not clear first merchant",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Guest address validation precedes checkout sign-in",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Identity is requested only on deliberate checkout continuation",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Theme switching preserves address and input",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Verification does not place an order",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Basket preserved after local verification",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Separate explicit Place order action exists",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Local completion snapshot agrees with selected basket",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Sent receipt does not imply merchant acceptance",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Dismissing sign-in keeps basket",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Invalid code has inline feedback",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Global catalogue does not show a fake price or Add",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Product search filters local fixture",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Issue send validates meaningful fields",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Modal focus is contained and Escape closes without login",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "System follows device preference",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Explicit theme does not follow OS changes",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Reduced motion disables skeleton animation",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "Uncertain order cannot be replayed through a Place button",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "No payment-confirm action is exposed",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "No JavaScript exceptions",
+      "pass": true,
+      "detail": []
+    },
+    {
+      "name": "No network requests in preview",
+      "pass": true,
+      "detail": []
+    }
+  ],
+  "passed": 28,
+  "total": 28
+}

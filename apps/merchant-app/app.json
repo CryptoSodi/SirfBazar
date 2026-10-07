@@ -7,8 +7,10 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "sirfbazar-merchant",
+    "icon": "./assets/brand/sirfbazar-app-icon-green.png",
     "splash": {
-      "backgroundColor": "#0f172a",
+      "image": "./assets/brand/sirfbazar-reverse.png",
+      "backgroundColor": "#009966",
       "resizeMode": "contain"
     },
     "ios": {

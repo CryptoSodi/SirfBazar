@@ -23,3 +23,15 @@ apps/api/storage/catalog/
 apps/api/storage/uploads/
 playwright-report/
 test-results/
+.playwright-cli/
+
+# Local previews, verification artifacts and personal agent configuration
+dist-local/
+/output/
+/.agenteam/
+/.codex/
+.vercel/
+*.tsbuildinfo
+**/API_STARTUP_LOG.txt
+**/__pycache__/
+*.pyc

@@ -1,0 +1,198 @@
+[
+  {
+    "theme": "light",
+    "pair": "ink on surface",
+    "ratio": 17.24,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "ink on bg",
+    "ratio": 16.17,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "muted on surface",
+    "ratio": 5.94,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "muted on bg",
+    "ratio": 5.57,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "quiet on surface",
+    "ratio": 4.67,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "accent on mint",
+    "ratio": 4.81,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "on-action on action",
+    "ratio": 5.38,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "on-action on hero",
+    "ratio": 8.71,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "hero-quiet on hero",
+    "ratio": 6.71,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "amber on amber-bg",
+    "ratio": 5.79,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "blue on blue-bg",
+    "ratio": 5.85,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "red on red-bg",
+    "ratio": 5.64,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "control on surface",
+    "ratio": 3.28,
+    "target": 3,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "pair": "focus on surface",
+    "ratio": 5.4,
+    "target": 3,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "ink on surface",
+    "ratio": 14.86,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "ink on bg",
+    "ratio": 16.7,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "muted on surface",
+    "ratio": 8.73,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "muted on bg",
+    "ratio": 9.81,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "quiet on surface",
+    "ratio": 7.87,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "accent on mint",
+    "ratio": 7.64,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "on-action on action",
+    "ratio": 5.38,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "on-action on hero",
+    "ratio": 9.78,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "hero-quiet on hero",
+    "ratio": 7.52,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "amber on amber-bg",
+    "ratio": 8.3,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "blue on blue-bg",
+    "ratio": 7.56,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "red on red-bg",
+    "ratio": 7.58,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "control on surface",
+    "ratio": 4.95,
+    "target": 3,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "pair": "focus on surface",
+    "ratio": 8.62,
+    "target": 3,
+    "pass": true
+  }
+]

@@ -1,0 +1,116 @@
+# Codex — reproduce the exact SirfBazar Rider design
+
+Implement the EXACT supplied SirfBazar Rider mobile design in my EXISTING native rider application. This is a design reproduction plus existing-API integration task, NOT a redesign, new scaffold or HTML-in-WebView wrapper. Make the code changes and verify them; do not stop at a plan.
+
+## 1. Find and read the fixed reference
+
+Locate `SirfBazar_Rider_Exact_Codex_Pack` in the current workspace, normally under `docs/design/`. Read repository instructions, `START_HERE.md`, `RIDER_EXACT_IMPLEMENTATION.md`, `VISUAL_ACCEPTANCE.md` and `SCREEN_PARITY_MATRIX.md`.
+
+Read and visually inspect:
+- `reference-v1/SirfBazar_Rider_Design.html`.
+- `reference-v1/rider-design.css`, `rider-preview.js` and `theme-tokens.ts`.
+- `reference-v1/assets/`, all `reference-v1/screens/`, `SCREENS.json` and `SCREENSHOTS.json`.
+- `reference-v1/SIRFBAZAR_RIDER_APP_DESIGN.md`, `API_CONTRACT_MAP.md`, `SOURCE_MANIFEST.json` and `QA_REPORT.md`.
+
+Run the top-level `tools/verify_reference.py`. The original reference is immutable. Do not regenerate expected screenshots, alter CSS/assets or widen image-diff thresholds to make a mismatch disappear. Do not run the reference's legacy build/finalize tools. Use its HTML for measurement and reference interaction only.
+
+## 2. Inspect the real application before editing
+
+Find the active rider workspace, previously `apps/rider-app`, and inspect its package/lockfile, React Native/Expo versions, React Navigation routes, native configuration, session/refresh, Google sign-in, push, location code, existing assets and uncommitted work.
+
+Reuse that application even when its frontend checkout is separate. Preserve working functionality and existing dependency versions. Do not create another rider app, migrate SDK/router, install a website framework, replace the backend or modify merchant/customer/admin applications. Add a compatible dependency only when genuinely needed for this native implementation and record why; do not upgrade the whole stack.
+
+Use real native components. Reproduce the source hierarchy using View, Text, Image, Pressable, ScrollView/FlatList, TextInput, native navigation and appropriately styled sheets. Do not copy DOM/innerHTML code, CSS directly into StyleSheet, the fake state machine, browser test hooks or mock success handlers into production.
+
+## 3. Lock the appearance
+
+Match the actual HTML's layout, section order, whitespace, card widths/heights, alignment, typography hierarchy, line heights, icon paths, stroke widths, borders, radii, shadows, selected states and actions. Do not use a similar UI kit or substitute default native component styling.
+
+Use the original basket/wordmark and slogan assets. Keep RIDER as a separate role label. No leaf, shopfront replacement logo, generic monogram or mascot. Preserve:
+بازار وہی۔ طریقہ نیا۔
+
+Keep the exact theme tokens. Identity is #009966; primary action #007A52; light canvas #F7F8F5; dark canvas #101614. The complete palette is in the reference, not just these four values.
+
+Reference dimensions are 390 × 844 LOGICAL units; 780 × 1688 PNGs are 2× captures. Do not make the native screen 780 dp wide. Match the app-controlled layout at equivalent logical sizes. Use 360 × 800 and 412 × 915 as additional checks. Read computed source dimensions instead of estimating from thumbnails.
+
+Use the source-matched logo PNG/SVG assets and exact icon geometry. `native-handoff/RiderReferenceIcon.tsx` is an optional generated adapter for react-native-svg, not a dependency already assumed installed. The source default icon is 22 units, viewBox 0 0 24 24, stroke 1.7; retain per-component overrides.
+
+The source font stack is Plus Jakarta Sans, Inter, Arial, sans-serif. Original screenshots used an installed browser fallback; they are not evidence that Plus Jakarta Sans loaded. Record the actual native font and weights, match font conditions for comparison where possible, and fix genuine wrapping/spacing differences without silently changing the approved font. No stretched text or whole-screen scaling.
+
+## 4. Implement all screens, not only Home
+
+Navigation is Deliveries, History, Help, Profile. Delivery detail uses a back/header/help row and a bottom next-action dock instead of tabs.
+
+Implement all 26 reference compositions and their relevant sheets:
+R01 Deliveries; R02 Assigned order; R03 Pickup check; R04 On the way;
+R05 At customer; R06 Cash and delivery code; R07 Completed; R08 Paid variant;
+R09 History; R10 Help; R11 Report issue; R12 Profile; R13 Appearance;
+R14 Location/alerts; R15 Sign-in; R16 Verify phone; R17 Find shop;
+R18 Join shop; R19 Pending approval; R20 No assignments; R21 Offline/stale;
+R22 Loading; R23 API error; R24 Expired session; R25 Inactive;
+R26 Completion uncertain.
+
+These are screen/state compositions, not a requirement for 26 separate navigation routes. Share the delivery and form components while rendering the reference state correctly. Include content below the initial viewport and confirmation, contact, support, notification and sign-out sheets. Do not stop after a few sample screens.
+
+## 5. Native adaptations are narrow and documented
+
+The production app must use real safe areas, status/navigation bars, keyboard handling, Android back and native permission/dialer/maps/Google flows. Do not draw the fake 9:41 clock, phone outline, desktop review rails, API notes or scenario selector. Do not retain empty space reserved for those review tools.
+
+Keep the exact designed in-app permission explanation, then call the real OS prompt. Keep primary actions above the keyboard and make large text scroll/wrap without hiding content. These platform requirements are not permission to redesign the cards or navigation.
+
+The illustrated map is fictional. Keep its container/visual hierarchy, but use the existing verified external navigation with an honest location summary, or an already configured real map. Never ship the example route as a customer's live location. Record this permitted production difference.
+
+## 6. Light, Dark and System everywhere
+
+Match the reference Appearance choices and preview. Apply tokens to safe areas, headers, tabs, every card/form/sheet, status/payment notices, disabled/error/loading states, maps/fallbacks and toasts. System follows OS changes only when selected. Persist only the validated preference under the established app convention.
+
+Theme changes must preserve the selected delivery, screen stack, entered code/notes, form checks, scroll, filters and pending operations. Use restrained 140ms feedback and 200ms entrances from the source; honor OS reduced motion. Never delay a server result for animation or animate fake GPS/progress.
+
+## 7. Connect existing rider APIs
+
+Use the existing backend in `SirfBazar/apps/api` and native configuration:
+EXPO_PUBLIC_API_URL=https://api.sirfbazar.com/api
+
+Use relative paths such as /rider/profile, so /api appears exactly once. Preserve existing session transport and refresh policy; do not use merchant Vite configuration, GroceryServer endpoints, admin credentials, fixed OTPs or mock Google tokens.
+
+Verify current DTOs/services and live-deployment differences before binding. The supplied map is source-reviewed context, not proof that every live contract is unchanged.
+
+Connect profile, assigned list/detail, online/offline, arrived-shop, picked-up, arrived-customer, delivered, report-issue and history. Connect the existing phone/Google, shop search/application and supported support/notification flows. Do not invent rider editing, accepting jobs, salary/earnings, cash handover, reassignment or an open jobs feed.
+
+The merchant assigns the delivery; the rider performs only authorized progress actions. Pickup is supported from RIDER_ASSIGNED or RIDER_ARRIVED_AT_SHOP and moves the main status to ON_THE_WAY. Completion is supported from ON_THE_WAY or RIDER_ARRIVED_AT_CUSTOMER in the reviewed service. Preserve these supported paths while keeping the reference's next-action hierarchy.
+
+Use the CUSTOMER delivery code, not the rider's login OTP. Verify the current generator: the reviewed order generator uses four digits, while the login flow has its own contract. Never fetch, prefill, retain, log or display deliveryOtp from rider responses. A response leak needs backend review, not just hiding the input.
+
+COD instructions require the real payment method/status and order amount. PAID means no cash collection. Already collected, pending, failed or unknown states must not ask for duplicate cash or pretend payment succeeded. Handover/cash checkboxes are local safeguards, not new request fields. Complete uses { otp, photoUrl?, note? }; order issue uses { description }.
+
+Wait for real confirmation, refetch detail/profile/list/history as appropriate and reconcile on relaunch. Prevent duplicate submissions. On an ambiguous timeout, refetch saved status before retry; do not auto-replay completion or tell the rider to collect cash again. Never show issue-report success after a caught failure. Going offline does not cancel assignments.
+
+## 8. Device behavior and production boundaries
+
+Request only the permissions needed at the relevant point. Location must reflect consent and the intended active-delivery lifecycle, not simply a mounted screen or Online flag. Clean up watchers/polling appropriately. Test maps hand-off, app background/foreground, lock, revoked access and completion cleanup. Do not promise background tracking from foreground pings.
+
+Native Google sign-in, push and location require actual device/build verification. Do not claim they work based on HTML or a browser build. Preserve compatible development-build configuration; no forced SDK upgrade or destructive prebuild reset.
+
+Normal application screens use real authenticated API data. Keep exact fictional fixtures only in isolated local visual/component tests. No public auth-bypass route and no silent demo fallback on request failure.
+
+Implement the frontend handlers, but do not perform production OTP requests, memberships, presence/location writes, delivery updates, support messages or other mutations as demonstration tests. Live writes require approved test accounts/records and explicit test scope. No apps/api edits, migrations, seeds, backend deployment or store release are authorized by this task.
+
+Record the reference's existing concerns about OTP serialization, mock verification settings, active/approved enforcement and partial completion effects. Do not probe bypasses or claim that UI changes fix server security.
+
+## 9. Compare the actual native result and correct it
+
+Use the supplied screen matrix, original HTML, CSS and screenshots. Top-level tools can verify source hashes, capture offline HTML references and generate image overlays/diffs; they do not capture or certify the native app.
+
+Create isolated same-content native visual states, capture real Android/iOS screenshots using available tooling, and compare both themes against the same reference state. Align logical width, scale, content, font conditions, scroll and animation state. Separate app content from documented OS-owned regions. Do not resize mismatched screenshots or hide controls in broad masks to manufacture agreement.
+
+Correct geometry, wrapping, color, assets, stroke weight, sheet position and fixed-action placement, then repeat. All 26 states need Light/Dark review, plus System behavior. Test larger text, keyboard, safe areas, hardware back, screen-reader labels, focus return, empty/loading/error/stale/expired/inactive states and uncertain completion.
+
+Run the actual repository type checks and available native/component/integration checks. If native tooling or test credentials are unavailable, complete independent work and identify exactly which verification is blocked. Never label browser-only work as verified native parity.
+
+## 10. Deliver implemented work and evidence
+
+Maintain screen-status.md, api-status.md, visual-parity-report.md and design-deviations.md using the provided templates. Report exact code files changed, screens implemented, actual live calls tested, device/build conditions, comparison screenshots, checks run and remaining blockers separately.
+
+The task is complete only when the existing native app reproduces the selected design and supported actions are wired, with evidence for the checks claimed. Do not say “100% exact”, “all APIs integrated” or “production-ready” based on a prompt, a screenshot of the HTML or copied colors.
+
+Start now: inspect, implement, render, compare, correct and verify. Do not deliver another disconnected HTML demo.

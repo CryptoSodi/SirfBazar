@@ -1,0 +1,137 @@
+{
+  "date": "2026-09-29",
+  "repository": "CryptoSodi/SirfBazar",
+  "source_ref": "default branch at retrieval",
+  "sources": [
+    {
+      "id": "C1",
+      "path": "apps/api/src/catalog/catalog.controller.ts",
+      "blob_sha": "fc73050df208a0eb06523cab40abe92d1493a3b6",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/catalog/catalog.controller.ts"
+    },
+    {
+      "id": "C2",
+      "path": "apps/api/src/catalog/catalog.service.ts",
+      "blob_sha": "b3afa7b14565c6036018c83f3100431db03ed5b7",
+      "inspected_lines": "1-245,445-720",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/catalog/catalog.service.ts"
+    },
+    {
+      "id": "C3",
+      "path": "apps/api/src/catalog/catalog.dto.ts",
+      "blob_sha": "82888385aa8b133af8da3a89d2eefeda52aa62ec",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/catalog/catalog.dto.ts"
+    },
+    {
+      "id": "C4",
+      "path": "apps/api/src/cart/cart.service.ts",
+      "blob_sha": "acac2dcea48144bd642ccd3a0ecc4c8cad1a8e09",
+      "inspected_lines": "1-390",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/cart/cart.service.ts"
+    },
+    {
+      "id": "C5",
+      "path": "apps/api/src/guest/guest.controller.ts",
+      "blob_sha": "db9c06c27d50d6087ba1397228ddeee3c6359545",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/guest/guest.controller.ts"
+    },
+    {
+      "id": "C6",
+      "path": "apps/api/src/orders/orders.controller.ts",
+      "blob_sha": "5c0b8dcae84c2210756ea45f94fb7ff4a97637da",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/orders/orders.controller.ts"
+    },
+    {
+      "id": "C7",
+      "path": "apps/api/src/orders/orders.service.ts",
+      "blob_sha": "53dad886ddc3c86ad6b15ddcabd23a66e792632b",
+      "inspected_lines": "1-475",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/orders/orders.service.ts"
+    },
+    {
+      "id": "C8",
+      "path": "apps/api/src/payments/payments.service.ts",
+      "blob_sha": "e36e7608bb45f8fb41fcea3e3e921298f7ef19b5",
+      "inspected_lines": "1-200",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/payments/payments.service.ts"
+    },
+    {
+      "id": "C9",
+      "path": "apps/api/src/customers/customers.controller.ts",
+      "blob_sha": "ed2786e89309025a154e10f4c1b0e4a7778e80cf",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/customers/customers.controller.ts"
+    },
+    {
+      "id": "C10",
+      "path": "apps/web/components/LoginSheet.tsx",
+      "blob_sha": "99372098d50fb5ce756682ed4637ce245af7a273",
+      "inspected_lines": "1-185",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/web/components/LoginSheet.tsx"
+    },
+    {
+      "id": "C11",
+      "path": "apps/web/lib/api.ts",
+      "blob_sha": "4f2a90ed5d3fb48ac034661f5434c63eb1118093",
+      "inspected_lines": "1-255",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/web/lib/api.ts"
+    },
+    {
+      "id": "C12",
+      "path": "apps/web/app/checkout/page.tsx",
+      "blob_sha": "9e5974bc372c0aa76e7d173fad2b63a709abc678",
+      "inspected_lines": "1-190",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/web/app/checkout/page.tsx"
+    },
+    {
+      "id": "C13",
+      "path": "apps/api/src/cart/cart.controller.ts",
+      "blob_sha": "5864f7e7966b41d4527f3c74bd6096f06f5ba9b3",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/cart/cart.controller.ts"
+    },
+    {
+      "id": "C14",
+      "path": "apps/api/src/cart/cart.dto.ts",
+      "blob_sha": "1876cefa42491a5648463a90f7703c16d841c5aa",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/cart/cart.dto.ts"
+    },
+    {
+      "id": "C15",
+      "path": "apps/api/src/catalog/location.service.ts",
+      "blob_sha": "50459dd15fb034f881922952dec73e8df1f50f93",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/catalog/location.service.ts"
+    },
+    {
+      "id": "C16",
+      "path": "apps/web/package.json",
+      "blob_sha": "03005cab79c61ede6e627bed3afa460fc6a5a10a",
+      "inspected_lines": "full",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/web/package.json"
+    }
+  ],
+  "owner_api_origin": "https://api.sirfbazar.com",
+  "source_log_sha256": "e2e1798cf248872d955640e7f8f3f7c50787d5fdaf64b530df5a669f2d1d6d1a",
+  "deployment_status": "No authenticated API reads or mutations performed. Public origin unavailable to this environment; no outage conclusion. Blob SHAs identify inspected file versions, not a deployed commit.",
+  "research": [
+    {
+      "id": "UX1",
+      "url": "https://baymard.com/research-articles/delayed-account-creation",
+      "use": "Account creation friction and the distinction from actual guest checkout; not a SirfBazar conversion forecast"
+    },
+    {
+      "id": "UX2",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html"
+    },
+    {
+      "id": "UX3",
+      "url": "https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html"
+    }
+  ]
+}

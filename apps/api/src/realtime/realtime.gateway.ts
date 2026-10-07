@@ -31,7 +31,14 @@ export class RealtimeGateway implements OnGatewayConnection {
     private readonly prisma: PrismaService,
   ) {}
 
-  async handleConnection(client: Socket) {
+  handleConnection(client: Socket) {
+    // Join messages can arrive while asynchronous JWT verification is running.
+    // Every room handler waits for this promise before reading the identity.
+    client.data.authReady = this.authenticate(client);
+    return client.data.authReady;
+  }
+
+  private async authenticate(client: Socket) {
     const token = client.handshake.auth?.token || client.handshake.query?.token;
     if (typeof token === 'string' && token) {
       try {
@@ -48,6 +55,7 @@ export class RealtimeGateway implements OnGatewayConnection {
 
   @SubscribeMessage('join:order')
   async joinOrder(@ConnectedSocket() client: Socket, @MessageBody() body: { orderId: string }) {
+    await client.data.authReady;
     const { userId, role } = client.data;
     if (!userId || !body?.orderId) return { ok: false };
 
@@ -77,6 +85,7 @@ export class RealtimeGateway implements OnGatewayConnection {
 
   @SubscribeMessage('join:merchant')
   async joinMerchant(@ConnectedSocket() client: Socket, @MessageBody() body: { merchantId: string }) {
+    await client.data.authReady;
     const { userId, role } = client.data;
     if (!userId || !body?.merchantId) return { ok: false };
 
@@ -95,6 +104,7 @@ export class RealtimeGateway implements OnGatewayConnection {
 
   @SubscribeMessage('join:rider')
   async joinRider(@ConnectedSocket() client: Socket, @MessageBody() body: { riderId: string }) {
+    await client.data.authReady;
     const { userId, role } = client.data;
     if (!userId || !body?.riderId) return { ok: false };
 

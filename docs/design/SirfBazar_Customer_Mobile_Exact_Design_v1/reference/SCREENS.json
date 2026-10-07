@@ -1,0 +1,296 @@
+[
+  {
+    "id": "C01",
+    "key": "home",
+    "title": "Home \u00b7 browse first",
+    "group": "Discovery",
+    "note": "Public products, categories and merchants. No account or permission wall."
+  },
+  {
+    "id": "C02",
+    "key": "nearby",
+    "title": "Home \u00b7 area selected",
+    "group": "Discovery",
+    "note": "Optional confirmed location improves offers. Do not label fallback coordinates as detected."
+  },
+  {
+    "id": "C03",
+    "key": "categories",
+    "title": "Shop by category",
+    "group": "Discovery",
+    "note": "Category tree; no merchant or admin taxonomy editing."
+  },
+  {
+    "id": "C04",
+    "key": "search",
+    "title": "Search & filters",
+    "group": "Discovery",
+    "note": "Search q, categories and supported sort. Actual merchant listing selected before Add."
+  },
+  {
+    "id": "C05",
+    "key": "shops",
+    "title": "Local shops",
+    "group": "Discovery",
+    "note": "Merchant cards; fees shown in basket, not invented on cards."
+  },
+  {
+    "id": "C06",
+    "key": "shop",
+    "title": "Shop storefront",
+    "group": "Discovery",
+    "note": "Shop product listing IDs, stock, price and merchant identity."
+  },
+  {
+    "id": "C07",
+    "key": "product",
+    "title": "Product & sellers",
+    "group": "Discovery",
+    "note": "Global productId for detail; merchantProductId for Add. Do not silently switch seller."
+  },
+  {
+    "id": "C08",
+    "key": "catalog",
+    "title": "Global catalogue",
+    "group": "Discovery",
+    "note": "Catalogue-only items have no price or seller. Check availability instead of Add."
+  },
+  {
+    "id": "C09",
+    "key": "basket",
+    "title": "Your basket",
+    "group": "Basket",
+    "note": "Guest cart works without login. Quantity updates preserve the merchant listing."
+  },
+  {
+    "id": "C10",
+    "key": "multi",
+    "title": "Two-shop basket",
+    "group": "Basket",
+    "note": "Group products and delivery fees by shop. Shared fees displayed once."
+  },
+  {
+    "id": "C11",
+    "key": "checkout",
+    "title": "Delivery details",
+    "group": "Checkout",
+    "note": "Guest address is a local draft until identity; no unauthorized address write."
+  },
+  {
+    "id": "C12",
+    "key": "location",
+    "title": "Delivery area",
+    "group": "Discovery",
+    "note": "Manual browsing plus optional native permission. No forced map or sign-in at launch."
+  },
+  {
+    "id": "C13",
+    "key": "map",
+    "title": "Confirm delivery pin",
+    "group": "Checkout",
+    "note": "Illustrative preview, not GPS. Use existing real native map/coordinates in production."
+  },
+  {
+    "id": "C14",
+    "key": "signin",
+    "title": "Sign in at checkout",
+    "group": "Checkout",
+    "note": "Phone OTP or Google. New and returning customers share the same entry."
+  },
+  {
+    "id": "C15",
+    "key": "verify",
+    "title": "Verify phone",
+    "group": "Checkout",
+    "note": "Auth verification then merge, reprice and final review. Never automatically place."
+  },
+  {
+    "id": "C16",
+    "key": "merge",
+    "title": "Basket merged \u00b7 review",
+    "group": "Checkout",
+    "note": "Show added existing-account items/quantities. Review after authenticated merge."
+  },
+  {
+    "id": "C17",
+    "key": "review",
+    "title": "Final order review",
+    "group": "Checkout",
+    "note": "Verified customer address and priced basket. Explicit Place order after login."
+  },
+  {
+    "id": "C18",
+    "key": "sent",
+    "title": "Order sent",
+    "group": "Orders",
+    "note": "COD sent to merchant is not accepted, paid or delivered."
+  },
+  {
+    "id": "C19",
+    "key": "tracking",
+    "title": "Track your delivery",
+    "group": "Orders",
+    "note": "Per-delivery status, last known rider location and customer-only code when returned."
+  },
+  {
+    "id": "C20",
+    "key": "multitrack",
+    "title": "Track two deliveries",
+    "group": "Orders",
+    "note": "Parent and child IDs retained. Each shop may be at a different status."
+  },
+  {
+    "id": "C21",
+    "key": "order",
+    "title": "Order details",
+    "group": "Orders",
+    "note": "Stored line snapshots and totals. Cancellation only where current service permits."
+  },
+  {
+    "id": "C22",
+    "key": "orders",
+    "title": "Your orders",
+    "group": "Orders",
+    "note": "Customer-owned orders, capped in baseline source. No lifetime totals or fake pagination."
+  },
+  {
+    "id": "C23",
+    "key": "guest-account",
+    "title": "Account \u00b7 guest",
+    "group": "Account",
+    "note": "Private actions may request login deliberately; public shopping remains available."
+  },
+  {
+    "id": "C24",
+    "key": "account",
+    "title": "Account \u00b7 member",
+    "group": "Account",
+    "note": "Customer details and preferences. No merchant or rider role switcher."
+  },
+  {
+    "id": "C25",
+    "key": "addresses",
+    "title": "Saved addresses",
+    "group": "Account",
+    "note": "Customer address CRUD; known address IDs and account scope."
+  },
+  {
+    "id": "C26",
+    "key": "address",
+    "title": "Edit delivery address",
+    "group": "Account",
+    "note": "Write address only when authenticated. Keep map pin and text independently editable."
+  },
+  {
+    "id": "C27",
+    "key": "appearance",
+    "title": "Appearance",
+    "group": "Account",
+    "note": "Light, Dark, System. Preserve basket, draft and navigation on theme change."
+  },
+  {
+    "id": "C28",
+    "key": "help",
+    "title": "Help & support",
+    "group": "Account",
+    "note": "Order-linked and general support using real authorized tickets, no fake live chat."
+  },
+  {
+    "id": "C29",
+    "key": "issue",
+    "title": "Report an order issue",
+    "group": "Orders",
+    "note": "Create ticket only after explicit submit; errors never display sent."
+  },
+  {
+    "id": "C30",
+    "key": "replacement",
+    "title": "Review a replacement",
+    "group": "Orders",
+    "note": "Customer approval is separate from merchant suggestion; refetch totals after decision."
+  },
+  {
+    "id": "C31",
+    "key": "rating",
+    "title": "Rate delivered order",
+    "group": "Orders",
+    "note": "Actual rate DTO and eligibility; no forced review to finish shopping."
+  },
+  {
+    "id": "C32",
+    "key": "empty",
+    "title": "Empty basket",
+    "group": "Recovery",
+    "note": "Only confirmed empty data. Not the same as loading or network failure."
+  },
+  {
+    "id": "C33",
+    "key": "no-service",
+    "title": "Outside delivery area",
+    "group": "Recovery",
+    "note": "Keep catalogue browsing available; do not fake nearby availability."
+  },
+  {
+    "id": "C34",
+    "key": "no-results",
+    "title": "No search results",
+    "group": "Recovery",
+    "note": "Keep the search term and recover without changing authentication."
+  },
+  {
+    "id": "C35",
+    "key": "loading",
+    "title": "Loading catalogue",
+    "group": "Recovery",
+    "note": "Stable skeletons, no fabricated zero price or stock."
+  },
+  {
+    "id": "C36",
+    "key": "error",
+    "title": "Connection problem",
+    "group": "Recovery",
+    "note": "Honest retry; never load demo records as a production fallback."
+  },
+  {
+    "id": "C37",
+    "key": "changes",
+    "title": "Price / stock changed",
+    "group": "Recovery",
+    "note": "Explicit review before submission; no silent quantity changes."
+  },
+  {
+    "id": "C38",
+    "key": "expired",
+    "title": "Session expired",
+    "group": "Recovery",
+    "note": "Basket/draft recovery without exposing private data or auto-placing."
+  },
+  {
+    "id": "C39",
+    "key": "uncertain",
+    "title": "Order result uncertain",
+    "group": "Recovery",
+    "note": "Check confirmed orders before retrying; do not blindly replay order creation."
+  },
+  {
+    "id": "C40",
+    "key": "payment",
+    "title": "Payment pending",
+    "group": "Recovery",
+    "note": "Provider-gated. No client-side mock-confirm operation in production."
+  },
+  {
+    "id": "C41",
+    "key": "notifications",
+    "title": "Order updates",
+    "group": "Account",
+    "note": "Authenticated notification feed and read actions; no fictional unread counts live."
+  },
+  {
+    "id": "C42",
+    "key": "merge-error",
+    "title": "Merge not confirmed",
+    "group": "Recovery",
+    "note": "Preserve both contexts; additive merge needs backend idempotency for safe retry."
+  }
+]

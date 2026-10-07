@@ -1,14 +1,17 @@
-import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { Appearance } from 'react-native';
+import { Appearance, Platform } from 'react-native';
 import { useEffect } from 'react';
 import { isLoggedIn } from './lib/api';
 import { loadThemeMode, useTheme } from './lib/theme';
 import HomeScreen from './screens/HomeScreen';
 import SearchScreen from './screens/SearchScreen';
 import CategoryScreen from './screens/CategoryScreen';
+import BrowseScreen from './screens/BrowseScreen';
+import GlobalCatalogScreen from './screens/GlobalCatalogScreen';
+import HelpScreen from './screens/HelpScreen';
 import CartScreen from './screens/CartScreen';
 import OrdersScreen from './screens/OrdersScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -19,23 +22,67 @@ import OrderDetailScreen from './screens/OrderDetailScreen';
 import AddressesScreen from './screens/AddressesScreen';
 import AddressEditScreen from './screens/AddressEditScreen';
 import MapPickerScreen from './screens/MapPickerScreen';
+import DeliveryLocationScreen from './screens/DeliveryLocationScreen';
 import { ToastHost } from './components/Toast';
 import { CustomTabBar } from './components/CustomTabBar';
 import { refreshBadges } from './lib/badges';
+import { ScreenHeader } from './components/CustomerUI';
+import NotificationsScreen from './screens/NotificationsScreen';
+import SupportTicketsScreen from './screens/SupportTicketsScreen';
+import SupportDetailScreen from './screens/SupportDetailScreen';
+import ProfileEditScreen from './screens/ProfileEditScreen';
+import AppearanceScreen from './screens/AppearanceScreen';
+import SupportRequestScreen from './screens/SupportRequestScreen';
+import OrderSentScreen, { PaymentPendingScreen } from './screens/OrderSentScreen';
+import ReplacementScreen from './screens/ReplacementScreen';
+import RatingScreen from './screens/RatingScreen';
+import ShopsScreen from './screens/ShopsScreen';
+import { startCustomerRealtime } from './lib/realtime';
+import { notificationDestination } from './lib/customer-flow';
+import { subscribeCustomerEvent } from './lib/customer-events';
+
+const navigationRef = createNavigationContainerRef<any>();
+let pendingNotification: ReturnType<typeof notificationDestination> = null;
+async function openPendingNotification() {
+  const destination = pendingNotification;
+  if (!navigationRef.isReady() || !destination || !(await isLoggedIn())) return;
+  // Another auth/ready callback may have consumed or replaced the notification.
+  if (pendingNotification !== destination) return;
+  pendingNotification = null;
+  navigationRef.navigate(destination.screen === 'SupportDetail' ? 'ProfileTab' : 'OrdersTab', {
+    screen: destination.screen,
+    params: destination.screen === 'SupportDetail' ? { ticketId: destination.ticketId } : { orderId: destination.orderId },
+  });
+}
 
 /** Screens reachable across the app (a single combined param list keeps the
  *  per-screen navigation typing simple; each tab registers the subset it owns). */
 export type RootStackParamList = {
   Home: undefined;
+  DeliveryLocation: undefined;
+  Notifications: undefined;
+  SupportTickets: undefined;
+  SupportDetail: { ticketId: string };
+  ProfileEdit: { deleteAccount?: boolean } | undefined;
+  Appearance: undefined;
+  SupportRequest: { orderId?: string; orderLabel?: string; category?: 'ORDER' | 'PAYMENT' | 'GENERAL' } | undefined;
+  Shops: undefined;
+  Browse: undefined;
+  GlobalCatalog: undefined;
   Cart: undefined;
   Orders: undefined;
   Profile: undefined;
   Search: { q?: string } | undefined;
   Category: { categoryId: string; name: string };
-  Product: { productId: string };
+  Product: { productId: string; merchantProductId?: string };
+  Help: { orderId?: string } | undefined;
   Shop: { merchantId: string };
-  Checkout: { selectedAddressId?: string } | undefined;
-  OrderDetail: { orderId: string };
+  Checkout: { selectedAddressId?: string; picked?: { latitude: number; longitude: number; fullAddress?: string; area?: string; city?: string; province?: string } } | undefined;
+  OrderDetail: { orderId: string; mode?: 'tracking' | 'details' };
+  OrderSent: { orderId: string };
+  Replacement: { orderId: string; originalItemId: string };
+  PaymentPending: { orderId: string };
+  Rating: { orderId: string };
   Addresses: undefined;
   AddressEdit:
     | {
@@ -59,7 +106,7 @@ export type RootStackParamList = {
         };
       }
     | undefined;
-  MapPicker: { latitude?: number; longitude?: number } | undefined;
+  MapPicker: { latitude?: number; longitude?: number; browsing?: boolean; returnTo?: 'Checkout' | 'AddressEdit'; fullAddress?: string; city?: string } | undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -69,18 +116,31 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
  *  light↔dark switch (header background/border come from the navigation theme). */
 function useStackOptions() {
   const { colors } = useTheme();
-  return { headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' as const } };
+  return {
+    headerTintColor: colors.text,
+    header: ({ navigation, options, route }: any) => (
+      <ScreenHeader
+        navigation={navigation}
+        title={options.title ?? route.name}
+        back={!['Cart', 'Orders', 'Profile'].includes(route.name)}
+      />
+    ),
+  };
 }
 
-// Each tab is a stack of its own screens, so the bottom bar stays visible while
-// browsing into product/shop/checkout/order details.
+// Preserve each tab's stack; CustomTabBar is hidden on detail/checkout routes.
 function HomeStack() {
   return (
     <Stack.Navigator screenOptions={useStackOptions()}>
       <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Browse" component={BrowseScreen} options={{ title: 'Shop by category' }} />
+      <Stack.Screen name="GlobalCatalog" component={GlobalCatalogScreen} options={{ title: 'Global catalogue' }} />
+      <Stack.Screen name="Shops" component={ShopsScreen} options={{ title: 'Local shops' }} />
+      <Stack.Screen name="DeliveryLocation" component={DeliveryLocationScreen} options={{ title: 'Delivery location' }} />
+      <Stack.Screen name="MapPicker" component={MapPickerScreen} options={{ title: 'Choose location' }} />
       <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
-      <Stack.Screen name="Category" component={CategoryScreen} options={{ title: 'Category' }} />
-      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
+      <Stack.Screen name="Category" component={CategoryScreen} options={{ title: 'Categories' }} />
+      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product details' }} />
       <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
     </Stack.Navigator>
   );
@@ -89,10 +149,17 @@ function HomeStack() {
 function CartStack() {
   return (
     <Stack.Navigator screenOptions={useStackOptions()}>
-      <Stack.Screen name="Cart" component={CartScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Cart" component={CartScreen} options={{ title: 'Basket' }} />
       <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
-      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
-      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
+      <Stack.Screen name="OrderSent" component={OrderSentScreen} options={{ title: 'Order sent' }} />
+      <Stack.Screen name="PaymentPending" component={PaymentPendingScreen} options={{ title: 'Payment pending' }} />
+      <Stack.Screen name="Replacement" component={ReplacementScreen} options={{ title: 'Review a replacement' }} />
+      <Stack.Screen name="Rating" component={RatingScreen} options={{ title: 'Rate delivered order' }} />
+      <Stack.Screen name="SupportRequest" component={SupportRequestScreen} options={{ title: 'Report an order issue' }} />
+      <Stack.Screen name="Help" component={HelpScreen} options={{ title: 'Help & support' }} />
+      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Track order' }} />
+      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product details' }} />
+      <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
       <Stack.Screen name="AddressEdit" component={AddressEditScreen} options={{ title: 'Address' }} />
       <Stack.Screen name="MapPicker" component={MapPickerScreen} options={{ title: 'Pin location' }} />
     </Stack.Navigator>
@@ -102,9 +169,16 @@ function CartStack() {
 function OrdersStack() {
   return (
     <Stack.Navigator screenOptions={useStackOptions()}>
-      <Stack.Screen name="Orders" component={OrdersScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
-      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product' }} />
+      <Stack.Screen name="Orders" component={OrdersScreen} options={{ title: 'My orders' }} />
+      <Stack.Screen name="PaymentPending" component={PaymentPendingScreen} options={{ title: 'Payment pending' }} />
+      <Stack.Screen name="OrderSent" component={OrderSentScreen} options={{ title: 'Order sent' }} />
+      <Stack.Screen name="Replacement" component={ReplacementScreen} options={{ title: 'Review a replacement' }} />
+      <Stack.Screen name="Rating" component={RatingScreen} options={{ title: 'Rate delivered order' }} />
+      <Stack.Screen name="SupportRequest" component={SupportRequestScreen} options={{ title: 'Report an order issue' }} />
+      <Stack.Screen name="Help" component={HelpScreen} options={{ title: 'Help & support' }} />
+      <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Track order' }} />
+      <Stack.Screen name="Product" component={ProductScreen} options={{ title: 'Product details' }} />
+      <Stack.Screen name="Shop" component={ShopScreen} options={{ title: 'Shop' }} />
     </Stack.Navigator>
   );
 }
@@ -112,7 +186,14 @@ function OrdersStack() {
 function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={useStackOptions()}>
-      <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Account' }} />
+      <Stack.Screen name="Appearance" component={AppearanceScreen} options={{ title: 'Appearance' }} />
+      <Stack.Screen name="SupportRequest" component={SupportRequestScreen} options={{ title: 'Report an issue' }} />
+      <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ title: 'Profile details' }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Order updates' }} />
+      <Stack.Screen name="SupportTickets" component={SupportTicketsScreen} options={{ title: 'Support requests' }} />
+      <Stack.Screen name="SupportDetail" component={SupportDetailScreen} options={{ title: 'Support conversation' }} />
+      <Stack.Screen name="Help" component={HelpScreen} options={{ title: 'Help & support' }} />
       <Stack.Screen name="Addresses" component={AddressesScreen} options={{ title: 'Saved addresses' }} />
       <Stack.Screen name="AddressEdit" component={AddressEditScreen} options={{ title: 'Address' }} />
       <Stack.Screen name="MapPicker" component={MapPickerScreen} options={{ title: 'Pin location' }} />
@@ -131,12 +212,36 @@ export default function App() {
       if (ok) void import('./lib/push').then((m) => m.registerForPush()).catch(() => undefined);
     });
   }, []);
+  useEffect(() => startCustomerRealtime(), []);
+  useEffect(() => {
+    const unsubscribe = subscribeCustomerEvent('auth', () => { void openPendingNotification(); void refreshBadges(); });
+    if (Platform.OS === 'web') return unsubscribe;
+    let disposed = false;
+    let remove: (() => void) | undefined;
+    void import('expo-notifications').then(async (notifications) => {
+      const receive = (response: any) => {
+        pendingNotification = notificationDestination(response.notification.request.content.data);
+        if (pendingNotification) {
+          void openPendingNotification();
+          if (navigationRef.isReady()) void isLoggedIn().then((ok) => {
+            if (!ok) navigationRef.navigate('OrdersTab', { screen: 'Orders' });
+          });
+        }
+      };
+      if (disposed) return;
+      const subscription = notifications.addNotificationResponseReceivedListener(receive);
+      remove = () => subscription.remove();
+      const initial = await notifications.getLastNotificationResponseAsync();
+      if (initial && !disposed) { receive(initial); await notifications.clearLastNotificationResponseAsync(); }
+    }).catch(() => undefined);
+    return () => { disposed = true; remove?.(); unsubscribe(); };
+  }, []);
 
   // Force the native appearance to match the chosen mode, so system chrome
   // (the window background behind transparent areas, status bar, etc.) follows
   // it too — not just our JS theme. 'system' (null) defers back to the OS.
   useEffect(() => {
-    Appearance.setColorScheme(mode === 'system' ? null : mode);
+    if (Platform.OS !== 'web') Appearance.setColorScheme(mode === 'system' ? null : mode);
   }, [mode]);
 
   // Drive react-navigation's theme from our palette so headers, screen
@@ -156,7 +261,7 @@ export default function App() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={navigationRef} onReady={() => void openPendingNotification()} theme={navTheme}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <Tab.Navigator
         tabBar={(props) => <CustomTabBar {...props} />}

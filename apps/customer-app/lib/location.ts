@@ -1,4 +1,7 @@
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
+import { api } from './api';
+import { withDeadline } from './customer-flow';
 
 /**
  * GPS + reverse-geocoding helpers. Centralises the permission + lookup dance so
@@ -46,16 +49,22 @@ function formatAddress(g?: Location.LocationGeocodedAddress): string {
 export async function reverseGeocode(latitude: number, longitude: number): Promise<GeocodedAddress> {
   let geo: Location.LocationGeocodedAddress | undefined;
   try {
-    const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+    const results = Platform.OS === 'web' ? [] : await withDeadline(
+      Location.reverseGeocodeAsync({ latitude, longitude }), 5000, 'Address lookup timed out.');
     geo = results?.[0];
   } catch {
     /* geocoder can fail (offline / unsupported) — coordinates are still useful */
   }
+  let coverage: any;
+  if (!geo) {
+    try { coverage = await withDeadline(api.post('/location/detect', { latitude, longitude }), 5000, 'Address lookup timed out.'); }
+    catch { /* Keep coordinates; let the customer enter address text. */ }
+  }
   return {
     fullAddress: formatAddress(geo),
     street: [geo?.streetNumber, geo?.street].filter(Boolean).join(' ').trim() || undefined,
-    area: geo?.district ?? geo?.subregion ?? undefined,
-    city: geo?.city ?? geo?.region ?? 'Lahore',
+    area: geo?.district ?? geo?.subregion ?? coverage?.area ?? undefined,
+    city: geo?.city ?? coverage?.city ?? '',
     province: geo?.region ?? undefined,
   };
 }
@@ -65,10 +74,12 @@ export async function reverseGeocode(latitude: number, longitude: number): Promi
  * Throws LocationPermissionError if the user declined.
  */
 export async function detectCurrentLocation(): Promise<DetectedLocation> {
-  const { status } = await Location.requestForegroundPermissionsAsync();
+  const { status } = await withDeadline(Location.requestForegroundPermissionsAsync(), 15000,
+    'Location permission did not respond. Choose a point on the map instead.');
   if (status !== 'granted') throw new LocationPermissionError();
 
-  const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+  const pos = await withDeadline(Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+    12000, 'Unable to detect your location. Choose a point on the map or a saved address.');
   const { latitude, longitude } = pos.coords;
   return { latitude, longitude, ...(await reverseGeocode(latitude, longitude)) };
 }

@@ -1,0 +1,198 @@
+[
+  {
+    "mode": "light",
+    "pair": "ink / surface",
+    "ratio": 17.24,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "ink / bg",
+    "ratio": 16.17,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "muted / surface",
+    "ratio": 5.94,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "muted / surface2",
+    "ratio": 5.34,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "quiet / surface",
+    "ratio": 5.06,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "accent / surface",
+    "ratio": 5.38,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "accent / mint",
+    "ratio": 4.77,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "hero-text / action",
+    "ratio": 5.38,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "hero-text / hero",
+    "ratio": 8.71,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "warning / warning-bg",
+    "ratio": 5.91,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "danger / danger-bg",
+    "ratio": 5.63,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "blue / blue-bg",
+    "ratio": 6.15,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "control / surface",
+    "ratio": 3.28,
+    "target": 3,
+    "pass": true
+  },
+  {
+    "mode": "light",
+    "pair": "focus / surface",
+    "ratio": 5.4,
+    "target": 3,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "ink / surface",
+    "ratio": 14.86,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "ink / bg",
+    "ratio": 16.7,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "muted / surface",
+    "ratio": 8.73,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "muted / surface2",
+    "ratio": 7.38,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "quiet / surface",
+    "ratio": 7.99,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "accent / surface",
+    "ratio": 9.92,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "accent / mint",
+    "ratio": 7.16,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "hero-text / action",
+    "ratio": 5.38,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "hero-text / hero",
+    "ratio": 9.78,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "warning / warning-bg",
+    "ratio": 9.35,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "danger / danger-bg",
+    "ratio": 7.95,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "blue / blue-bg",
+    "ratio": 7.77,
+    "target": 4.5,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "control / surface",
+    "ratio": 4.95,
+    "target": 3,
+    "pass": true
+  },
+  {
+    "mode": "dark",
+    "pair": "focus / surface",
+    "ratio": 8.62,
+    "target": 3,
+    "pass": true
+  }
+]

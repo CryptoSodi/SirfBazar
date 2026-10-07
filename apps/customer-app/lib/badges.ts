@@ -18,9 +18,11 @@ const TERMINAL_ORDER_STATUSES = [
 export interface Badges {
   cart: number;
   orders: number;
+  cartItems: Record<string, { id: string; quantity: number }>;
 }
 
-let current: Badges = { cart: 0, orders: 0 };
+let current: Badges = { cart: 0, orders: 0, cartItems: {} };
+let refreshVersion = 0;
 const listeners = new Set<(b: Badges) => void>();
 
 function publish(next: Badges) {
@@ -30,11 +32,20 @@ function publish(next: Badges) {
 
 /** Re-fetch cart item count and active-order count. Safe to call anytime. */
 export async function refreshBadges() {
+  const version = ++refreshVersion;
   const next: Badges = { ...current };
 
   try {
     const cart = await fetchCart();
     next.cart = cart?.itemCount ?? 0;
+    next.cartItems = Object.fromEntries(
+      (cart?.groups ?? []).flatMap((group: any) =>
+        (group.items ?? []).map((item: any) => [
+          item.merchantProductId,
+          { id: item.id, quantity: item.quantity },
+        ]),
+      ),
+    );
   } catch {
     /* leave previous cart count on transient failure */
   }
@@ -52,12 +63,13 @@ export async function refreshBadges() {
     /* leave previous orders count */
   }
 
-  publish(next);
+  if (version === refreshVersion) publish(next);
 }
 
 /** Immediately zero the badges (e.g. on logout) without a round-trip. */
 export function resetBadges() {
-  publish({ cart: 0, orders: 0 });
+  refreshVersion++;
+  publish({ cart: 0, orders: 0, cartItems: {} });
 }
 
 export function useBadges(): Badges {

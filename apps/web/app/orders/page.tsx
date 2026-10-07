@@ -16,6 +16,7 @@ const TONE_CLASSES = {
 export default function OrdersPage() {
   const [orders, setOrders] = useState<any[] | null>(null);
   const [needLogin, setNeedLogin] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   const load = () => {
     if (!isLoggedIn()) {
@@ -23,7 +24,8 @@ export default function OrdersPage() {
       return;
     }
     setNeedLogin(false);
-    api.get('/orders').then(setOrders).catch(() => setOrders([]));
+    setLoadError('');
+    api.get('/orders').then(setOrders).catch((e: Error) => setLoadError(e.message || 'Unable to load orders. Try again.'));
   };
 
   useEffect(load, []);
@@ -40,11 +42,13 @@ export default function OrdersPage() {
       </>
     );
   }
-  if (!orders) return <p className="text-stone-500">Loading orders…</p>;
+  if (loadError) return <div role="alert" className="card p-6"><p>Unable to load orders: {loadError}</p><button className="btn-secondary mt-3" onClick={load}>Try again</button></div>;
+  if (!orders) return <p role="status" className="text-stone-500">Loading orders…</p>;
 
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="mb-4 text-xl font-bold">Your orders</h1>
+      {orders.length >= 50 && <p className="sb-muted mb-4">Showing your latest 50 orders. Contact support if you need an older order.</p>}
       {orders.length === 0 && (
         <div className="card p-10 text-center text-stone-500">
           No orders yet. <Link className="text-emerald-700 underline" href="/">Start shopping</Link>

@@ -1,0 +1,106 @@
+[
+  {
+    "id": "home",
+    "name": "Your deliveries"
+  },
+  {
+    "id": "assigned",
+    "name": "Assigned order"
+  },
+  {
+    "id": "pickup",
+    "name": "Pickup check"
+  },
+  {
+    "id": "navigate",
+    "name": "On the way"
+  },
+  {
+    "id": "doorstep",
+    "name": "At the customer"
+  },
+  {
+    "id": "code",
+    "name": "Cash & delivery code"
+  },
+  {
+    "id": "complete",
+    "name": "Delivery completed"
+  },
+  {
+    "id": "prepaid",
+    "name": "Paid order completion"
+  },
+  {
+    "id": "history",
+    "name": "Delivery history"
+  },
+  {
+    "id": "help",
+    "name": "Help"
+  },
+  {
+    "id": "report",
+    "name": "Report a delivery issue"
+  },
+  {
+    "id": "profile",
+    "name": "Rider profile"
+  },
+  {
+    "id": "appearance",
+    "name": "Light / Dark / System"
+  },
+  {
+    "id": "permissions",
+    "name": "Location & alerts"
+  },
+  {
+    "id": "login",
+    "name": "Sign in"
+  },
+  {
+    "id": "login-code",
+    "name": "Verify phone"
+  },
+  {
+    "id": "shops",
+    "name": "Find your shop"
+  },
+  {
+    "id": "apply",
+    "name": "Join shop"
+  },
+  {
+    "id": "pending",
+    "name": "Awaiting shop approval"
+  },
+  {
+    "id": "empty",
+    "name": "No assignments"
+  },
+  {
+    "id": "offline",
+    "name": "Connection lost"
+  },
+  {
+    "id": "loading",
+    "name": "Loading"
+  },
+  {
+    "id": "error",
+    "name": "API unavailable"
+  },
+  {
+    "id": "expired",
+    "name": "Session expired"
+  },
+  {
+    "id": "inactive",
+    "name": "Account inactive"
+  },
+  {
+    "id": "unknown",
+    "name": "Completion not confirmed"
+  }
+]

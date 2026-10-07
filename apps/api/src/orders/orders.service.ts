@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -28,6 +29,8 @@ import { haversineKm, estimateDeliveryMinutes } from '../common/utils/geo';
 import { generateNumericCode, generateOrderNumber } from '../common/utils/ids';
 
 export interface PlaceOrderInput {
+  requestId?: string;
+  cartId?: string;
   deliveryAddressId: string;
   paymentMethod: string;
   customerNote?: string;
@@ -67,11 +70,18 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     });
     if (!customer) throw new NotFoundException('Customer profile not found');
 
+    const replay = await this.existingCheckout(customerUserId, customer.id, input);
+    if (replay) return replay;
+
     const cart = await this.prisma.cart.findFirst({
-      where: { customerId: customer.id, status: 'ACTIVE' },
+      where: { id: input.cartId, customerId: customer.id, status: 'ACTIVE' },
       include: { items: true },
       orderBy: { createdAt: 'desc' },
     });
+    if (!cart && input.cartId)
+      throw new ConflictException(
+        'This checkout basket is no longer active. Check your orders before retrying.',
+      );
     if (!cart || cart.items.length === 0) throw new BadRequestException('Your cart is empty');
 
     const address = await this.prisma.customerAddress.findFirst({
@@ -183,121 +193,142 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     const initialPaymentStatus = isOnlinePayment ? PaymentStatus.PENDING : PaymentStatus.CASH_PENDING;
     const isMulti = perMerchant.length > 1;
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Atomic stock decrement; fails the whole checkout on a race.
-      for (const g of perMerchant) {
-        for (const line of g.lines) {
-          const updated = await tx.merchantProduct.updateMany({
-            where: { id: line.mp.id, stockQuantity: { gte: line.cartItem.quantity } },
-            data: { stockQuantity: { decrement: line.cartItem.quantity } },
-          });
-          if (updated.count !== 1) {
-            throw new BadRequestException(`${line.mp.product.name} just went out of stock`);
+    let result: { parentId: string | null; childOrders: any[] };
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
+        // Fence the same basket before stock/payment writes, including requests
+        // from older clients without a requestId. Rollback releases the claim.
+        const claimed = await tx.cart.updateMany({
+          where: { id: cart.id, customerId: customer.id, status: 'ACTIVE' },
+          data: { status: 'CHECKED_OUT' },
+        });
+        if (claimed.count !== 1)
+          throw new ConflictException('Checkout already started for this basket. Check your orders.');
+        // Atomic stock decrement; fails the whole checkout on a race.
+        for (const g of perMerchant) {
+          for (const line of g.lines) {
+            const updated = await tx.merchantProduct.updateMany({
+              where: { id: line.mp.id, stockQuantity: { gte: line.cartItem.quantity } },
+              data: { stockQuantity: { decrement: line.cartItem.quantity } },
+            });
+            if (updated.count !== 1) {
+              throw new BadRequestException(`${line.mp.product.name} just went out of stock`);
+            }
           }
         }
-      }
 
-      let parentId: string | null = null;
-      if (isMulti) {
-        const parent = await tx.order.create({
+        let parentId: string | null = null;
+        if (isMulti) {
+          const parent = await tx.order.create({
+            data: {
+              id: input.requestId,
+              isParent: true,
+              orderNumber: generateOrderNumber(),
+              customerId: customer.id,
+              deliveryAddressId: address.id,
+              status: initialStatus,
+              paymentStatus: initialPaymentStatus,
+              paymentMethod: input.paymentMethod,
+              subtotalPaisa: totalSubtotal,
+              deliveryFeePaisa: totalDeliveryFee,
+              serviceFeePaisa,
+              smallOrderFeePaisa,
+              discountAmountPaisa: discountPaisa,
+              totalAmountPaisa: grandTotalPaisa,
+              couponCode: couponCode ?? null,
+              customerNote: input.customerNote ?? null,
+            },
+          });
+          parentId = parent.id;
+        }
+
+        const childOrders: any[] = [];
+        for (const g of perMerchant) {
+          const childTotal = isMulti ? g.subtotalPaisa + g.deliveryFeePaisa : grandTotalPaisa;
+          const order = await tx.order.create({
+            data: {
+              id: isMulti ? undefined : input.requestId,
+              parentOrderId: parentId,
+              orderNumber: generateOrderNumber(),
+              customerId: customer.id,
+              merchantId: g.merchantId,
+              deliveryAddressId: address.id,
+              status: initialStatus,
+              paymentStatus: initialPaymentStatus,
+              paymentMethod: input.paymentMethod,
+              subtotalPaisa: g.subtotalPaisa,
+              deliveryFeePaisa: g.deliveryFeePaisa,
+              serviceFeePaisa: isMulti ? 0 : serviceFeePaisa,
+              smallOrderFeePaisa: isMulti ? 0 : smallOrderFeePaisa,
+              discountAmountPaisa: isMulti ? 0 : discountPaisa,
+              commissionAmountPaisa: g.commissionPaisa,
+              totalAmountPaisa: childTotal,
+              merchantEarningPaisa: g.subtotalPaisa - g.commissionPaisa,
+              couponCode: isMulti ? null : (couponCode ?? null),
+              customerNote: input.customerNote ?? null,
+              deliveryOtp: generateNumericCode(4),
+              estimatedDeliveryMinutes: g.etaMinutes,
+            },
+          });
+          await tx.orderItem.createMany({
+            data: g.lines.map((line) => ({
+              orderId: order.id,
+              productId: line.mp.productId,
+              merchantProductId: line.mp.id,
+              productNameSnapshot: line.mp.product.name,
+              productImageSnapshot: line.mp.product.imageUrl,
+              unitSnapshot: line.mp.product.unit,
+              quantity: line.cartItem.quantity,
+              unitPricePaisa: line.unitPricePaisa,
+              totalPricePaisa: line.unitPricePaisa * line.cartItem.quantity,
+            })),
+          });
+          await tx.orderTimelineEntry.createMany({
+            data: [
+              {
+                orderId: order.id,
+                status: OrderStatus.CREATED,
+                changedByUserId: customerUserId,
+                changedByRole: 'CUSTOMER',
+              },
+              { orderId: order.id, status: initialStatus, changedByRole: 'SYSTEM' },
+            ],
+          });
+          childOrders.push(order);
+        }
+
+        const paymentAnchorId = parentId ?? childOrders[0].id;
+        await tx.payment.create({
           data: {
-            isParent: true,
-            orderNumber: generateOrderNumber(),
-            customerId: customer.id,
-            deliveryAddressId: address.id,
-            status: initialStatus,
-            paymentStatus: initialPaymentStatus,
-            paymentMethod: input.paymentMethod,
-            subtotalPaisa: totalSubtotal,
-            deliveryFeePaisa: totalDeliveryFee,
-            serviceFeePaisa,
-            smallOrderFeePaisa,
-            discountAmountPaisa: discountPaisa,
-            totalAmountPaisa: grandTotalPaisa,
-            couponCode: couponCode ?? null,
-            customerNote: input.customerNote ?? null,
-          },
-        });
-        parentId = parent.id;
-      }
-
-      const childOrders: any[] = [];
-      for (const g of perMerchant) {
-        const childTotal = isMulti
-          ? g.subtotalPaisa + g.deliveryFeePaisa
-          : grandTotalPaisa;
-        const order = await tx.order.create({
-          data: {
-            parentOrderId: parentId,
-            orderNumber: generateOrderNumber(),
-            customerId: customer.id,
-            merchantId: g.merchantId,
-            deliveryAddressId: address.id,
-            status: initialStatus,
-            paymentStatus: initialPaymentStatus,
-            paymentMethod: input.paymentMethod,
-            subtotalPaisa: g.subtotalPaisa,
-            deliveryFeePaisa: g.deliveryFeePaisa,
-            serviceFeePaisa: isMulti ? 0 : serviceFeePaisa,
-            smallOrderFeePaisa: isMulti ? 0 : smallOrderFeePaisa,
-            discountAmountPaisa: isMulti ? 0 : discountPaisa,
-            commissionAmountPaisa: g.commissionPaisa,
-            totalAmountPaisa: childTotal,
-            merchantEarningPaisa: g.subtotalPaisa - g.commissionPaisa,
-            couponCode: isMulti ? null : (couponCode ?? null),
-            customerNote: input.customerNote ?? null,
-            deliveryOtp: generateNumericCode(4),
-            estimatedDeliveryMinutes: g.etaMinutes,
-          },
-        });
-        await tx.orderItem.createMany({
-          data: g.lines.map((line) => ({
-            orderId: order.id,
-            productId: line.mp.productId,
-            merchantProductId: line.mp.id,
-            productNameSnapshot: line.mp.product.name,
-            productImageSnapshot: line.mp.product.imageUrl,
-            unitSnapshot: line.mp.product.unit,
-            quantity: line.cartItem.quantity,
-            unitPricePaisa: line.unitPricePaisa,
-            totalPricePaisa: line.unitPricePaisa * line.cartItem.quantity,
-          })),
-        });
-        await tx.orderTimelineEntry.createMany({
-          data: [
-            { orderId: order.id, status: OrderStatus.CREATED, changedByUserId: customerUserId, changedByRole: 'CUSTOMER' },
-            { orderId: order.id, status: initialStatus, changedByRole: 'SYSTEM' },
-          ],
-        });
-        childOrders.push(order);
-      }
-
-      const paymentAnchorId = parentId ?? childOrders[0].id;
-      await tx.payment.create({
-        data: {
-          orderId: paymentAnchorId,
-          customerId: customer.id,
-          amountPaisa: grandTotalPaisa,
-          paymentMethod: input.paymentMethod,
-          paymentProvider: isOnlinePayment ? input.paymentMethod.toLowerCase() : 'cod',
-          status: initialPaymentStatus,
-        },
-      });
-
-      if (couponId) {
-        await tx.couponUsage.create({
-          data: {
-            couponId,
-            customerId: customer.id,
             orderId: paymentAnchorId,
-            discountAmountPaisa: discountPaisa,
+            customerId: customer.id,
+            amountPaisa: grandTotalPaisa,
+            paymentMethod: input.paymentMethod,
+            paymentProvider: isOnlinePayment ? input.paymentMethod.toLowerCase() : 'cod',
+            status: initialPaymentStatus,
           },
         });
-      }
 
-      await tx.cart.update({ where: { id: cart.id }, data: { status: 'CHECKED_OUT' } });
-      return { parentId, childOrders };
-    });
+        if (couponId) {
+          await tx.couponUsage.create({
+            data: {
+              couponId,
+              customerId: customer.id,
+              orderId: paymentAnchorId,
+              discountAmountPaisa: discountPaisa,
+            },
+          });
+        }
+
+        return { parentId, childOrders };
+      });
+    } catch (cause) {
+      // A concurrent retry may lose the cart claim / unique ID race. Only
+      // return an order owned by this customer with the original intent.
+      const replay = await this.existingCheckout(customerUserId, customer.id, input);
+      if (replay) return replay;
+      throw cause;
+    }
 
     // Post-commit notifications + realtime (only when already sent to merchants).
     if (!isOnlinePayment) {
@@ -314,6 +345,22 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     });
 
     return this.detailForCustomer(customerUserId, result.parentId ?? result.childOrders[0].id);
+  }
+
+  private async existingCheckout(customerUserId: string, customerId: string, input: PlaceOrderInput) {
+    if (!input.requestId) return null;
+    const order = await this.prisma.order.findUnique({ where: { id: input.requestId } });
+    if (!order) return null;
+    if (
+      order.customerId !== customerId ||
+      order.deliveryAddressId !== input.deliveryAddressId ||
+      order.paymentMethod !== input.paymentMethod ||
+      (order.customerNote ?? '') !== (input.customerNote ?? '') ||
+      (input.couponCode !== undefined && order.couponCode !== input.couponCode)
+    ) {
+      throw new ConflictException('Checkout reference cannot be reused. Check your orders before retrying.');
+    }
+    return this.detailForCustomer(customerUserId, order.id);
   }
 
   /** Called by PaymentsService after a successful online payment. */
@@ -344,7 +391,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     await this.announceToMerchants(orders, anchor.customer.user.fullName ?? 'A customer');
   }
 
-  private async announceToMerchants(orders: { id: string; merchantId: string | null; orderNumber: string; totalAmountPaisa: number }[], customerName: string) {
+  private async announceToMerchants(
+    orders: { id: string; merchantId: string | null; orderNumber: string; totalAmountPaisa: number }[],
+    customerName: string,
+  ) {
     for (const order of orders) {
       if (!order.merchantId) continue;
       const userIds = await this.access.merchantUserIds(order.merchantId);
@@ -395,7 +445,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         timeline: { orderBy: { createdAt: 'asc' } },
         deliveryAddress: true,
         merchant: { select: { id: true, shopName: true, logoUrl: true, phoneNumber: true } },
-        rider: { select: { id: true, fullName: true, phoneNumber: true, vehicleType: true, vehicleNumber: true, profileImageUrl: true } },
+        rider: {
+          select: {
+            id: true,
+            fullName: true,
+            phoneNumber: true,
+            vehicleType: true,
+            vehicleNumber: true,
+            profileImageUrl: true,
+          },
+        },
         payments: true,
         refunds: true,
         children: {
@@ -403,7 +462,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             items: true,
             timeline: { orderBy: { createdAt: 'asc' } },
             merchant: { select: { id: true, shopName: true, logoUrl: true, phoneNumber: true } },
-            rider: { select: { id: true, fullName: true, phoneNumber: true, vehicleType: true, vehicleNumber: true, profileImageUrl: true } },
+            rider: {
+              select: {
+                id: true,
+                fullName: true,
+                phoneNumber: true,
+                vehicleType: true,
+                vehicleNumber: true,
+                profileImageUrl: true,
+              },
+            },
           },
         },
       },
@@ -471,11 +539,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
     for (const child of targets) {
       await this.restoreStock(child.id);
-      await this.statusService.apply(child.id, OrderStatus.CANCELLED_BY_CUSTOMER, {
-        userId: customerUserId,
-        role: 'CUSTOMER',
-        notes: reason,
-      }, { cancellationReason: reason ?? 'Cancelled by customer', cancelledAt: new Date() });
+      await this.statusService.apply(
+        child.id,
+        OrderStatus.CANCELLED_BY_CUSTOMER,
+        {
+          userId: customerUserId,
+          role: 'CUSTOMER',
+          notes: reason,
+        },
+        { cancellationReason: reason ?? 'Cancelled by customer', cancelledAt: new Date() },
+      );
       if (child.merchantId) {
         const userIds = await this.access.merchantUserIds(child.merchantId);
         await this.notifications.notifyMany(userIds, {
@@ -496,7 +569,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         },
       });
     }
-    await this.refundIfPaid(order.isParent ? order.id : targets[0].id, customerId, 'Order cancelled by customer');
+    await this.refundIfPaid(
+      order.isParent ? order.id : targets[0].id,
+      customerId,
+      'Order cancelled by customer',
+    );
     return this.detailForCustomer(customerUserId, orderId);
   }
 
@@ -506,10 +583,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       where: { orderId, itemStatus: { in: ['CONFIRMED', 'REPLACEMENT_SUGGESTED'] } },
     });
     for (const item of items) {
-      await this.prisma.merchantProduct.update({
-        where: { id: item.merchantProductId },
-        data: { stockQuantity: { increment: item.quantity } },
-      }).catch(() => undefined);
+      await this.prisma.merchantProduct
+        .update({
+          where: { id: item.merchantProductId },
+          data: { stockQuantity: { increment: item.quantity } },
+        })
+        .catch(() => undefined);
     }
   }
 
@@ -653,12 +732,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   // ── Replacement response (spec 20.6) ───────────────────────────────────────
 
-  async respondToReplacement(
-    customerUserId: string,
-    orderId: string,
-    itemId: string,
-    accept: boolean,
-  ) {
+  async respondToReplacement(customerUserId: string, orderId: string, itemId: string, accept: boolean) {
     const customerId = await this.access.customerId(customerUserId);
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, customerId },
@@ -679,10 +753,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       await this.prisma.orderItem.update({ where: { id: original.id }, data: { itemStatus: 'UNAVAILABLE' } });
       await this.prisma.orderItem.update({ where: { id: suggestion.id }, data: { itemStatus: 'REMOVED' } });
       // Return the suggested item's reserved stock.
-      await this.prisma.merchantProduct.update({
-        where: { id: suggestion.merchantProductId },
-        data: { stockQuantity: { increment: suggestion.quantity } },
-      }).catch(() => undefined);
+      await this.prisma.merchantProduct
+        .update({
+          where: { id: suggestion.merchantProductId },
+          data: { stockQuantity: { increment: suggestion.quantity } },
+        })
+        .catch(() => undefined);
     }
     await this.recomputeOrderTotals(order.id);
     await this.statusService.appendTimeline(order.id, 'REPLACEMENT_' + (accept ? 'ACCEPTED' : 'REJECTED'), {
@@ -715,7 +791,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     const commission = this.pricing.commissionPaisa(order.merchant, subtotal);
     const total = Math.max(
       0,
-      subtotal + order.deliveryFeePaisa + order.serviceFeePaisa + order.smallOrderFeePaisa - order.discountAmountPaisa,
+      subtotal +
+        order.deliveryFeePaisa +
+        order.serviceFeePaisa +
+        order.smallOrderFeePaisa -
+        order.discountAmountPaisa,
     );
     await this.prisma.order.update({
       where: { id: orderId },
@@ -739,7 +819,11 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
             deliveryFeePaisa: deliverySum,
             totalAmountPaisa: Math.max(
               0,
-              subtotalSum + deliverySum + parent.serviceFeePaisa + parent.smallOrderFeePaisa - parent.discountAmountPaisa,
+              subtotalSum +
+                deliverySum +
+                parent.serviceFeePaisa +
+                parent.smallOrderFeePaisa -
+                parent.discountAmountPaisa,
             ),
           },
         });
@@ -753,9 +837,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     const minutes = Number(process.env.MERCHANT_ACCEPT_TIMEOUT_MINUTES || 10);
     if (minutes <= 0) return;
     this.timeoutTimer = setInterval(() => {
-      this.expireUnacceptedOrders(minutes).catch((err) =>
-        this.logger.warn(`Timeout sweep failed: ${err}`),
-      );
+      this.expireUnacceptedOrders(minutes).catch((err) => this.logger.warn(`Timeout sweep failed: ${err}`));
     }, 60_000);
     this.timeoutTimer.unref?.();
   }
@@ -778,10 +860,15 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     for (const order of stale) {
       this.logger.log(`Auto-rejecting unaccepted order ${order.orderNumber}`);
       await this.restoreStock(order.id);
-      await this.statusService.apply(order.id, OrderStatus.MERCHANT_REJECTED, {
-        role: 'SYSTEM',
-        notes: `Shop did not respond within ${timeoutMinutes} minutes`,
-      }, { cancellationReason: 'Merchant did not respond in time', cancelledAt: new Date() });
+      await this.statusService.apply(
+        order.id,
+        OrderStatus.MERCHANT_REJECTED,
+        {
+          role: 'SYSTEM',
+          notes: `Shop did not respond within ${timeoutMinutes} minutes`,
+        },
+        { cancellationReason: 'Merchant did not respond in time', cancelledAt: new Date() },
+      );
       await this.notifications.notify({
         userId: order.customer.userId,
         title: 'Order not accepted',

@@ -1,24 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { api, errorMessage, pkr, statusLabel } from '../lib/api';
+import { readRider, readRiderOrders, readRiders, type MerchantRider, type RiderOrder } from '../lib/merchant-contracts';
 import { Badge, Table, btnCls, btnDanger, btnGhost, inputCls, Modal, useToast } from '../components/ui';
 
 const VEHICLE_TYPES = ['MOTORBIKE', 'BICYCLE', 'CAR', 'ON_FOOT'];
 
 export default function Riders() {
   const { toast, node } = useToast();
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<MerchantRider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setError('');
+    setItems([]);
     try {
       const res = await api.get('/merchant/riders');
-      setItems(Array.isArray(res) ? res : (res?.items ?? []));
-    } catch (e: any) {
-      setError(e.message);
+      setItems(readRiders(res));
+    } catch (e) {
+      setItems([]);
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -57,9 +61,9 @@ export default function Riders() {
         </button>
       </div>
 
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-3 text-sm text-red-700" role="alert">Unable to load riders. {error} <button type="button" className={btnGhost} onClick={reload}>Retry</button></p>}
 
-      <Table headers={['Rider', 'Vehicle', 'Online', 'Status', '']}>
+      {!error && <Table headers={['Rider', 'Vehicle', 'Online', 'Status', 'Actions']}>
         {items.map((r) => (
           <tr key={r.id} className="hover:bg-slate-50">
             <td className="px-4 py-2.5 font-medium">
@@ -75,6 +79,7 @@ export default function Riders() {
               <Badge value={r.approvalStatus === 'PENDING' ? 'PENDING' : r.isActive ? 'ACTIVE' : 'INACTIVE'} />
             </td>
             <td className="px-4 py-2.5 text-right">
+              <button type="button" className={btnGhost} onClick={() => setSelectedId(r.id)} aria-label={`View ${r.fullName} details`}>Details</button>{' '}
               {r.approvalStatus === 'PENDING' ? (
                 <div className="flex justify-end gap-2">
                   <button className={btnCls} onClick={() => decide(r, 'approve')}>Approve</button>
@@ -111,7 +116,9 @@ export default function Riders() {
             </td>
           </tr>
         )}
-      </Table>
+      </Table>}
+
+      {selectedId && <RiderDetail key={selectedId} riderId={selectedId} onClose={() => setSelectedId(null)} />}
 
       {adding && (
         <AddRiderModal
@@ -218,4 +225,45 @@ function AddRiderModal({
       </form>
     </Modal>
   );
+}
+
+function RiderDetail({ riderId, onClose }: { riderId: string; onClose: () => void }) {
+  const [rider, setRider] = useState<MerchantRider | null>(null);
+  const [orders, setOrders] = useState<RiderOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    setRider(null);
+    setOrders([]);
+    try {
+      const [detail, assigned] = await Promise.all([
+        api.get(`/merchant/riders/${riderId}`),
+        api.get(`/merchant/riders/${riderId}/orders`),
+      ]);
+      setRider(readRider(detail));
+      setOrders(readRiderOrders(assigned));
+    } catch (e) {
+      setRider(null);
+      setOrders([]);
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [riderId]);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  return <Modal title="Rider details" onClose={onClose}>
+    <div className="space-y-4 p-1 text-sm">
+      {loading ? <p role="status">Loading rider details…</p> : error ? <p role="alert" className="text-red-700">Unable to load this rider. {error} <button type="button" className={btnGhost} onClick={reload}>Retry</button></p> : rider && <>
+        <div><h3 className="text-lg font-semibold">{rider.fullName}</h3><p>{rider.phoneNumber}</p><p>{rider.vehicleType.replace(/_/g, ' ')}{rider.vehicleNumber ? ` · ${rider.vehicleNumber}` : ''}</p></div>
+        <div className="flex flex-wrap gap-2"><Badge value={rider.approvalStatus} /><Badge value={rider.isActive ? 'ACTIVE' : 'INACTIVE'} /><span className="text-slate-600">{rider.isOnline ? 'Online' : 'Offline'}</span></div>
+        {rider.currentOrderId && <p className="rounded-xl bg-amber-50 p-3">Current order reference: <span className="font-mono">{rider.currentOrderId}</span></p>}
+        <section aria-labelledby="rider-orders-heading"><h4 id="rider-orders-heading" className="font-semibold">Recent assigned orders</h4>{orders.length === 0 ? <p className="mt-2 text-slate-500">No assigned orders in the latest 100.</p> : <ul className="mt-2 divide-y divide-slate-100">{orders.map((order) => <li key={order.id} className="flex flex-wrap justify-between gap-2 py-2"><span className="font-mono">{order.orderNumber}</span><span>{statusLabel(order.status)}</span><span>{pkr(order.totalAmountPaisa)}</span></li>)}</ul>}</section>
+      </>}
+    </div>
+  </Modal>;
 }

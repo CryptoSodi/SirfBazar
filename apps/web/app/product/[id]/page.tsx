@@ -12,92 +12,37 @@ export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const { location, resolved } = useLocation();
   const [product, setProduct] = useState<any>(null);
+  const [selectedId, setSelectedId] = useState('');
   const [error, setError] = useState('');
-  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addError, setAddError] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     if (!resolved) return;
-    api
-      .get(`/products/${id}?${locationQuery(location)}`)
-      .then(setProduct)
-      .catch((e) => setError(e.message));
-  }, [id, resolved, location?.latitude]);
+    let active = true;
+    setError(''); setProduct(null);
+    api.get(`/products/${id}?${locationQuery(location)}`).then((value) => {
+      if (!active) return;
+      setProduct(value);
+      setSelectedId((value.offers ?? []).find((offer: any) => offer.isAvailable && offer.stockQuantity !== 0)?.merchantProductId ?? '');
+    }).catch((cause: Error) => { if (active) setError(cause.message); });
+    return () => { active = false; };
+  }, [id, resolved, location?.latitude, location?.longitude, reload]);
 
-  if (error) return <div className="card p-10 text-center text-stone-500">{error}</div>;
-  if (!product) return <p className="text-stone-500">Loading…</p>;
+  if (error) return <div role="alert" className="card p-6"><p>Unable to load this item: {error}</p><button className="btn-secondary mt-3" onClick={() => setReload((value) => value + 1)}>Try again</button></div>;
+  if (!product) return <p role="status">Loading product…</p>;
 
   const offers: any[] = product.offers ?? [];
-
-  const add = async (merchantProductId: string) => {
-    setAddingId(merchantProductId);
-    try {
-      await addToCart(merchantProductId, 1);
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setAddingId(null);
-    }
+  const selected = offers.find((offer) => offer.merchantProductId === selectedId);
+  const add = async () => {
+    if (!selected) return;
+    setAdding(true); setAddError('');
+    try { await addToCart(selected.merchantProductId, 1); setAdded(true); }
+    catch (cause: any) { setAddError(cause.message || 'Unable to add this item. Try again.'); }
+    finally { setAdding(false); }
   };
 
-  return (
-    <div className="space-y-8">
-      <div className="grid gap-6 md:grid-cols-2">
-        <ProductImage name={product.name} imageUrl={product.imageUrl} className="h-72 w-full rounded-2xl" />
-        <div>
-          <h1 className="text-2xl font-bold">{product.name}</h1>
-          <div className="mt-1 text-sm text-stone-500">
-            {[product.brand, product.size ?? product.unit].filter(Boolean).join(' · ')}
-          </div>
-          {product.description && <p className="mt-3 text-sm text-stone-600">{product.description}</p>}
-
-          <h2 className="mb-2 mt-6 font-bold">Available from {offers.length} shop{offers.length === 1 ? '' : 's'} nearby</h2>
-          <div className="space-y-2">
-            {offers.map((o) => (
-              <div key={o.merchantProductId} className="card flex items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <Link href={`/shop/${o.merchant.id}`} className="truncate font-semibold hover:text-emerald-700">
-                    {o.merchant.shopName}
-                  </Link>
-                  <div className="text-xs text-stone-500">
-                    ⭐ {o.merchant.ratingAverage?.toFixed?.(1) ?? '–'}
-                    {o.merchant.distanceKm != null && ` · ${o.merchant.distanceKm} km`}
-                    {o.merchant.estimatedDeliveryMinutes && ` · ~${o.merchant.estimatedDeliveryMinutes} min`}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-bold">{formatPKR(o.discountPricePaisa ?? o.pricePaisa)}</div>
-                  {o.discountPricePaisa && (
-                    <div className="text-xs text-stone-400 line-through">{formatPKR(o.pricePaisa)}</div>
-                  )}
-                </div>
-                <button
-                  className="btn-primary px-3 py-1.5 text-xs"
-                  disabled={addingId === o.merchantProductId || !o.isAvailable || o.stockQuantity === 0}
-                  onClick={() => add(o.merchantProductId)}
-                >
-                  {o.stockQuantity === 0 ? 'Out of stock' : addingId === o.merchantProductId ? '…' : '+ Add'}
-                </button>
-              </div>
-            ))}
-            {offers.length === 0 && (
-              <div className="card p-6 text-center text-sm text-stone-500">
-                No shop near you currently stocks this item.
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {(product.similar ?? []).length > 0 && (
-        <section>
-          <h2 className="mb-3 text-lg font-bold">Similar products</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {product.similar.map((p: any) => (
-              <ProductCard key={p.merchantProductId ?? p.productId} card={p} />
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
-  );
+  return <div className="sb-product-page"><nav className="sb-breadcrumb" aria-label="Breadcrumb"><Link href="/">Home</Link><span aria-hidden="true">›</span><Link href="/search">{product.category?.name || 'All essentials'}</Link><span aria-hidden="true">›</span><span>{product.name}</span></nav><div className="sb-product-overview"><div><div className="sb-product-large-image"><ProductImage name={product.name} imageUrl={product.imageUrl} className="h-full w-full" /></div><p className="sb-muted mt-2 text-xs">Product image and details come from the current catalogue.</p></div><div className="sb-product-offers"><p className="sb-home-eyebrow">{product.category?.name || 'Everyday essentials'}</p><h1>{product.name}</h1><span className="sb-product-size-pill">{[product.brand, product.size ?? product.unit].filter(Boolean).join(' · ') || 'See item details'}</span><p className="sb-muted mt-4">Choose the shop you’d like to buy from. Price and availability belong to that shop.</p><h2>Available from</h2><fieldset><legend className="sr-only">Choose a shop</legend>{offers.map((offer) => <label key={offer.merchantProductId} className={selectedId === offer.merchantProductId ? 'sb-product-offer selected' : 'sb-product-offer'}><input type="radio" name="shop-offer" checked={selectedId === offer.merchantProductId} disabled={!offer.isAvailable || offer.stockQuantity === 0} onChange={() => { setSelectedId(offer.merchantProductId); setAdded(false); }} /><span><strong>{offer.merchant.shopName}</strong><small>{offer.merchant.estimatedDeliveryMinutes ? `Est. ${offer.merchant.estimatedDeliveryMinutes} min · ` : ''}Delivery fee in basket</small></span><b>{formatPKR(offer.discountPricePaisa ?? offer.pricePaisa)}</b></label>)}</fieldset>{offers.length === 0 && <p className="sb-notice">No shop in this area currently offers this item. Choose another area or keep browsing.</p>}<div className="sb-product-add-row"><span>{selected ? `${selected.stockQuantity ?? 'Stock'} units available` : 'Choose a shop'}</span><button className="sb-product-add" disabled={!selected || adding} onClick={() => void add()}>{adding ? 'Adding…' : added ? '✓ Added' : '+ Add'}</button></div>{addError && <p role="alert" className="sb-error">{addError}</p>}<div className="sb-product-about"><h2>About this item</h2><p>{product.description || 'Check the current catalogue and packaging for exact product details.'}</p>{selected && <p>Sold and delivered by {selected.merchant.shopName}.</p>}</div></div></div>{(product.similar ?? []).length > 0 && <section className="sb-home-section"><div className="sb-home-section-heading"><div><h2>Keep your list moving</h2><p>Other everyday essentials.</p></div><Link href="/search">View all&nbsp; →</Link></div><div className="sb-product-grid">{product.similar.slice(0,6).map((item: any) => <ProductCard key={item.merchantProductId ?? item.productId} card={item} />)}</div></section>}</div>;
 }

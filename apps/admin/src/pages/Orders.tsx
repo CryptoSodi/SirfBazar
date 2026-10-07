@@ -8,35 +8,40 @@ const STATUSES = ['', 'SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING', 'REA
 export default function Orders() {
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
-  const { items, page, setPage, totalPages, loading, error, reload } = usePaged('/admin/orders', { status, q });
+  const { items, total, page, setPage, totalPages, loading, error, reload } = usePaged('/admin/orders', { status, q });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { toast, node } = useToast();
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">Orders</h1>
-        <select className={`${inputCls} w-auto`} value={status} onChange={(e) => setStatus(e.target.value)}>
+    <div className="ops-page">
+      <div><div className="ops-kicker">Marketplace / orders</div><h1 className="ops-title mt-2">All marketplace orders</h1><p className="ops-description">Inspect the end-to-end journey across merchants. {total} matching records.</p></div>
+      <div className="ops-panel flex flex-wrap items-end gap-3">
+        <label className="text-xs" style={{ color: 'var(--sb-secondary)' }}>Status
+        <select className={`${inputCls} mt-1 w-auto`} value={status} onChange={(e) => setStatus(e.target.value)}>
           {STATUSES.map((s) => <option key={s} value={s}>{s ? s.replace(/_/g, ' ') : 'All statuses'}</option>)}
         </select>
-        <input className={`${inputCls} max-w-xs`} placeholder="Order number…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        <label className="text-xs" style={{ color: 'var(--sb-secondary)' }}>Search order number
+          <input className={`${inputCls} mt-1 max-w-xs`} placeholder="SB-1041" value={q} onChange={(e) => setQ(e.target.value)} />
+        </label>
+        {(status || q) && <button type="button" className="ops-button" onClick={() => { setStatus(''); setQ(''); }}>Clear filters</button>}
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-      <Table headers={['Order', 'Customer', 'Shop', 'Rider', 'Total', 'Payment', 'Status', '']}>
+      {error && <p className="text-sm" style={{ color: 'var(--sb-danger)' }} role="alert">Unable to load orders. {error} <button type="button" className="ops-button" onClick={reload}>Retry</button></p>}
+      {items.length === 0 ? <div className="ops-panel ops-empty" role={loading ? 'status' : undefined}>{loading ? 'Loading orders…' : 'No orders match these filters. Clear filters to see all orders.'}</div> : <Table headers={['Order', 'Customer', 'Shop', 'Rider', 'Total', 'Payment', 'Status', '']}>
         {items.map((o) => (
           <tr key={o.id} className="hover:bg-slate-50">
-            <td className="px-4 py-2.5 font-mono text-xs">{o.orderNumber}<div className="text-[10px] text-slate-400">{new Date(o.createdAt).toLocaleString()}</div></td>
+            <td className="px-4 py-2.5 font-mono text-xs">{o.orderNumber}<div className="mt-1 text-xs" style={{ color: 'var(--sb-secondary)' }}>{new Date(o.createdAt).toLocaleString()}</div></td>
             <td className="px-4 py-2.5">{o.customer?.user?.fullName ?? '—'}<div className="text-xs text-slate-400">{o.customer?.user?.phoneNumber}</div></td>
             <td className="px-4 py-2.5">{o.merchant?.shopName ?? '—'}</td>
             <td className="px-4 py-2.5">{o.rider?.fullName ?? '—'}</td>
             <td className="px-4 py-2.5 font-semibold">{pkr(o.totalAmountPaisa)}</td>
             <td className="px-4 py-2.5"><Badge value={o.paymentStatus} /><div className="mt-0.5 text-[10px] text-slate-400">{o.paymentMethod}</div></td>
             <td className="px-4 py-2.5"><Badge value={o.status} /></td>
-            <td className="px-4 py-2.5 text-right"><button className={btnGhost} onClick={() => setSelectedId(o.id)}>Open</button></td>
+            <td className="px-4 py-2.5 text-right"><button type="button" className="ops-button" onClick={() => setSelectedId(o.id)} aria-label={`View order ${o.orderNumber}`}>View</button></td>
           </tr>
         ))}
-        {!loading && items.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">No orders found.</td></tr>}
       </Table>
+      }
       <Pager page={page} totalPages={totalPages} setPage={setPage} />
       {selectedId && <OrderModal orderId={selectedId} onClose={() => setSelectedId(null)} toast={toast} reload={reload} />}
       {node}

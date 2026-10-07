@@ -1,0 +1,55 @@
+// Generated from the reference CSS. Values are native design inputs, not a theme-provider implementation.
+export type ThemeMode = "light" | "dark" | "system";
+export const customerPalette = {
+  "light": {
+    "brand": "#009966",
+    "action": "#007a52",
+    "action-hover": "#006442",
+    "bg": "#f7f8f5",
+    "surface": "#fff",
+    "surface2": "#f0f4f0",
+    "ink": "#071f18",
+    "muted": "#52695d",
+    "quiet": "#607369",
+    "line": "#dce4dc",
+    "control": "#7e9387",
+    "accent": "#007a52",
+    "mint": "#e2f6eb",
+    "hero": "#07563e",
+    "hero-text": "#fff",
+    "warning": "#86530b",
+    "warning-bg": "#fff4df",
+    "danger": "#ae362d",
+    "danger-bg": "#fff0ed",
+    "blue": "#2659a2",
+    "blue-bg": "#eaf2ff",
+    "focus": "#4762cc",
+    "overlay": "rgba(6,24,17,.48)"
+  },
+  "dark": {
+    "brand": "#009966",
+    "action": "#007a52",
+    "action-hover": "#006442",
+    "bg": "#101614",
+    "surface": "#19221e",
+    "surface2": "#233027",
+    "ink": "#f0f6f1",
+    "muted": "#b0c2b7",
+    "quiet": "#a4bbae",
+    "line": "#374a3e",
+    "control": "#789486",
+    "accent": "#73dead",
+    "mint": "#183f2c",
+    "hero": "#134d39",
+    "hero-text": "#fff",
+    "warning": "#ffd385",
+    "warning-bg": "#3c2e16",
+    "danger": "#ffb4a8",
+    "danger-bg": "#412823",
+    "blue": "#a5c7ff",
+    "blue-bg": "#1c304a",
+    "focus": "#a7baff",
+    "overlay": "rgba(0,0,0,.65)"
+  }
+} as const;
+export const customerLayout = { pagePadding:20, compactPadding:16, headerHeight:58, tabContentHeight:72, cardRadius:18, productRadius:17, heroRadius:20, buttonRadius:13, sheetRadius:27, buttonMinHeight:52, tapTarget:44, motionFeedbackMs:140, motionEnterMs:200 } as const;

@@ -7,8 +7,10 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "scheme": "sirfbazar",
+    "icon": "./assets/brand/sirfbazar-app-icon-green.png",
     "splash": {
-      "backgroundColor": "#059669",
+      "image": "./assets/brand/sirfbazar-reverse.png",
+      "backgroundColor": "#009966",
       "resizeMode": "contain"
     },
     "ios": {
@@ -40,7 +42,8 @@
         }
       ],
       "@react-native-google-signin/google-signin",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-secure-store"
     ],
     "extra": {
       "eas": {

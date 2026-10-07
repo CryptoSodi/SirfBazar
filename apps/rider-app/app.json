@@ -4,18 +4,20 @@
     "slug": "sirfbazar-rider",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "scheme": "sirfbazar-rider",
+    "icon": "./assets/brand/sirfbazar-app-icon-green.png",
     "splash": {
-      "backgroundColor": "#059669",
+      "image": "./assets/brand/sirfbazar-reverse.png",
+      "backgroundColor": "#009966",
       "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "pk.sirfbazar.rider",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "SirfBazar Rider shares your location with the customer during active deliveries."
+        "NSLocationWhenInUseUsageDescription": "Location permission is optional. This build does not send live GPS updates."
       }
     },
     "android": {
@@ -31,7 +33,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "SirfBazar Rider shares your location with the customer during active deliveries."
+          "locationWhenInUsePermission": "Location permission is optional. This build does not send live GPS updates."
         }
       ],
       "@react-native-google-signin/google-signin",

@@ -1,0 +1,376 @@
+[
+  {
+    "screen": "home",
+    "theme": "light",
+    "file": "screens/01-home-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "home",
+    "theme": "dark",
+    "file": "screens/02-home-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "assigned",
+    "theme": "light",
+    "file": "screens/03-assigned-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "pickup",
+    "theme": "light",
+    "file": "screens/04-pickup-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "navigate",
+    "theme": "light",
+    "file": "screens/05-active-delivery-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "doorstep",
+    "theme": "light",
+    "file": "screens/06-at-customer-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "code",
+    "theme": "light",
+    "file": "screens/07-delivery-code-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "complete",
+    "theme": "light",
+    "file": "screens/08-completed-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "prepaid",
+    "theme": "light",
+    "file": "screens/09-paid-completion-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "history",
+    "theme": "light",
+    "file": "screens/10-history-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "help",
+    "theme": "light",
+    "file": "screens/11-help-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "report",
+    "theme": "light",
+    "file": "screens/12-report-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "profile",
+    "theme": "light",
+    "file": "screens/13-profile-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "appearance",
+    "theme": "light",
+    "file": "screens/14-appearance-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "permissions",
+    "theme": "light",
+    "file": "screens/15-permissions-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "login",
+    "theme": "light",
+    "file": "screens/16-login-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "login-code",
+    "theme": "light",
+    "file": "screens/17-login-code-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "shops",
+    "theme": "light",
+    "file": "screens/18-shops-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "apply",
+    "theme": "light",
+    "file": "screens/19-apply-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "pending",
+    "theme": "light",
+    "file": "screens/20-pending-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "empty",
+    "theme": "light",
+    "file": "screens/21-empty-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "offline",
+    "theme": "light",
+    "file": "screens/22-offline-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "loading",
+    "theme": "light",
+    "file": "screens/23-loading-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "error",
+    "theme": "light",
+    "file": "screens/24-error-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "expired",
+    "theme": "light",
+    "file": "screens/25-expired-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "inactive",
+    "theme": "light",
+    "file": "screens/26-inactive-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "unknown",
+    "theme": "light",
+    "file": "screens/27-unknown-light.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "pickup",
+    "theme": "dark",
+    "file": "screens/28-pickup-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "navigate",
+    "theme": "dark",
+    "file": "screens/29-navigate-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "code",
+    "theme": "dark",
+    "file": "screens/30-code-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "complete",
+    "theme": "dark",
+    "file": "screens/31-complete-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "profile",
+    "theme": "dark",
+    "file": "screens/32-profile-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "appearance",
+    "theme": "dark",
+    "file": "screens/33-appearance-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  },
+  {
+    "screen": "login",
+    "theme": "dark",
+    "file": "screens/34-login-dark.png",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 2,
+    "scope": "scrollable screen, visible viewport"
+  }
+]

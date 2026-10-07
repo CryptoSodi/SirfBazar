@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, pkr, statusLabel } from '../lib/api';
+import { useSearchParams } from 'react-router-dom';
+import { api, errorMessage, pkr, statusLabel } from '../lib/api';
+import { assignableRider, can, readOrder, readOrders, readProfile, readRiders, type MerchantOrder, type MerchantProfile, type MerchantRider } from '../lib/merchant-contracts';
 import { Badge, Modal, Table, btnCls, btnDanger, btnGhost, inputCls, useToast } from '../components/ui';
 
 const CHIPS: { label: string; value: string }[] = [
@@ -8,38 +10,48 @@ const CHIPS: { label: string; value: string }[] = [
   { label: 'Accepted', value: 'MERCHANT_ACCEPTED' },
   { label: 'Preparing', value: 'PREPARING' },
   { label: 'Ready', value: 'READY_FOR_PICKUP' },
+  { label: 'Assigned', value: 'RIDER_ASSIGNED' },
   { label: 'On the way', value: 'ON_THE_WAY' },
   { label: 'Delivered', value: 'DELIVERED' },
 ];
 
 const fmtTime = (d?: string) => (d ? new Date(d).toLocaleString() : '—');
-const itemCount = (o: any) =>
-  (o.items ?? []).reduce((n: number, it: any) => n + (it.quantity ?? 0), 0);
+const itemCount = (o: MerchantOrder) => o.items.reduce((n, it) => n + it.quantity, 0);
 
 export default function Orders() {
-  const [status, setStatus] = useState('');
-  const [orders, setOrders] = useState<any[]>([]);
+  const [search, setSearch] = useSearchParams();
+  const [status, setStatus] = useState(() => CHIPS.some(chip => chip.value === search.get('status')) ? search.get('status')! : '');
+  const [orders, setOrders] = useState<MerchantOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<MerchantProfile | null>(null);
+  const [profileError, setProfileError] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(() => search.get('order'));
   const { toast, node } = useToast();
+  const requestNumber = useRef(0);
 
   const statusRef = useRef(status);
   statusRef.current = status;
 
+  useEffect(() => {
+    setSelectedId(search.get('order'));
+    const filter = search.get('status');
+    if (filter !== null && CHIPS.some(chip => chip.value === filter)) setStatus(filter);
+  }, [search]);
+
   const load = useCallback(async (showSpinner = true) => {
+    const current = ++requestNumber.current;
     if (showSpinner) setLoading(true);
     setError('');
     try {
       const s = statusRef.current;
       const res = await api.get(`/merchant/orders${s ? `?status=${s}` : ''}`);
-      // Guard against a stale response if the filter changed mid-flight.
-      if (statusRef.current !== s) return;
-      setOrders(Array.isArray(res) ? res : (res?.items ?? []));
-    } catch (e: any) {
-      setError(e.message);
+      if (current !== requestNumber.current || statusRef.current !== s) return;
+      setOrders(readOrders(res));
+    } catch (e) {
+      if (current === requestNumber.current) { setError(errorMessage(e)); setOrders([]); }
     } finally {
-      if (showSpinner) setLoading(false);
+      if (current === requestNumber.current) setLoading(false);
     }
   }, []);
 
@@ -48,38 +60,44 @@ export default function Orders() {
     load(true);
   }, [status, load]);
 
-  // Poll the list every 10s (silent refresh).
+  const loadProfile = useCallback(async () => {
+    setProfileError('');
+    try { setProfile(readProfile(await api.get('/merchant/profile'))); }
+    catch (e) { setProfile(null); setProfileError(errorMessage(e)); }
+  }, []);
+  useEffect(() => { void loadProfile(); return () => { requestNumber.current++; }; }, [loadProfile]);
+
+  // Refresh visible work periodically; avoid background traffic and stale updates.
   useEffect(() => {
-    const id = setInterval(() => load(false), 10000);
-    return () => clearInterval(id);
+    const id = setInterval(() => { if (!document.hidden) load(false); }, 30_000);
+    let debounce: ReturnType<typeof setTimeout>;
+    const refresh = () => { clearTimeout(debounce); debounce = setTimeout(() => void load(false), 100); };
+    window.addEventListener('sb:orders-changed', refresh);
+    return () => { clearInterval(id); clearTimeout(debounce); window.removeEventListener('sb:orders-changed', refresh); };
   }, [load]);
 
   return (
-    <div>
-      <h1 className="text-xl font-bold">Orders</h1>
-
-      <div className="mt-4 flex flex-wrap gap-2">
+    <div className="ops-page">
+      <div><div className="ops-kicker">Sales & delivery</div><h1 className="ops-title mt-2">Online orders</h1><p className="ops-description">Review and fulfil orders for your shop. Latest 100 per status are shown.</p></div>
+      <div className="ops-panel flex flex-wrap items-center gap-2" role="group" aria-label="Filter orders by status">
         {CHIPS.map((c) => (
           <button
             key={c.value}
+            type="button"
+            aria-pressed={status === c.value}
             onClick={() => setStatus(c.value)}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
-              status === c.value
-                ? 'bg-emerald-600 text-white'
-                : 'border border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
+            className={status === c.value ? 'ops-button ops-button-primary' : 'ops-button'}
           >
             {c.label}
           </button>
         ))}
       </div>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="ops-panel text-sm" style={{ color: 'var(--sb-danger)' }} role="alert">Unable to load orders. {error} <button type="button" className="ops-button ml-2" onClick={() => load(true)}>Retry</button></p>}
 
-      <div className="mt-4">
-        <Table headers={['Order', 'Customer', 'Items', 'Total', 'Status', 'Time']}>
+      {loading ? <div className="ops-panel ops-empty" role="status">Loading orders…</div> : error ? null : orders.length === 0 ? <div className="ops-panel ops-empty">No orders in this status. Choose another filter to continue.</div> : <Table headers={['Order', 'Customer', 'Items', 'Total', 'Status', 'Rider', 'Time', 'Action']}>
           {orders.map((o) => (
-            <tr key={o.id} className="cursor-pointer hover:bg-slate-50" onClick={() => setSelectedId(o.id)}>
+            <tr key={o.id}>
               <td className="px-4 py-2.5 font-mono text-xs font-semibold">{o.orderNumber}</td>
               <td className="px-4 py-2.5">
                 {o.customer?.user?.fullName ?? '—'}
@@ -88,30 +106,21 @@ export default function Orders() {
               <td className="px-4 py-2.5">{itemCount(o)}</td>
               <td className="px-4 py-2.5 font-semibold">{pkr(o.totalAmountPaisa)}</td>
               <td className="px-4 py-2.5"><Badge value={o.status} /></td>
+              <td className="px-4 py-2.5 text-sm">{o.rider?.fullName ?? '—'}</td>
               <td className="px-4 py-2.5 text-xs text-slate-500">{fmtTime(o.createdAt)}</td>
+              <td><button type="button" className="ops-button" onClick={() => setSelectedId(o.id)} aria-label={`View order ${o.orderNumber}`}>View</button></td>
             </tr>
           ))}
-          {!loading && orders.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                No orders here.
-              </td>
-            </tr>
-          )}
-          {loading && orders.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                Loading…
-              </td>
-            </tr>
-          )}
         </Table>
-      </div>
+      }
 
       {selectedId && (
         <OrderModal
           orderId={selectedId}
-          onClose={() => setSelectedId(null)}
+          profile={profile}
+          profileError={profileError}
+          retryProfile={loadProfile}
+          onClose={() => { setSelectedId(null); const next = new URLSearchParams(search); next.delete('order'); setSearch(next, { replace: true }); }}
           toast={toast}
           reload={() => load(false)}
         />
@@ -123,68 +132,101 @@ export default function Orders() {
 
 function OrderModal({
   orderId,
+  profile,
+  profileError,
+  retryProfile,
   onClose,
   toast,
   reload,
 }: {
   orderId: string;
+  profile: MerchantProfile | null;
+  profileError: string;
+  retryProfile: () => void;
   onClose: () => void;
   toast: (text: string, ok?: boolean) => void;
   reload: () => void;
 }) {
-  const [order, setOrder] = useState<any>(null);
+  const [order, setOrder] = useState<MerchantOrder | null>(null);
+  const [detailLoading, setDetailLoading] = useState(true);
+  const [detailError, setDetailError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [uncertain, setUncertain] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [riders, setRiders] = useState<any[]>([]);
+  const [riders, setRiders] = useState<MerchantRider[]>([]);
+  const [ridersLoading, setRidersLoading] = useState(false);
+  const [ridersError, setRidersError] = useState('');
   const [riderId, setRiderId] = useState('');
+  const [confirmAssign, setConfirmAssign] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState('');
 
-  const loadOrder = useCallback(() => {
-    return api
-      .get(`/merchant/orders/${orderId}`)
-      .then(setOrder)
-      .catch((e: any) => toast(e.message, false));
-  }, [orderId, toast]);
+  const loadOrder = useCallback(async () => {
+    const fresh = readOrder(await api.get(`/merchant/orders/${orderId}`));
+    setOrder(fresh);
+    setDetailError('');
+    setUncertain(false);
+    return fresh;
+  }, [orderId]);
 
   useEffect(() => {
-    loadOrder();
+    setDetailLoading(true);
+    loadOrder().catch((e) => setDetailError(errorMessage(e))).finally(() => setDetailLoading(false));
   }, [loadOrder]);
 
-  const act = async (fn: () => Promise<any>, okMsg: string) => {
+  const act = async (action: string, expectedStatus: string, okMsg: string, body?: unknown) => {
     setBusy(true);
+    setActionError('');
+    const confirmed = (fresh: MerchantOrder) => fresh.status === expectedStatus &&
+      (action !== 'assign-rider' || fresh.rider?.id === (body as { riderId: string }).riderId);
     try {
-      await fn();
-      toast(okMsg);
-      await loadOrder();
+      const result = await api.post(`/merchant/orders/${orderId}/${action}`, body);
+      if (result?.ok !== true || result.status !== expectedStatus) throw new Error('The service did not confirm the expected order status.');
+      const fresh = await loadOrder();
       reload();
-    } catch (e: any) {
-      toast(e.message, false);
+      window.dispatchEvent(new Event('sb:orders-reconcile'));
+      if (!confirmed(fresh)) throw new Error('The order changed while this action was being confirmed.');
+      toast(okMsg);
+      setConfirmAssign(false);
+      setRejecting(false);
+    } catch (e) {
+      try {
+        const fresh = await loadOrder();
+        reload();
+        window.dispatchEvent(new Event('sb:orders-reconcile'));
+        if (confirmed(fresh)) { toast(`Latest order state confirmed: ${statusLabel(expectedStatus)}`); setConfirmAssign(false); setRejecting(false); return; }
+        setActionError(`${errorMessage(e)} The latest order state is shown. Review it before trying again.`);
+      } catch {
+        setUncertain(true);
+        setActionError(`The outcome could not be confirmed. Refresh this order before trying again. ${errorMessage(e)}`);
+      }
     } finally {
       setBusy(false);
     }
   };
 
-  const loadRiders = async () => {
+  const loadRiders = useCallback(async () => {
+    setRidersLoading(true);
+    setRidersError('');
     try {
-      const res = await api.get('/merchant/riders');
-      const list = (Array.isArray(res) ? res : (res?.items ?? [])).filter(
-        (r: any) => r.isActive && r.approvalStatus === 'APPROVED',
-      );
-      setRiders(list);
-      if (!riderId && list[0]) setRiderId(list[0].id);
-    } catch (e: any) {
-      toast(e.message, false);
+      setRiders(readRiders(await api.get('/merchant/riders')).filter(assignableRider));
+    } catch (e) {
+      setRiders([]);
+      setRidersError(errorMessage(e));
+    } finally {
+      setRidersLoading(false);
     }
-  };
+  }, []);
 
   // Load assignable riders once the order is ready for pickup.
   useEffect(() => {
     if (order?.status === 'READY_FOR_PICKUP') loadRiders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order?.status]);
+  }, [order?.status, loadRiders]);
 
-  if (!order) return null;
+  if (!order) return <Modal title="Order details" onClose={onClose}><div className="p-4" role={detailError ? 'alert' : 'status'}>{detailError ? <>Unable to load this order. {detailError} <button type="button" className="ops-button" onClick={() => { setDetailError(''); setDetailLoading(true); loadOrder().catch((e) => setDetailError(errorMessage(e))).finally(() => setDetailLoading(false)); }}>Retry</button></> : detailLoading ? 'Loading order details…' : 'Order details unavailable.'}</div></Modal>;
 
   const s: string = order.status;
-  const items: any[] = order.items ?? [];
+  const items = order.items;
   const addr = order.deliveryAddress;
 
   return (
@@ -274,87 +316,33 @@ function OrderModal({
           </ul>
         </details>
 
-        {/* Lifecycle actions */}
+        {actionError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800" role="alert">{actionError}</div>}
+        {uncertain && <button type="button" className={btnGhost} onClick={() => loadOrder().catch((e) => setDetailError(errorMessage(e)))}>Refresh order to check outcome</button>}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
-          {s === 'SENT_TO_MERCHANT' && (
-            <>
-              <button
-                className={btnCls}
-                disabled={busy}
-                onClick={() => act(() => api.post(`/merchant/orders/${orderId}/accept`), 'Order accepted')}
-              >
-                Accept
-              </button>
-              <button
-                className={btnDanger}
-                disabled={busy}
-                onClick={() => {
-                  const reason = prompt('Reason for rejecting this order:');
-                  if (reason != null) act(() => api.post(`/merchant/orders/${orderId}/reject`, { reason }), 'Order rejected');
-                }}
-              >
-                Reject
-              </button>
-            </>
-          )}
-
-          {s === 'MERCHANT_ACCEPTED' && (
-            <>
-              <button
-                className={btnCls}
-                disabled={busy}
-                onClick={() => act(() => api.post(`/merchant/orders/${orderId}/preparing`), 'Marked as preparing')}
-              >
-                Start preparing
-              </button>
-              <button
-                className={btnGhost}
-                disabled={busy}
-                onClick={() => act(() => api.post(`/merchant/orders/${orderId}/ready`), 'Marked ready for pickup')}
-              >
-                Mark ready
-              </button>
-            </>
-          )}
-
-          {s === 'PREPARING' && (
-            <button
-              className={btnCls}
-              disabled={busy}
-              onClick={() => act(() => api.post(`/merchant/orders/${orderId}/ready`), 'Marked ready for pickup')}
-            >
-              Mark ready for pickup
-            </button>
-          )}
-
-          {s === 'READY_FOR_PICKUP' && (
-            <div className="flex w-full flex-wrap items-center gap-2">
-              <select
-                className={`${inputCls} w-auto flex-1`}
-                value={riderId}
-                onChange={(e) => setRiderId(e.target.value)}
-              >
-                {riders.length === 0 && <option value="">No active riders</option>}
-                {riders.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.fullName} {r.phoneNumber ? `· ${r.phoneNumber}` : ''}
-                  </option>
-                ))}
-              </select>
-              <button
-                className={btnCls}
-                disabled={busy || !riderId}
-                onClick={() => act(() => api.post(`/merchant/orders/${orderId}/assign-rider`, { riderId }), 'Rider assigned')}
-              >
-                Assign rider
-              </button>
-            </div>
-          )}
-
-          {!['SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'].includes(s) && (
-            <span className="text-xs text-slate-400">No actions available for this status.</span>
-          )}
+          {!profile ? profileError ? <span className="text-xs text-red-700" role="alert">Unable to verify merchant permissions. {profileError} <button type="button" className={btnGhost} onClick={retryProfile}>Retry</button></span> : <span className="text-xs text-slate-500">Checking merchant permissions before showing actions.</span> : !can(profile, 'ORDERS') ? <span className="text-xs text-red-700">You do not have order-management permission.</span> : <>
+            {s === 'SENT_TO_MERCHANT' && <>
+              <button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('accept', 'MERCHANT_ACCEPTED', 'Order accepted')}>Accept order</button>
+              <button type="button" className={btnDanger} disabled={busy || uncertain} onClick={() => setRejecting(true)}>Reject order</button>
+            </>}
+            {s === 'MERCHANT_ACCEPTED' && <>
+              <button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('preparing', 'PREPARING', 'Order is preparing')}>Start preparing</button>
+              <button type="button" className={btnGhost} disabled={busy || uncertain} onClick={() => act('ready', 'READY_FOR_PICKUP', 'Order ready for pickup')}>Mark ready</button>
+            </>}
+            {s === 'PREPARING' && <button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('ready', 'READY_FOR_PICKUP', 'Order ready for pickup')}>Mark ready for pickup</button>}
+            {s === 'READY_FOR_PICKUP' && <div className="w-full space-y-3">
+              {!can(profile, 'RIDERS') ? <p className="text-xs text-red-700">Rider permission is required to assign a rider.</p> : ridersLoading ? <p role="status" className="text-xs text-slate-500">Loading your riders…</p> : ridersError ? <p role="alert" className="text-xs text-red-700">Unable to load riders. {ridersError} <button type="button" className={btnGhost} onClick={loadRiders}>Retry</button></p> : riders.length === 0 ? <p className="text-xs text-slate-600">No active, approved riders are available for this shop. Add or approve a rider in My riders.</p> : <>
+                <label htmlFor="assign-rider" className="block text-xs font-semibold text-slate-700">Choose one of your active, approved riders</label>
+                <select id="assign-rider" className={`${inputCls} w-full`} value={riderId} onChange={(e) => { setRiderId(e.target.value); setConfirmAssign(false); }}>
+                  <option value="">Select a rider</option>
+                  {riders.map((r) => <option key={r.id} value={r.id}>{r.fullName} · {r.phoneNumber}</option>)}
+                </select>
+                {confirmAssign ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p>Assign {riders.find((r) => r.id === riderId)?.fullName} to order {order.orderNumber}?</p><div className="mt-2 flex gap-2"><button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('assign-rider', 'RIDER_ASSIGNED', 'Rider assignment confirmed', { riderId })}>{busy ? 'Confirming…' : 'Confirm assignment'}</button><button type="button" className={btnGhost} disabled={busy} onClick={() => setConfirmAssign(false)}>Cancel</button></div></div> : <button type="button" className={btnCls} disabled={busy || uncertain || !riderId} onClick={() => setConfirmAssign(true)}>Assign selected rider</button>}
+              </>}
+            </div>}
+            {!['SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'].includes(s) && <span className="text-xs text-slate-500">No merchant actions are available for this status.</span>}
+          </>}
         </div>
+        {rejecting && s === 'SENT_TO_MERCHANT' && <div className="rounded-xl border border-red-200 bg-red-50 p-3"><label htmlFor="rejection-reason" className="block text-xs font-semibold text-red-900">Reason for rejecting this order</label><textarea id="rejection-reason" className={`${inputCls} mt-2`} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} required /><div className="mt-2 flex gap-2"><button type="button" className={btnDanger} disabled={busy || uncertain || !reason.trim()} onClick={() => act('reject', 'MERCHANT_REJECTED', 'Order rejected', { reason: reason.trim() })}>Confirm rejection</button><button type="button" className={btnGhost} disabled={busy} onClick={() => setRejecting(false)}>Cancel</button></div></div>}
       </div>
     </Modal>
   );

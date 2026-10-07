@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { Badge, Stat, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
+const ShopMapPicker = lazy(() => import('../components/ShopMapPicker'));
 
 /** Editable fields accepted by PUT /merchant/profile (UpdateMerchantProfileDto). */
 type Form = {
@@ -74,6 +75,7 @@ export default function Profile() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [stateBusy, setStateBusy] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const { toast, node } = useToast();
 
   const set = (k: keyof Form, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -124,6 +126,7 @@ export default function Profile() {
       const updated = await api.put('/merchant/profile', body);
       setMerchant((m: any) => ({ ...m, ...updated }));
       setForm(toForm(updated));
+      window.dispatchEvent(new Event('sb:shop-status'));
       toast('Shop details saved');
     } catch (e: any) {
       toast(e.message, false);
@@ -138,6 +141,7 @@ export default function Profile() {
       await api.post(`/merchant/${path}`);
       toast(label);
       await load();
+      window.dispatchEvent(new Event('sb:shop-status'));
     } catch (e: any) {
       toast(e.message, false);
     } finally {
@@ -250,13 +254,11 @@ export default function Profile() {
                 <input className={inputCls} value={form.area} onChange={(e) => set('area', e.target.value)} />
               </Field>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Latitude">
-                <input className={inputCls} type="number" step="any" value={form.latitude} onChange={(e) => set('latitude', e.target.value)} />
-              </Field>
-              <Field label="Longitude">
-                <input className={inputCls} type="number" step="any" value={form.longitude} onChange={(e) => set('longitude', e.target.value)} />
-              </Field>
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <button type="button" className={btnGhost} disabled={!canEdit} onClick={() => setMapOpen(true)}>Pin shop on map</button>
+              <span className="text-xs text-slate-500">{form.latitude && form.longitude ? `Pinned at ${Number(form.latitude).toFixed(5)}, ${Number(form.longitude).toFixed(5)}` : 'No shop location pinned yet'}</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Service radius (km)" hint="Minimum 0.5">
                 <input className={inputCls} type="number" step="0.5" min="0.5" value={form.serviceRadiusKm} onChange={(e) => set('serviceRadiusKm', e.target.value)} />
               </Field>
@@ -307,6 +309,7 @@ export default function Profile() {
       </form>
 
       {node}
+      {mapOpen && <Suspense fallback={<div role="status">Loading map…</div>}><ShopMapPicker initial={form.latitude && form.longitude ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null} onClose={() => setMapOpen(false)} onConfirm={(point) => { setForm((previous) => ({ ...previous, latitude: String(point.latitude), longitude: String(point.longitude) })); setMapOpen(false); toast('Shop pin selected. Save changes to publish it.'); }} /></Suspense>}
     </div>
   );
 }

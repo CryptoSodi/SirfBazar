@@ -1,5 +1,5 @@
 export function formatPKR(paisa: number | null | undefined): string {
-  if (paisa == null) return 'Rs 0';
+  if (paisa == null || !Number.isFinite(paisa)) return 'Amount unavailable';
   return `Rs ${Math.round(paisa / 100).toLocaleString('en-PK')}`;
 }
 

@@ -1,0 +1,146 @@
+[
+  {
+    "file": "reference/assets/product-milk.svg",
+    "sha256": "41beef08949703af6c23aaa973de79d8cb2d31efc23776b826bd9454a72c2bc2",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-milk.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-rice.svg",
+    "sha256": "917be297c39fed817f4b223902ff76feb12c64c6ab66b130994ce8ead2ee273b",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-rice.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-tomato.svg",
+    "sha256": "9c2a973d700d1f78dcf6479112bc371a82679095a78fdabe7e1f6478f0847a4a",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-tomato.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-banana.svg",
+    "sha256": "956d6615570ff55aa111fa2609f22cbe490407672b5edf957e07737d506e3221",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-banana.svg"
+    }
+  },
+  {
+    "file": "reference/assets/sirfbazar-slogan-urdu.svg",
+    "sha256": "b20dee447d2cd70adc0729fe2e620fb086b935941a5ab7925b3b7424e996c9bc",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/sirfbazar-slogan-urdu.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-apple.svg",
+    "sha256": "e9a5eb896c99da7eccb2e7e3fa62ba09422fb7ed941f224fdbb4c9785d5865bf",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-apple.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-tea.svg",
+    "sha256": "3c753ed24ab68c54c249b9593ea85e10c3e273df1a33d16eee61c273a070ffcf",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-tea.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-shampoo.svg",
+    "sha256": "0bb3f899d74b7b10c51af12d1b6ab776e80e76910b62f305eaa731fbd39a99d6",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-shampoo.svg"
+    }
+  },
+  {
+    "file": "reference/assets/sirfbazar-slogan-urdu-dark.png",
+    "sha256": "254d475b44121c776fb7b4ad578b810a122d25737bbb55ef1567fceaaa63619b",
+    "unchangedSource": {
+      "archive": "SirfBazar_Rider_App_Design_v1.zip",
+      "member": "SirfBazar_Rider_App_Design_v1/assets/sirfbazar-slogan-urdu-dark.png"
+    }
+  },
+  {
+    "file": "reference/assets/sirfbazar-horizontal-no-slogan-dark.png",
+    "sha256": "5fbabe09488f26a94c70482baffc4560e645c58be2c9c5c513cf19d75aafc6cc",
+    "unchangedSource": {
+      "archive": "SirfBazar_Rider_App_Design_v1.zip",
+      "member": "SirfBazar_Rider_App_Design_v1/assets/sirfbazar-horizontal-no-slogan-dark.png"
+    }
+  },
+  {
+    "file": "reference/assets/product-oil.svg",
+    "sha256": "00c1420ba9b707d93f25fb542e13426db1db83f80de3ac06617fd7a27f28ddf6",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-oil.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-yogurt.svg",
+    "sha256": "cece15503d2cffc0c1e8093b7e6a7d505d329bad9f5a62344412108eb9d6a020",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-yogurt.svg"
+    }
+  },
+  {
+    "file": "reference/assets/sirfbazar-horizontal-no-slogan-light.png",
+    "sha256": "cc966d889767fc8d45d35d911a388bc7ac182fbf680ab6e14b33deef28dadecc",
+    "unchangedSource": {
+      "archive": "SirfBazar_Rider_App_Design_v1.zip",
+      "member": "SirfBazar_Rider_App_Design_v1/assets/sirfbazar-horizontal-no-slogan-light.png"
+    }
+  },
+  {
+    "file": "reference/assets/product-bread.svg",
+    "sha256": "391ecd97de5a9b3670743e93e370038c3fbac5d5ea1e8d64c95ccab3b9f6d76c",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-bread.svg"
+    }
+  },
+  {
+    "file": "reference/assets/sirfbazar-horizontal-no-slogan.svg",
+    "sha256": "7e74f5630929d06d1873a8f661a56414d506b2b9b692763dd59710c322ee9bfc",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/sirfbazar-horizontal-no-slogan.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-detergent.svg",
+    "sha256": "b6518100723a78c5e3a61d8352f46422dabed033e3588bfd72157f85d003cb78",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-detergent.svg"
+    }
+  },
+  {
+    "file": "reference/assets/product-eggs.svg",
+    "sha256": "e8a023df7c2f81e995842e1f682212dd7ea34d2f94c378764f43a80577c1a5c1",
+    "unchangedSource": {
+      "archive": "SirfBazar_Customer_Web_Design_v1.zip",
+      "member": "SirfBazar_Customer_Web_Design_v1/assets/product-eggs.svg"
+    }
+  },
+  {
+    "file": "reference/assets/sirfbazar-slogan-urdu-light.png",
+    "sha256": "cfd450a72a17a1be440ca69a48fb62e809c2329b6ffc00d605ee87bd53cbb816",
+    "unchangedSource": {
+      "archive": "SirfBazar_Rider_App_Design_v1.zip",
+      "member": "SirfBazar_Rider_App_Design_v1/assets/sirfbazar-slogan-urdu-light.png"
+    }
+  }
+]

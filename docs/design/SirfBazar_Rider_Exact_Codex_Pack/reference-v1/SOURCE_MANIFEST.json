@@ -1,0 +1,70 @@
+{
+  "prepared": "2026-09-29",
+  "repository": "CryptoSodi/SirfBazar",
+  "read_ref": "default branch; display URLs master; deployed version not verified",
+  "files": [
+    {
+      "path": "apps/rider-app/package.json",
+      "git_blob_sha": "6587e0151667ccf73d1d55f42909d80ac3e8cfe0",
+      "scope": "complete file",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/rider-app/package.json"
+    },
+    {
+      "path": "apps/rider-app/screens/DeliveryScreen.tsx",
+      "git_blob_sha": "8e91217f31353ffbe4d05602be4943a73e2c7dad",
+      "scope": "complete file",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/rider-app/screens/DeliveryScreen.tsx"
+    },
+    {
+      "path": "apps/rider-app/screens/LoginScreen.tsx",
+      "git_blob_sha": "41ecba9d2b8f2723b62ed020a8202bca399ed6f4",
+      "scope": "complete file",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/rider-app/screens/LoginScreen.tsx"
+    },
+    {
+      "path": "apps/api/src/rider/rider.service.ts",
+      "git_blob_sha": "22c99749a1f66ffe5b97985b05c8e3a99323fbc7",
+      "scope": "selected lines 1–115 and 112–395",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/rider/rider.service.ts"
+    },
+    {
+      "path": "apps/api/src/rider/rider.controller.ts",
+      "git_blob_sha": "6fc92a187c8304542434bf71e915efc2040d4591",
+      "scope": "complete file",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/rider/rider.controller.ts"
+    },
+    {
+      "path": "apps/api/src/rider/rider-apply.controller.ts",
+      "git_blob_sha": "625e98438521ac95ca3333bc85ffba4261cc9009",
+      "scope": "complete file",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/rider/rider-apply.controller.ts"
+    },
+    {
+      "path": "apps/api/src/auth/auth.dto.ts",
+      "git_blob_sha": "c5a1960c2056e70576adf7e3e0bd811e7a5e7c66",
+      "scope": "complete file",
+      "url": "https://github.com/CryptoSodi/SirfBazar/blob/master/apps/api/src/auth/auth.dto.ts"
+    }
+  ],
+  "search_excerpt": {
+    "path": "apps/api/src/orders/orders.service.ts",
+    "snippet": "deliveryOtp: generateNumericCode(4)",
+    "scope": "search result excerpt, not full file",
+    "ref_in_search": "69e137bf9ca53c5235ac6d55c866b611b3e6ce38"
+  },
+  "startup_log": {
+    "path": "reference/API_STARTUP_LOG.txt",
+    "sha256": "e2e1798cf248872d955640e7f8f3f7c50787d5fdaf64b530df5a669f2d1d6d1a"
+  },
+  "brand_sources": {
+    "package": "SirfBazar_API_Supported_Dashboard_v2.zip",
+    "geometry": "Original provided SVGs copied unchanged; generated PNG display derivatives change dark fill only"
+  },
+  "not_performed": [
+    "Live API traffic",
+    "Real authentication or delivery mutations",
+    "Backend or native repository edits",
+    "Google Stitch generation",
+    "Native runtime testing"
+  ]
+}

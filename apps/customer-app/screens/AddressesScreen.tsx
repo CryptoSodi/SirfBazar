@@ -1,131 +1,64 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useState } from 'react';
-import { Alert, FlatList, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCallback, useRef, useState } from 'react';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { LoginSheet } from '../components/LoginSheet';
 import { api, isLoggedIn } from '../lib/api';
 import { useTheme } from '../lib/theme';
-import { toast } from '../components/Toast';
+import { Icon, Notice, StatePanel, usePageInset } from '../components/CustomerUI';
 
-const LABEL_ICONS: Record<string, string> = { Home: '🏠', Work: '💼', Family: '❤️' };
-const iconFor = (label?: string) => (label && LABEL_ICONS[label]) || '📍';
-
-/** Foodpanda-style saved-address book: add, edit, set default, delete. */
+/** C25: saved addresses are customer-owned; never collapse an API error to empty. */
 export default function AddressesScreen() {
   const { colors, s } = useTheme();
+  const inset = usePageInset();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [addresses, setAddresses] = useState<any[] | null>(null);
   const [needLogin, setNeedLogin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-
+  const [error, setError] = useState('');
+  const [deleteId, setDeleteId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const mutationLock = useRef(false);
+  const generation = useRef(0);
   const load = useCallback(() => {
-    (async () => {
-      if (!(await isLoggedIn())) {
-        setNeedLogin(true);
-        setAddresses(null);
-        return;
-      }
-      setNeedLogin(false);
-      api.get('/customer/addresses').then(setAddresses).catch(() => setAddresses([]));
-    })();
+    const current = ++generation.current;
+    void (async () => {
+      const ok = await isLoggedIn();
+      if (current !== generation.current) return;
+      setNeedLogin(!ok);
+      if (!ok) { setAddresses(null); return; }
+      const result = await api.get('/customer/addresses');
+      if (current === generation.current) { setAddresses(result); setError(''); }
+    })().catch((cause) => { if (current === generation.current) setError(`${cause.message} Reload addresses to retry.`); });
   }, []);
-
-  useFocusEffect(load);
-
-  const setDefault = async (id: string) => {
-    try {
-      await api.put(`/customer/addresses/${id}/default`, {});
-      load();
-    } catch (e: any) {
-      toast(e?.message ?? 'Could not update.');
-    }
+  useFocusEffect(useCallback(() => { load(); return () => { generation.current++; }; }, [load]));
+  const mutate = async (action: () => Promise<any>, failure: string) => {
+    if (mutationLock.current) return;
+    mutationLock.current = true; setBusy(true);
+    try { await action(); setDeleteId(''); load(); }
+    catch (cause: any) { setError(`${cause.message} ${failure}`); }
+    finally { mutationLock.current = false; setBusy(false); }
   };
-
-  const remove = (item: any) => {
-    Alert.alert('Delete address', `Remove "${item.label}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await api.del(`/customer/addresses/${item.id}`);
-            load();
-          } catch (e: any) {
-            toast(e?.message ?? 'Could not delete.');
-          }
-        },
-      },
-    ]);
-  };
-
-  if (needLogin) {
-    return (
-      <SafeAreaView style={s.screen} edges={['bottom']}>
-        <View style={[s.pad, { alignItems: 'center', marginTop: 60 }]}>
-          <Text style={{ fontSize: 40 }}>📍</Text>
-          <Text style={[s.h2, { marginTop: 8 }]}>Login to manage addresses</Text>
-          <Text style={[s.muted, { marginTop: 4, textAlign: 'center' }]}>Save home, work and more to check out faster.</Text>
-          <TouchableOpacity style={[s.btn, { marginTop: 14 }]} onPress={() => setShowLogin(true)}>
-            <Text style={s.btnText}>Login</Text>
-          </TouchableOpacity>
-        </View>
-        <LoginSheet visible={showLogin} onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); load(); }} />
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={s.screen} edges={['bottom']}>
-      <FlatList
-        contentContainerStyle={[s.pad, { gap: 10, paddingBottom: 96 }]}
-        data={addresses ?? []}
-        keyExtractor={(a) => a.id}
-        ListEmptyComponent={
-          addresses ? (
-            <Text style={[s.muted, { textAlign: 'center', marginTop: 24 }]}>No saved addresses yet. Add one below.</Text>
-          ) : (
-            <Text style={[s.muted, { marginTop: 12 }]}>Loading…</Text>
-          )
-        }
-        renderItem={({ item }) => (
-          <View style={s.card}>
-            <View style={[s.row, { gap: 10 }]}>
-              <Text style={{ fontSize: 22 }}>{iconFor(item.label)}</Text>
-              <View style={{ flex: 1 }}>
-                <View style={[s.row, { gap: 8 }]}>
-                  <Text style={[s.body, { fontWeight: '800' }]}>{item.label}</Text>
-                  {item.isDefault && (
-                    <Text style={[s.chip, { backgroundColor: colors.emeraldBg, color: colors.primary, fontWeight: '700' }]}>Default</Text>
-                  )}
-                </View>
-                <Text style={s.muted} numberOfLines={2}>{item.fullAddress}</Text>
-                {!!item.instructions && <Text style={[s.faint, { marginTop: 2 }]} numberOfLines={1}>📝 {item.instructions}</Text>}
-              </View>
-            </View>
-            <View style={[s.row, { gap: 8, marginTop: 12 }]}>
-              <TouchableOpacity style={[s.btnGhost, { flex: 1, paddingVertical: 8 }]} onPress={() => navigation.navigate('AddressEdit', { addressId: item.id })}>
-                <Text style={s.btnGhostText}>Edit</Text>
-              </TouchableOpacity>
-              {!item.isDefault && (
-                <TouchableOpacity style={[s.btnGhost, { flex: 1, paddingVertical: 8 }]} onPress={() => setDefault(item.id)}>
-                  <Text style={s.btnGhostText}>Set default</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={[s.btnGhost, { paddingVertical: 8, paddingHorizontal: 14, borderColor: colors.danger }]} onPress={() => remove(item)}>
-                <Text style={[s.btnGhostText, { color: colors.danger }]}>Delete</Text>
-              </TouchableOpacity>
-            </View>
+  return <View style={s.screen}>
+    {needLogin ? <StatePanel title="Keep your places together" message="Sign in to save home, work and other delivery addresses." action="Sign in" onPress={() => setShowLogin(true)} /> :
+      <ScrollView contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}>
+        <Text accessibilityRole="header" style={s.h1}>Your places</Text><Text style={[s.muted, { marginTop: 8 }]}>Keep the written address and map pin accurate.</Text>
+        {!!error && <View style={{ gap: 12, marginTop: 20 }}><Notice danger>{error}</Notice><TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={load}><Text style={s.btnGhostText}>Reload addresses</Text></TouchableOpacity></View>}
+        {!addresses && !error && <StatePanel loading title="Loading addresses…" />}
+        {addresses?.length === 0 && <StatePanel title="No saved places yet" message="Add a delivery address and its map pin below." />}
+        {addresses?.map((item) => <View key={item.id} style={[s.card, { marginTop: 20 }]}>
+          <View style={[s.row, { gap: 8 }]}><Icon name={item.label === 'Home' ? 'home' : 'pin'} color={colors.text} size={22} /><Text style={[s.body, { fontSize: 15, fontWeight: '700', flex: 1 }]}>{item.label || 'Delivery address'}</Text>{item.isDefault && <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary, backgroundColor: colors.emeraldBg, paddingVertical: 4, paddingHorizontal: 7, borderRadius: 7 }}>Default</Text>}</View>
+          <Text style={[s.body, { fontSize: 12, lineHeight: 18, marginTop: 12 }]}>{item.fullAddress}{item.city ? `\n${item.city}` : ''}</Text>
+          <View style={[s.spread, { marginTop: 12, gap: 12, flexWrap: 'wrap' }]}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Edit ${item.label || 'delivery'} address`} style={{ minHeight: 36, justifyContent: 'center' }} onPress={() => navigation.navigate('AddressEdit', { addressId: item.id })}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>Edit address</Text></TouchableOpacity>
+            {!item.isDefault && <TouchableOpacity accessibilityRole="button" disabled={busy} style={{ minHeight: 36, justifyContent: 'center' }} onPress={() => void mutate(() => api.put(`/customer/addresses/${item.id}/default`, {}), 'Reload to check the default address before retrying.')}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>Set default</Text></TouchableOpacity>}
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Remove ${item.label || 'delivery'} address`} disabled={busy} style={{ minHeight: 36, justifyContent: 'center' }} onPress={() => setDeleteId(item.id)}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>Remove</Text></TouchableOpacity>
           </View>
-        )}
-      />
-      <View style={[s.pad, { position: 'absolute', left: 0, right: 0, bottom: 0 }]}>
-        <TouchableOpacity style={s.btn} onPress={() => navigation.navigate('AddressEdit', {})}>
-          <Text style={s.btnText}>➕ Add new address</Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
-  );
+          {deleteId === item.id && <View style={{ marginTop: 12, gap: 12 }}><Notice danger>Remove this saved address? This cannot be undone.</Notice><TouchableOpacity accessibilityRole="button" disabled={busy} style={s.btnGhost} onPress={() => setDeleteId('')}><Text style={s.btnGhostText}>Keep address</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" disabled={busy} style={[s.btn, { backgroundColor: colors.dangerSolid }]} onPress={() => void mutate(() => api.del(`/customer/addresses/${item.id}`), 'Reload addresses to check whether removal succeeded.')}><Text style={s.btnText}>{busy ? 'Removing…' : 'Remove address'}</Text></TouchableOpacity></View>}
+        </View>)}
+        <TouchableOpacity accessibilityRole="button" style={[s.btnGhost, s.row, { justifyContent: 'center', gap: 9, marginTop: 16 }]} onPress={() => navigation.navigate('AddressEdit', {})}><Icon name="plus" color={colors.primary} size={18} /><Text style={s.btnGhostText}>Add a new address</Text></TouchableOpacity>
+      </ScrollView>}
+    <LoginSheet visible={showLogin} onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); load(); }} />
+  </View>;
 }

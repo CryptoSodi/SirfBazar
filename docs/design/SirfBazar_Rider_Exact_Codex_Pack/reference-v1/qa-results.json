@@ -1,0 +1,658 @@
+{
+  "checks": [
+    {
+      "name": "All 26 scene/state compositions render in both themes",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "No horizontal overflow at 390px in any scene/theme",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "Action/navigation docks remain within the 844px reference viewport",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "At-shop action enters pickup and retains distinct state",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Pickup requires deliberate packed-order acknowledgement",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Sheet Escape cancels without changing pickup status",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Keyboard focus wraps within confirmation sheet",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Pickup advances main state to ON_THE_WAY",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "COD completion remains disabled without collected-cash acknowledgement",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Code and both acknowledgements enable completion",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Theme change preserves code and form state",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Full local merchant-assigned delivery path completes",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Paid variant omits cash collection acknowledgement",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Empty issue report shows validation instead of success",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Local issue reporting leaves delivery status unchanged",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Disconnected state cannot complete a delivery",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Invalid phone is not treated as sign-in success",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Phone entry progresses to distinct login-code screen",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Shop application ends in pending, not automatic approval",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "System follows OS; explicit Light ignores OS changes",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Reduced motion disables loading animation",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Selected long/form screens fit 320, 360 and 412px widths",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "Expired-session composition hides customer and order details",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Browser JavaScript errors",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "Prototype makes no network requests",
+      "passed": true,
+      "detail": []
+    }
+  ],
+  "passed": 25,
+  "total": 25,
+  "sceneThemeRenders": 52,
+  "browser": "system Chromium via Python Playwright",
+  "scope": "local HTML preview only; no real API or native runtime",
+  "jsErrors": [],
+  "networkRequests": [],
+  "layouts": [
+    {
+      "screen": "home",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 437,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "assigned",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 530,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "pickup",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 474,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "navigate",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 455,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "doorstep",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 400,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "code",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 537,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "complete",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 403,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "prepaid",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 379,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "history",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 485,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "help",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 500,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "report",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 414,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "profile",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 367,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "appearance",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 379,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "permissions",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 558,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "login",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 232,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "login-code",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 276,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "shops",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 333,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "apply",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 298,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "pending",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 290,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "empty",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 251,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "offline",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 446,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "loading",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 41,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "error",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 171,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "expired",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 186,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "inactive",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 219,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "unknown",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 254,
+      "footer": 844,
+      "theme": "light"
+    },
+    {
+      "screen": "home",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 437,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "assigned",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 530,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "pickup",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 474,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "navigate",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 455,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "doorstep",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 400,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "code",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 537,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "complete",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 403,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "prepaid",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 379,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "history",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 485,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "help",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 500,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "report",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 414,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "profile",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 367,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "appearance",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 379,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "permissions",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 558,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "login",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 232,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "login-code",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 276,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "shops",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 333,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "apply",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 298,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "pending",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 290,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "empty",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 251,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "offline",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 446,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "loading",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 41,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "error",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 171,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "expired",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 186,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "inactive",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 219,
+      "footer": 844,
+      "theme": "dark"
+    },
+    {
+      "screen": "unknown",
+      "width": 390,
+      "document": 390,
+      "content": 390,
+      "contentWidth": 390,
+      "text": 254,
+      "footer": 844,
+      "theme": "dark"
+    }
+  ]
+}

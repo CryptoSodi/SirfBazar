@@ -1,0 +1,154 @@
+{
+  "fictional": true,
+  "products": [
+    {
+      "id": "milk",
+      "productId": "example-product-milk",
+      "merchantProductId": "example-listing-milk",
+      "name": "Fresh milk",
+      "unit": "1 litre",
+      "price": 29000,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Dairy",
+      "stock": 12
+    },
+    {
+      "id": "bread",
+      "productId": "example-product-bread",
+      "merchantProductId": "example-listing-bread",
+      "name": "Whole wheat bread",
+      "unit": "400 g",
+      "price": 19500,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Bakery",
+      "stock": 8
+    },
+    {
+      "id": "eggs",
+      "productId": "example-product-eggs",
+      "merchantProductId": "example-listing-eggs",
+      "name": "Farm eggs",
+      "unit": "6 pieces",
+      "price": 21000,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Dairy",
+      "stock": 10
+    },
+    {
+      "id": "banana",
+      "productId": "example-product-banana",
+      "merchantProductId": "example-listing-banana",
+      "name": "Bananas",
+      "unit": "6 pieces",
+      "price": 18000,
+      "shop": "Neighbourhood Produce",
+      "merchantId": "produce",
+      "category": "Fresh",
+      "stock": 14
+    },
+    {
+      "id": "rice",
+      "productId": "example-product-rice",
+      "merchantProductId": "example-listing-rice",
+      "name": "Basmati rice",
+      "unit": "1 kg",
+      "price": 36000,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Pantry",
+      "stock": 9
+    },
+    {
+      "id": "tomato",
+      "productId": "example-product-tomato",
+      "merchantProductId": "example-listing-tomato",
+      "name": "Tomatoes",
+      "unit": "500 g",
+      "price": 9500,
+      "shop": "Neighbourhood Produce",
+      "merchantId": "produce",
+      "category": "Fresh",
+      "stock": 15
+    },
+    {
+      "id": "tea",
+      "productId": "example-product-tea",
+      "merchantProductId": "example-listing-tea",
+      "name": "Everyday tea",
+      "unit": "190 g",
+      "price": 42500,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Pantry",
+      "stock": 10
+    },
+    {
+      "id": "yogurt",
+      "productId": "example-product-yogurt",
+      "merchantProductId": "example-listing-yogurt",
+      "name": "Plain yogurt",
+      "unit": "400 g",
+      "price": 22000,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Dairy",
+      "stock": 7
+    },
+    {
+      "id": "oil",
+      "productId": "example-product-oil",
+      "merchantProductId": "example-listing-oil",
+      "name": "Cooking oil",
+      "unit": "1 litre",
+      "price": 56000,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Pantry",
+      "stock": 10
+    },
+    {
+      "id": "apple",
+      "productId": "example-product-apple",
+      "merchantProductId": "example-listing-apple",
+      "name": "Apples",
+      "unit": "500 g",
+      "price": 24000,
+      "shop": "Neighbourhood Produce",
+      "merchantId": "produce",
+      "category": "Fresh",
+      "stock": 15
+    },
+    {
+      "id": "detergent",
+      "productId": "example-product-detergent",
+      "merchantProductId": "example-listing-detergent",
+      "name": "Laundry detergent",
+      "unit": "500 g",
+      "price": 34000,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Home",
+      "stock": 6
+    },
+    {
+      "id": "shampoo",
+      "productId": "example-product-shampoo",
+      "merchantProductId": "example-listing-shampoo",
+      "name": "Daily care shampoo",
+      "unit": "180 ml",
+      "price": 45000,
+      "shop": "Market Lane Grocers",
+      "merchantId": "grocer",
+      "category": "Home",
+      "stock": 7
+    }
+  ],
+  "basket": {
+    "milk": 1,
+    "bread": 1,
+    "eggs": 1
+  }
+}

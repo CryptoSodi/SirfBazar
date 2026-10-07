@@ -170,7 +170,7 @@ export class MerchantService {
       lowStockProducts,
     ] = await Promise.all([
       this.prisma.merchant.findUnique({ where: { id: merchantId } }),
-      this.prisma.order.count({ where: { merchantId, createdAt: { gte: startOfToday } } }),
+      this.prisma.order.count({ where: { merchantId, channel: 'ONLINE', createdAt: { gte: startOfToday } } }),
       this.prisma.order.count({ where: { merchantId, status: OrderStatus.SENT_TO_MERCHANT } }),
       this.prisma.order.count({
         where: { merchantId, status: { in: [OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING] } },

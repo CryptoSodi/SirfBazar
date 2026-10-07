@@ -1,0 +1,347 @@
+{
+  "referenceLogicalViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "captureScale": 2,
+  "screens": [
+    {
+      "id": "R01",
+      "sourceKey": "home",
+      "title": "Your deliveries",
+      "nativeResponsibility": "Existing Home route / Deliveries tab",
+      "lightScreenshot": "screens/01-home-light.png",
+      "darkScreenshot": "screens/02-home-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R02",
+      "sourceKey": "assigned",
+      "title": "Assigned order",
+      "nativeResponsibility": "Delivery detail: assigned state",
+      "lightScreenshot": "screens/03-assigned-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R03",
+      "sourceKey": "pickup",
+      "title": "Pickup check",
+      "nativeResponsibility": "Delivery detail: pickup state + confirmation sheet",
+      "lightScreenshot": "screens/04-pickup-light.png",
+      "darkScreenshot": "screens/28-pickup-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R04",
+      "sourceKey": "navigate",
+      "title": "On the way",
+      "nativeResponsibility": "Delivery detail: on-the-way state",
+      "lightScreenshot": "screens/05-active-delivery-light.png",
+      "darkScreenshot": "screens/29-navigate-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R05",
+      "sourceKey": "doorstep",
+      "title": "At the customer",
+      "nativeResponsibility": "Delivery detail: arrived-customer state",
+      "lightScreenshot": "screens/06-at-customer-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R06",
+      "sourceKey": "code",
+      "title": "Cash & delivery code",
+      "nativeResponsibility": "Handover/code route or sheet",
+      "lightScreenshot": "screens/07-delivery-code-light.png",
+      "darkScreenshot": "screens/30-code-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R07",
+      "sourceKey": "complete",
+      "title": "Delivery completed",
+      "nativeResponsibility": "Saved completion receipt",
+      "lightScreenshot": "screens/08-completed-light.png",
+      "darkScreenshot": "screens/31-complete-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R08",
+      "sourceKey": "prepaid",
+      "title": "Paid order completion",
+      "nativeResponsibility": "Handover/code paid-state variant",
+      "lightScreenshot": "screens/09-paid-completion-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R09",
+      "sourceKey": "history",
+      "title": "Delivery history",
+      "nativeResponsibility": "History tab",
+      "lightScreenshot": "screens/10-history-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R10",
+      "sourceKey": "help",
+      "title": "Help",
+      "nativeResponsibility": "Help tab",
+      "lightScreenshot": "screens/11-help-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R11",
+      "sourceKey": "report",
+      "title": "Report a delivery issue",
+      "nativeResponsibility": "Delivery issue form",
+      "lightScreenshot": "screens/12-report-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R12",
+      "sourceKey": "profile",
+      "title": "Rider profile",
+      "nativeResponsibility": "Profile tab",
+      "lightScreenshot": "screens/13-profile-light.png",
+      "darkScreenshot": "screens/32-profile-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R13",
+      "sourceKey": "appearance",
+      "title": "Light / Dark / System",
+      "nativeResponsibility": "Appearance sub-screen",
+      "lightScreenshot": "screens/14-appearance-light.png",
+      "darkScreenshot": "screens/33-appearance-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R14",
+      "sourceKey": "permissions",
+      "title": "Location & alerts",
+      "nativeResponsibility": "Location/alerts sub-screen",
+      "lightScreenshot": "screens/15-permissions-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R15",
+      "sourceKey": "login",
+      "title": "Sign in",
+      "nativeResponsibility": "Existing Login route",
+      "lightScreenshot": "screens/16-login-light.png",
+      "darkScreenshot": "screens/34-login-dark.png",
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R16",
+      "sourceKey": "login-code",
+      "title": "Verify phone",
+      "nativeResponsibility": "Existing Login verification step",
+      "lightScreenshot": "screens/17-login-code-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R17",
+      "sourceKey": "shops",
+      "title": "Find your shop",
+      "nativeResponsibility": "Onboarding: shop selection",
+      "lightScreenshot": "screens/18-shops-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R18",
+      "sourceKey": "apply",
+      "title": "Join shop",
+      "nativeResponsibility": "Onboarding: application details",
+      "lightScreenshot": "screens/19-apply-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R19",
+      "sourceKey": "pending",
+      "title": "Awaiting shop approval",
+      "nativeResponsibility": "Linked/pending account state",
+      "lightScreenshot": "screens/20-pending-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R20",
+      "sourceKey": "empty",
+      "title": "No assignments",
+      "nativeResponsibility": "Deliveries successful-empty state",
+      "lightScreenshot": "screens/21-empty-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R21",
+      "sourceKey": "offline",
+      "title": "Connection lost",
+      "nativeResponsibility": "Last-confirmed active-delivery stale state",
+      "lightScreenshot": "screens/22-offline-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R22",
+      "sourceKey": "loading",
+      "title": "Loading",
+      "nativeResponsibility": "Shared loading composition",
+      "lightScreenshot": "screens/23-loading-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R23",
+      "sourceKey": "error",
+      "title": "API unavailable",
+      "nativeResponsibility": "Shared initial failure",
+      "lightScreenshot": "screens/24-error-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R24",
+      "sourceKey": "expired",
+      "title": "Session expired",
+      "nativeResponsibility": "Session-expired boundary",
+      "lightScreenshot": "screens/25-expired-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R25",
+      "sourceKey": "inactive",
+      "title": "Account inactive",
+      "nativeResponsibility": "Account-inactive boundary",
+      "lightScreenshot": "screens/26-inactive-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    },
+    {
+      "id": "R26",
+      "sourceKey": "unknown",
+      "title": "Completion not confirmed",
+      "nativeResponsibility": "Uncertain mutation recovery",
+      "lightScreenshot": "screens/27-unknown-light.png",
+      "darkScreenshot": null,
+      "requiredThemes": [
+        "light",
+        "dark"
+      ],
+      "status": "not implemented by this handoff"
+    }
+  ]
+}

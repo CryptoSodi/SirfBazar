@@ -17,6 +17,13 @@ import { GOOGLE_AUTH_SERVICE, IGoogleAuthService } from './google/google-auth.se
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
+/** Existing shop riders may have been stored with a local 03 number. */
+function pakistanMobileVariants(phoneNumber: string): string[] {
+  const mobile = /^(?:\+?92|0)(3\d{9})$/.exec(phoneNumber)?.[1];
+  if (!mobile) return [phoneNumber];
+  return [...new Set([phoneNumber, `+92${mobile}`, `92${mobile}`, `0${mobile}`])];
+}
+
 /** Which app the user signed in from — selects which "hat" (role) the token grants. */
 type AuthContext = 'customer' | 'admin' | 'merchant' | 'rider';
 
@@ -98,6 +105,18 @@ export class AuthService {
     });
 
     let user = await this.prisma.user.findUnique({ where: { phoneNumber } });
+    if (context === 'rider') {
+      // Prefer the rider already linked to this verified mobile number over a
+      // base account accidentally created under its alternate phone format.
+      const riders = await this.prisma.rider.findMany({
+        where: { user: { is: { phoneNumber: { in: pakistanMobileVariants(phoneNumber) } } } },
+        select: { user: true },
+      });
+      if (riders.length > 1) {
+        throw new UnauthorizedException('Multiple rider accounts use this number. Contact your shop.');
+      }
+      if (riders.length === 1) user = riders[0].user;
+    }
     if (!user) {
       // Customer + rider self-onboarding create a base account; merchant/admin must pre-exist.
       if (context !== 'customer' && context !== 'rider') {
@@ -192,6 +211,7 @@ export class AuthService {
       data: {
         userId,
         tokenHash: sha256(refreshToken),
+        role,
         expiresAt: new Date(Date.now() + refreshTtlDays * 86400_000),
       },
     });
@@ -216,7 +236,25 @@ export class AuthService {
       where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
-    return this.issueTokens(user.id, user.role as UserRole);
+    // A user can be a customer and merchant/rider at once. Rotating a refresh
+    // token must retain the role selected at login, not the user's base role.
+    // Tokens issued before the role column existed keep the legacy fallback;
+    // those clients can re-authenticate to establish an app-scoped session.
+    const requestedRole = (stored.role ?? user.role) as UserRole;
+    let activeRole: UserRole;
+    if (requestedRole === UserRole.CUSTOMER) {
+      activeRole = await this.resolveContextRole(user.id, 'customer');
+    } else if (requestedRole === UserRole.MERCHANT_OWNER || requestedRole === UserRole.MERCHANT_STAFF) {
+      activeRole = await this.resolveContextRole(user.id, 'merchant');
+    } else if (requestedRole === UserRole.RIDER) {
+      activeRole = await this.resolveContextRole(user.id, 'rider');
+      if (activeRole !== UserRole.RIDER) throw new UnauthorizedException('Rider access is no longer available');
+    } else if (ADMIN_ROLES.includes(requestedRole)) {
+      activeRole = await this.resolveContextRole(user.id, 'admin');
+    } else {
+      throw new UnauthorizedException('Invalid session role');
+    }
+    return this.issueTokens(user.id, activeRole);
   }
 
   async logout(refreshToken: string) {
