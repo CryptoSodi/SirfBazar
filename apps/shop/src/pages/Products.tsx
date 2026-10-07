@@ -8,17 +8,19 @@ import { readMemory, writeMemory } from '../lib/memoryCache';
 import { readListingsPage, type MerchantListing, type Paged } from '../lib/merchant-contracts';
 import BulkImport from '../components/BulkImport';
 import { parseRupees, parseStock, type BulkItem, type UploadResult } from '../lib/bulk-import';
+import { categoryPath, type CatalogCategory } from '../lib/catalog-categories';
 
 /** A merchant's own product listing row (GET /merchant/products). */
 type MP = MerchantListing;
 type CatalogItem = { productId: string; name: string; brand?: string | null; imageUrl?: string | null; unit?: string | null; size?: string | null; category?: { name?: string | null }; alreadyListed: boolean };
 type CatalogResult = { items: CatalogItem[]; total: number; totalPages: number };
-type CatalogCategory = { id: string; name: string; children?: CatalogCategory[] };
 type Selection = { item: CatalogItem; price: string; stock: string; error?: string };
 
 function CategoryNode({ category, selected, onSelect }: { category: CatalogCategory; selected: string; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false);
-  return <div className="catalog-category-node"><div className="catalog-category-line">{category.children?.length ? <button type="button" className="catalog-disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${category.name}`} aria-expanded={open} onClick={() => setOpen(!open)}><ReferenceIcon name={open ? "down" : "right"} size="sm" /></button> : <span className="catalog-disclosure-spacer" />}<button type="button" className={selected === category.id ? 'active' : ''} aria-pressed={selected === category.id} onClick={() => onSelect(category.id)}>{category.name}{category.children?.length ? ' (includes subcategories)' : ''}</button></div>{open && category.children?.length ? <div className="catalog-children">{category.children.map((child) => <CategoryNode key={child.id} category={child} selected={selected} onSelect={onSelect} />)}</div> : null}</div>;
+  const containsSelection = categoryPath([category], selected).length > 0;
+  useEffect(() => { if (containsSelection) setOpen(true); }, [containsSelection]);
+  return <div className="catalog-category-node"><div className="catalog-category-line">{category.children?.length ? <button type="button" className="catalog-disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${category.name}`} aria-expanded={open} onClick={() => setOpen(!open)}><ReferenceIcon name={open ? "down" : "right"} size="sm" /></button> : <span className="catalog-disclosure-spacer" />}<button type="button" className={selected === category.id ? 'active' : ''} aria-pressed={selected === category.id} onClick={() => { setOpen(true); onSelect(category.id); }}>{category.name}{category.children?.length ? ' (includes subcategories)' : ''}</button></div>{open && category.children?.length ? <div className="catalog-children">{category.children.map((child) => <CategoryNode key={child.id} category={child} selected={selected} onSelect={onSelect} />)}</div> : null}</div>;
 }
 
 function ProductViewTabs({ view, onChange }: { view: 'catalog' | 'shop'; onChange: (view: 'catalog' | 'shop') => void }) {
@@ -41,6 +43,10 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
   const [bulkResult, setBulkResult] = useState<UploadResult | null>(null);
   const [bulkRequest, setBulkRequest] = useState<{ requestId: string; items: BulkItem[] } | null>(null);
   const [revision, setRevision] = useState(0);
+  const activePath = categoryPath(categories, categoryId);
+  const activeCategory = activePath.at(-1);
+  const eligibleItems = result?.items.filter((item) => !item.alreadyListed) ?? [];
+  const allVisibleSelected = eligibleItems.length > 0 && eligibleItems.every((item) => !!selected[item.productId]);
 
   const toggleSelected = (item: CatalogItem) => setSelected((current) => {
     const next = { ...current };
@@ -50,7 +56,10 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
   });
   const selectVisible = () => setSelected((current) => {
     const next = { ...current };
-    result?.items.filter((item) => !item.alreadyListed).forEach((item) => { next[item.productId] ??= { item, price: '', stock: '' }; });
+    eligibleItems.forEach((item) => {
+      if (allVisibleSelected) delete next[item.productId];
+      else next[item.productId] ??= { item, price: '', stock: '' };
+    });
     return next;
   });
   const submitSelected = async (retry = false) => {
@@ -80,6 +89,7 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
 
   useEffect(() => {
     let active = true;
+    setCategoryError('');
     api.get('/products/categories')
       .then((response: CatalogCategory[]) => {
         if (!active) return;
@@ -120,16 +130,16 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
     <ProductViewTabs view="catalog" onChange={onView} />
     <div className="catalog-layout catalog-bulk-layout">
     <aside className="catalog-categories" aria-label="Catalog categories"><h2>Categories</h2><button type="button" className={!categoryId ? 'active' : ''} aria-pressed={!categoryId} onClick={() => { setCategoryId(''); setPage(1); }}>All products</button>{categories.map((category) => <CategoryNode key={category.id} category={category} selected={categoryId} onSelect={(id) => { setCategoryId(id); setPage(1); }} />)}{categoryError && <p role="alert">{categoryError} <button type="button" onClick={() => setRevision((value) => value + 1)}>Retry</button></p>}</aside>
-    <div className="catalog-results"><div className="catalog-summary">{result ? `${result.total.toLocaleString()} products${categoryId ? ' in this category and its subcategories' : ''}` : 'Loading catalog products…'}{loading && result && <span className="muted"> · Refreshing…</span>}</div><button type="button" className="btn catalog-select-visible" disabled={loading || !result?.items.some((item) => !item.alreadyListed) || !!bulkRequest} onClick={selectVisible}>Select visible products ({result?.items.filter((item) => !item.alreadyListed).length ?? 0} eligible)</button>
+    <div className="catalog-results"><h2 className="catalog-section-title">{activePath.length ? activePath.map((category) => category.name).join(' / ') : 'All products'}</h2><div className="catalog-summary" role="status">{result ? `${result.total.toLocaleString()} products${activeCategory?.children?.length ? ' including subsections' : ''}` : 'Loading catalog products…'}{loading && result && <span className="muted"> · Refreshing…</span>}</div><button type="button" className="btn catalog-select-visible" disabled={loading || !eligibleItems.length || !!bulkRequest} onClick={selectVisible}>{allVisibleSelected ? 'Deselect visible products' : 'Select visible products'} ({eligibleItems.length} eligible)</button>
     {error && <div className="panel catalog-error" role="alert"><p>{error}</p><button type="button" className="btn" onClick={() => setRevision((value) => value + 1)}>Retry</button></div>}
     {loading && !result ? <LoadingFrame label="Loading catalog products"><div className="catalog-grid">{Array.from({ length: 8 }, (_, index) => <CardSkeleton key={index} />)}</div></LoadingFrame> : null}
     {result && result.items.length > 0 && <div className="catalog-grid">{result.items.map((item) => <article className="catalog-card" key={item.productId}>
       <div className="catalog-image">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : <ReferenceIcon name="package" size="lg" />}</div>
       <div className="catalog-card-body"><span className="catalog-category">{item.category?.name || 'Product'}</span><h2 title={item.name}>{item.name}</h2><p>{[item.brand, item.size ?? item.unit].filter(Boolean).join(' · ') || 'Catalog item'}</p>
-        {item.alreadyListed ? <button type="button" className="btn" onClick={() => onView('shop')}>Already in my shop</button> : <label className="catalog-select"><input type="checkbox" disabled={!!bulkRequest} checked={!!selected[item.productId]} onChange={() => toggleSelected(item)} /> Select product</label>}
+        {item.alreadyListed ? <button type="button" className="btn" onClick={() => onView('shop')}>Already in my shop</button> : <label className="catalog-select"><input type="checkbox" aria-label={`Select product: ${item.name}`} disabled={!!bulkRequest || loading} checked={!!selected[item.productId]} onChange={() => toggleSelected(item)} /> Select product</label>}
       </div>
     </article>)}</div>}
-    {!loading && result?.items.length === 0 && !error && <div className="panel catalog-empty">{query ? `No catalog products match “${query}”.` : 'The catalog is empty.'}</div>}
+    {!loading && result?.items.length === 0 && !error && <div className="panel catalog-empty"><p>{query ? `No catalog products match “${query}”${activeCategory ? ` in ${activeCategory.name}` : ''}.` : `No products are available${activeCategory ? ` in ${activeCategory.name}` : ''}.`}</p><button type="button" className="btn" onClick={() => { setSearch(''); setQuery(''); setCategoryId(''); setPage(1); }}>Show all products</button></div>}
     {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Catalog pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}><UiIcon name="back" /> Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next <UiIcon name="arrow" /></button></nav>}
     </div>
     <aside className="catalog-review" aria-label="Selected products"><h2>Review selected products <span>{Object.keys(selected).length}</span></h2>{!Object.keys(selected).length && <p>Select products from the visible page to set their sale price and stock.</p>}{Object.values(selected).map(({ item, price, stock }) => <div className="catalog-review-item" key={item.productId}><strong>{item.name}</strong><button type="button" className="btn tiny" disabled={!!bulkRequest} onClick={() => toggleSelected(item)} aria-label={`Remove ${item.name} from selection`}>Remove</button><label>Sale price (Rs)<input className={inputCls} inputMode="decimal" value={price} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], price: event.target.value } }))} /></label><label>Stock quantity (units)<input className={inputCls} inputMode="numeric" value={stock} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], stock: event.target.value } }))} /></label></div>)}{bulkError && <p className="inline-error" role="alert">{bulkError}</p>}{bulkResult && <div role="status"><p>{bulkResult.created} added · {bulkResult.skipped} skipped · {bulkResult.failed.length} failed</p>{bulkResult.rows.filter((row) => row.error).map((row) => <p key={row.rowId}>{row.rowId}: {row.error}</p>)}</div>}{bulkRequest ? <><button type="button" className="btn primary" disabled={bulkBusy} onClick={() => void submitSelected(true)}>{bulkBusy ? 'Checking…' : 'Retry same selection'}</button>{bulkResult?.failed.length ? <button type="button" className="btn" disabled={bulkBusy} onClick={() => { setBulkRequest(null); setBulkResult(null); setBulkError(''); }}>Edit failed rows</button> : null}</> : <button type="button" className="btn primary" disabled={bulkBusy || !Object.keys(selected).length} onClick={() => void submitSelected()}>{bulkBusy ? 'Adding…' : `Add ${Object.keys(selected).length} selected`}</button>}</aside>
