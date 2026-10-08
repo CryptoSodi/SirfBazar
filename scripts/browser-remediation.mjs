@@ -559,6 +559,8 @@ try {
   await auth.close();
   for (const [fixture, url] of [
     ['./check-category-browser.cjs', process.env.BROWSER_SHOP_URL],
+    ['./check-catalog-autoload-browser.cjs', process.env.BROWSER_SHOP_URL],
+    ['./check-location-picker-browser.cjs', process.env.BROWSER_WEB_URL],
     ['./check-customer-feedback.cjs', process.env.BROWSER_WEB_URL],
   ]) {
     const context = await browser.newContext();

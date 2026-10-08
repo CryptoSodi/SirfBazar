@@ -39,6 +39,11 @@ export function OpenMapPicker({ initial, onConfirm, onClose, returnFocusTo }: {
         setPoint({ latitude: center.lat, longitude: center.lng });
       });
       instance.on('dragend', () => setChosen(true));
+      instance.on('click', (event: Leaflet.LeafletMouseEvent) => {
+        instance.setView(event.latlng, instance.getZoom(), { animate: false });
+        const center = instance.getCenter();
+        setPoint({ latitude: center.lat, longitude: center.lng }); setChosen(true);
+      });
       map.current = instance;
       window.setTimeout(() => instance.invalidateSize(), 0);
     }).catch(() => setError('Unable to load the map. Check your connection and try again.'));

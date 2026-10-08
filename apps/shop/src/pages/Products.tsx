@@ -9,6 +9,7 @@ import { readListingsPage, type MerchantListing, type Paged } from '../lib/merch
 import BulkImport from '../components/BulkImport';
 import { parseRupees, parseStock, type BulkItem, type UploadResult } from '../lib/bulk-import';
 import { categoryPath, type CatalogCategory } from '../lib/catalog-categories';
+import { useCatalogAutoLoad } from '../lib/useCatalogAutoLoad';
 import './catalog-workspace.css';
 
 /** A merchant's own product listing row (GET /merchant/products). */
@@ -83,8 +84,10 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   const [sort, setSort] = useState('az');
   const reviewRef = useRef<HTMLElement>(null);
   const loadedSummaryRef = useRef<HTMLSpanElement>(null);
-  const loadMoreRef = useRef<HTMLButtonElement>(null);
   const appendRequested = useRef(false);
+  const [automaticLoading, setAutomaticLoading] = useState(true);
+  const [observerSupported, setObserverSupported] = useState(true);
+  useEffect(() => setObserverSupported(typeof IntersectionObserver !== 'undefined'), []);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectedCount = Object.keys(selected).length;
   const activePath = categoryPath(categories, categoryId);
@@ -92,6 +95,13 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   const eligibleItems = result?.items.filter((item) => !item.alreadyListed) ?? [];
   const allVisibleSelected = eligibleItems.length > 0 && eligibleItems.every((item) => !!selected[item.productId]);
   const visibleItems = [...(result?.items ?? [])].sort((a, b) => sort === 'az' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+  const canLoadMore = !!result && page < result.totalPages && !loading && !error && search.trim() === query && !bulkBusy && !bulkRequest;
+  const requestNext = () => {
+    if (!automaticLoading || !canLoadMore || appendRequested.current) return;
+    appendRequested.current = true;
+    setPage((current) => current + 1);
+  };
+  const loadSentinel = useCatalogAutoLoad(automaticLoading && canLoadMore, requestNext);
   useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = !allVisibleSelected && eligibleItems.some((item) => !!selected[item.productId]); }, [selected, result, allVisibleSelected]);
   const chooseCategory = (id: string) => { appendRequested.current = false; setCategoryId(id); setPage(1); setAddedCount(null); };
   const reviewSelection = () => {
@@ -144,9 +154,10 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   };
 
   useEffect(() => {
+    if (search.trim() === query) return;
     const timer = setTimeout(() => { appendRequested.current = false; setPage(1); setAddedCount(null); setQuery(search.trim()); }, 250);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, query]);
 
   useEffect(() => {
     let active = true;
@@ -180,6 +191,7 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
         const next = { items: response.items ?? [], total: response.total ?? 0, totalPages: response.totalPages ?? 1 };
         if (append) {
           const previousIds = new Set((result?.items ?? []).map((item) => item.productId));
+          if (page < next.totalPages && !next.items.some((item) => !previousIds.has(item.productId))) throw Error('No new products were returned. Retry loading products.');
           setAddedCount(next.items.filter((item) => !previousIds.has(item.productId)).length);
         }
         setResult((previous) => {
@@ -187,7 +199,6 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
           const seen = new Set(previous.items.map((item) => item.productId));
           return { ...next, items: [...previous.items, ...next.items.filter((item) => !seen.has(item.productId))] };
         });
-        if (append && page >= next.totalPages && document.activeElement === loadMoreRef.current) requestAnimationFrame(() => loadedSummaryRef.current?.focus());
         writeMemory(cacheKey, next);
       })
       .catch((cause: Error) => { if (active) setError(cause.message || 'The catalog could not be loaded.'); })
@@ -220,7 +231,7 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
       <label htmlFor={`catalog-pick-${item.productId}`} className="catalog-card-label"><span className="catalog-image"><CatalogPicture item={item} /></span><span className="catalog-card-body"><span className="catalog-product-name">{item.name}</span><span className="catalog-product-meta">{[item.brand, item.size ?? item.unit].filter(Boolean).join(' · ') || item.category?.name || 'Catalog item'}</span><span className="catalog-product-status">{(item.alreadyListed || selected[item.productId]) && <ReferenceIcon name="check" size="sm" />}{item.alreadyListed ? 'In your shop' : selected[item.productId] ? 'Selected' : 'Select product'}</span></span></label>
     </article>)}</div>}
     {!loading && result?.items.length === 0 && !error && <div className="panel catalog-empty"><p>{query ? `No catalog products match “${query}”${activeCategory ? ` in ${activeCategory.name}` : ''}.` : `No products are available${activeCategory ? ` in ${activeCategory.name}` : ''}.`}</p><button type="button" className="btn" onClick={() => { setSearch(''); setQuery(''); setCategoryId(''); setPage(1); }}>Show all products</button></div>}
-    {result && <div className="catalog-pagination" role="status" aria-live="polite"><span ref={loadedSummaryRef} tabIndex={-1}>Showing {result.items.length} of {result.total.toLocaleString()} products{addedCount !== null && !loading ? ` · ${addedCount} more loaded` : ''}{page >= result.totalPages ? ' · All available products loaded' : ''}</span>{!error && page < result.totalPages && <button ref={loadMoreRef} type="button" className="btn" disabled={loading} onClick={() => { if (loading || appendRequested.current) return; appendRequested.current = true; setPage((current) => current + 1); }}>{loading ? 'Loading products…' : 'Load more products'} <UiIcon name="arrow" /></button>}</div>}
+    <div ref={loadSentinel} className="catalog-pagination"><span ref={loadedSummaryRef} role="status" aria-live="polite">{result ? `Showing ${result.items.length} of ${result.total.toLocaleString()} products${addedCount !== null && !loading ? ` · ${addedCount} more loaded` : ''}${page >= result.totalPages ? ' · All available products loaded' : ''}` : ''}{loading && result ? ' · Loading more products…' : ''}</span>{result && !error && page < result.totalPages && (observerSupported ? <button type="button" className="btn" onClick={() => setAutomaticLoading((current) => !current)}>{automaticLoading ? 'Pause automatic loading' : 'Resume automatic loading'}</button> : <button type="button" className="btn" disabled={!canLoadMore} onClick={requestNext}>{loading ? 'Loading products…' : 'Load more products'} <UiIcon name="arrow" /></button>)}</div>
     </section>
     <aside ref={reviewRef} tabIndex={-1} className="catalog-review" aria-label="Selected products">
       <div className="catalog-review-heading"><h2>Ready for your shop <span>{selectedCount}</span></h2><p>Set the selling price and stock for each product.</p></div>
