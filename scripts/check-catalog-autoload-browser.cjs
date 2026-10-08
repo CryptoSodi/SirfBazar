@@ -37,6 +37,7 @@ module.exports = async (page, baseUrl) => {
   await page.goto(baseUrl + '/products');
   await page.locator('article.catalog-card').nth(23).waitFor();
   assert.deepEqual(requests, [1], 'must not eagerly download catalogue pages');
+  assert.equal(await page.getByRole('button', { name: 'Pause automatic loading', exact: true }).getAttribute('aria-pressed'), null, 'an action-labelled pause/resume button must not announce contradictory toggle state');
   const selected = page.getByRole('checkbox', { name: 'Select product: Product 001', exact: true });
   await selected.check();
   await selected.focus();
@@ -44,12 +45,19 @@ module.exports = async (page, baseUrl) => {
   await page.waitForFunction(() => document.body.textContent.includes('Loading more products'));
   await page.mouse.wheel(0, 1000); await page.mouse.wheel(0, 1000);
   assert.deepEqual(requests, [1, 2], 'only one request may be pending for the same batch');
+  await page.getByRole('button', { name: 'Pause automatic loading', exact: true }).click();
+  await selected.focus();
   releaseSecond();
   await page.locator('article.catalog-card').nth(46).waitFor();
   assert.equal(await page.locator('article.catalog-card').count(), 47, 'overlapping products are deduplicated');
   assert.equal(await selected.isChecked(), true, 'selection survives automatic append');
   assert.equal(await selected.evaluate(node => node === document.activeElement), true, 'automatic append must not move keyboard focus');
   await page.locator('.catalog-pagination').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(100);
+  assert.deepEqual(requests, [1, 2], 'paused automatic loading must not request the next page');
+  const resume = page.getByRole('button', { name: 'Resume automatic loading', exact: true });
+  assert.equal(await resume.getAttribute('aria-pressed'), null);
+  await resume.click();
   await page.getByRole('button', { name: 'Retry loading products', exact: true }).waitFor();
   await page.mouse.wheel(0, 1000); await page.waitForTimeout(100);
   assert.deepEqual(requests, [1, 2, 3], 'an error must pause automatic requests');
