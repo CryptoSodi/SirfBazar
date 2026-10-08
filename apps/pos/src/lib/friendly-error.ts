@@ -21,4 +21,3 @@ export function friendlyError(value: unknown, status?: number, path = '', code?:
   }
   return raw;
 }
-
