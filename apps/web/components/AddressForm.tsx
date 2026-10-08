@@ -1,7 +1,10 @@
 'use client';
 
+import { ToastMessage } from '@/components/Toast';
+import { AppIcon, type AppIconName } from './AppIcon';
+
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { hasMapsKey } from '@/lib/maps';
 import type { PickedPoint } from './MapPicker';
@@ -10,11 +13,11 @@ import type { PickedPoint } from './MapPicker';
 const MapPicker = dynamic(() => import('./MapPicker').then((m) => m.MapPicker), { ssr: false });
 const OpenMapPicker = dynamic(() => import('./OpenMapPicker').then((m) => m.OpenMapPicker), { ssr: false });
 
-const LABELS: { key: string; icon: string }[] = [
-  { key: 'Home', icon: '🏠' },
-  { key: 'Work', icon: '💼' },
-  { key: 'Family', icon: '❤️' },
-  { key: 'Other', icon: '📍' },
+const LABELS: { key: string; icon: AppIconName }[] = [
+  { key: 'Home', icon: 'home' },
+  { key: 'Work', icon: 'briefcase' },
+  { key: 'Family', icon: 'team' },
+  { key: 'Other', icon: 'pin' },
 ];
 
 /** Add or edit a saved delivery address — parity with the mobile app:
@@ -46,6 +49,7 @@ export function AddressForm({
       : defaultCoords ?? null,
   );
   const [showMap, setShowMap] = useState(false);
+  const mapTrigger = useRef<HTMLButtonElement>(null);
   const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -79,9 +83,14 @@ export function AddressForm({
     );
   };
 
+  const closeMap = () => {
+    setShowMap(false);
+    requestAnimationFrame(() => mapTrigger.current?.focus());
+  };
+
   const onPinned = async (p: PickedPoint) => {
     setCoords(p);
-    setShowMap(false);
+    closeMap();
     await fillFromCoords(p.latitude, p.longitude);
   };
 
@@ -120,9 +129,9 @@ export function AddressForm({
       {/* Location pinning */}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-secondary text-sm" onClick={useCurrentLocation} disabled={locating}>
-          {locating ? 'Locating…' : '📍 Use current location'}
+          {locating ? 'Locating…' : <><AppIcon name="location" size={18} /> Use current location</>}
         </button>
-        <button type="button" className="btn-secondary text-sm" onClick={() => setShowMap(true)}>Pin on map</button>
+        <button ref={mapTrigger} type="button" className="btn-secondary text-sm" onClick={() => setShowMap(true)}>Pin on map</button>
         {coords && (
           <span className="self-center text-xs text-emerald-700">
             Pinned: {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}
@@ -143,7 +152,7 @@ export function AddressForm({
                 active ? 'border-emerald-500 bg-emerald-50 font-bold text-emerald-700' : 'border-stone-200 text-stone-600'
               }`}
             >
-              <div className="text-base">{l.icon}</div>
+              <div className="text-base"><AppIcon name={l.icon} size={18} /></div>
               {l.key}
             </button>
           );
@@ -169,7 +178,7 @@ export function AddressForm({
         Set as default delivery address
       </label>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <div className="flex gap-2">
         <button className="btn-primary text-sm" onClick={save} disabled={busy}>
           {busy ? 'Saving…' : initial?.id ? 'Save changes' : 'Save address'}
@@ -179,7 +188,7 @@ export function AddressForm({
         </button>
       </div>
 
-      {showMap && (hasMapsKey ? <MapPicker initial={coords} onConfirm={onPinned} onClose={() => setShowMap(false)} /> : <OpenMapPicker initial={coords} onConfirm={onPinned} onClose={() => setShowMap(false)} />)}
+      {showMap && (hasMapsKey ? <MapPicker initial={coords} onConfirm={onPinned} onClose={closeMap} returnFocusTo={mapTrigger.current} /> : <OpenMapPicker initial={coords} onConfirm={onPinned} onClose={closeMap} returnFocusTo={mapTrigger.current} />)}
     </div>
   );
 }

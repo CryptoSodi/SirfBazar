@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -330,7 +331,7 @@ function OrderModal({
           </ul>
         </details>
 
-        {actionError && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800" role="alert">{actionError}</div>}
+        {actionError && <ToastMessage>{actionError}</ToastMessage>}
         {uncertain && <button type="button" className={btnGhost} onClick={() => loadOrder().catch((e) => setDetailError(errorMessage(e)))}>Refresh order to check outcome</button>}
         <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
           {!profile ? profileError ? <span className="text-xs text-red-700" role="alert">Unable to verify merchant permissions. {profileError} <button type="button" className={btnGhost} onClick={retryProfile}>Retry</button></span> : <span className="text-xs text-slate-500">Checking merchant permissions before showing actions.</span> : !can(profile, 'ORDERS') ? <span className="text-xs text-red-700">You do not have order-management permission.</span> : <>
@@ -409,7 +410,7 @@ function UnavailableItemModal({ orderId, item, onClose, onSaved }: { orderId: st
       {loadingProducts && <p className="small muted" role="status">Loading eligible products…</p>}
       {!loadingProducts && products.length === 0 && !error && <p className="small muted">No eligible products match this search.</p>}
       {totalPages > 1 && <nav className="catalog-pagination" aria-label="Replacement product pages"><button type="button" className="btn" disabled={page <= 1 || loadingProducts} onClick={() => { setPage(page - 1); setReplacementId(''); }}><UiIcon name="back" /> Previous</button><span>Page {page} of {totalPages}</span><button type="button" className="btn" disabled={page >= totalPages || loadingProducts} onClick={() => { setPage(page + 1); setReplacementId(''); }}>Next <UiIcon name="arrow" /></button></nav>}
-      {error && <div className="inline-error" role="alert">{error}</div>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <div className="row"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn primary" disabled={busy || loadingProducts} onClick={() => void submit()}>{busy ? 'Updating…' : replacementId ? 'Suggest replacement' : 'Mark unavailable'}</button></div>
     </div>
   </Modal>;

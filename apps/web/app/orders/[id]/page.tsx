@@ -1,4 +1,7 @@
 'use client';
+import { toast, ToastMessage } from '@/components/Toast';
+import { AppIcon as UiIcon } from '../../../components/AppIcon';
+
 
 import { useParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -47,7 +50,7 @@ function OrderTracking() {
       await api.post(`/orders/${id}/cancel`, { reason });
       await load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -58,9 +61,9 @@ function OrderTracking() {
     setBusy(true);
     try {
       await api.post(`/orders/${id}/rate`, { merchantRating: rating, riderRating: rating });
-      alert('Thanks for your rating!');
+      toast('Thanks for your rating!', true);
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -75,9 +78,9 @@ function OrderTracking() {
         title: `Issue with order ${track?.orderNumber}`,
         description,
       });
-      alert('Support ticket created — we will get back to you.');
+      toast('Support ticket created — we will get back to you.', true);
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -114,7 +117,7 @@ function OrderTracking() {
         return (
           <section key={d.orderId} className="card p-5">
             <div className="mb-3 flex items-center justify-between">
-              <div className="font-bold">🏪 {d.merchant?.shopName}</div>
+              <div className="font-bold"><UiIcon name="shop" size={18} /> {d.merchant?.shopName}</div>
               <span className={`chip ${TONE_CLASSES[statusTone(d.status)]}`}>{statusLabel(d.status)}</span>
             </div>
 
@@ -147,7 +150,7 @@ function OrderTracking() {
             {/* Rider */}
             {d.rider && (
               <div className="mb-3 flex items-center gap-3 rounded-xl bg-stone-50 p-3 text-sm">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-lg">🛵</span>
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-lg"><UiIcon name="bike" size={18} /></span>
                 <div className="flex-1">
                   <div className="font-semibold">{d.rider.fullName}</div>
                   <div className="text-xs text-stone-500">
@@ -218,8 +221,8 @@ function OrderTracking() {
           <div className="card flex items-center gap-2 p-3">
             <span className="text-sm font-medium">Rate:</span>
             {[1, 2, 3, 4, 5].map((n) => (
-              <button key={n} className={`text-xl ${n <= rating ? '' : 'grayscale opacity-40'}`} onClick={() => setRating(n)}>
-                ⭐
+              <button key={n} aria-label={`Rate ${n} out of 5 stars`} aria-pressed={n === rating} className={`inline-flex min-h-11 min-w-11 items-center justify-center text-xl ${n <= rating ? '' : 'opacity-40'}`} onClick={() => setRating(n)}>
+                <UiIcon name="star" size={24} fill={n <= rating ? 'currentColor' : 'none'} />
               </button>
             ))}
             <button className="btn-primary px-3 py-1.5 text-xs" onClick={rate} disabled={!rating || busy}>
@@ -251,13 +254,13 @@ function ReplacementPrompt({ orderId, item, original, onDone }: { orderId: strin
   return <>
     <button className="ml-2 rounded-lg bg-amber-50 px-2 py-1 text-xs font-bold text-amber-800" onClick={() => setOpen(true)}>Review replacement</button>
     {open && createPortal(<div className="sb-modal-backdrop"><div ref={dialogFocus.ref} onKeyDown={dialogFocus.onKeyDown} tabIndex={-1} className="card sb-modal" role="dialog" aria-modal="true" aria-labelledby="replacement-title">
-      <button className="float-right" aria-label="Close replacement review" onClick={() => setOpen(false)}>×</button>
+      <button className="float-right" aria-label="Close replacement review" onClick={() => setOpen(false)}><UiIcon name="close" size={18} /></button>
       <h2 id="replacement-title">Your shop suggested a replacement</h2>
       <p>Review the item and price before deciding. A suggestion is not approval.</p>
       <div className="sb-replacement-choice"><small>Original</small><strong>{original?.productNameSnapshot || 'Original item'}</strong><span>{original?.totalPricePaisa != null ? formatPKR(original.totalPricePaisa) : 'Price unavailable'}</span></div>
       <div className="sb-replacement-choice selected"><small>Suggested replacement</small><strong>{item.productNameSnapshot}</strong><span>{formatPKR(item.totalPricePaisa)}</span></div>
       <p className="sb-cart-warning">The service must recalculate the final order total and any refund. No automatic refund is promised here.</p>
-      {error && <p role="alert" className="sb-error">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <div className="sb-replacement-actions"><button className="btn-secondary" disabled={busy} onClick={() => void respond(false)}>Decline replacement</button><button className="btn-primary" disabled={busy} onClick={() => void respond(true)}>{busy ? 'Please wait…' : 'Accept replacement'}</button></div>
     </div></div>, document.body)}
   </>;

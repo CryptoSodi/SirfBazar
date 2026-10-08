@@ -1,3 +1,5 @@
+import { ToastMessage } from '../components/Toast';
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { usePaged } from '../lib/usePaged';
@@ -25,7 +27,7 @@ export default function Coupons() {
         <h1 className="text-xl font-bold">Coupons</h1>
         <button className={btnCls} onClick={() => setCreating(true)}>+ New coupon</button>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Code', 'Title', 'Discount', 'Min order', 'Validity', 'Used', 'Status', '']}>
         {items.map((c) => (
           <tr key={c.id} className="hover:bg-slate-50">
@@ -36,7 +38,7 @@ export default function Coupons() {
               {c.maxDiscountAmountPaisa && <div className="text-xs text-slate-400">max {pkr(c.maxDiscountAmountPaisa)}</div>}
             </td>
             <td className="px-4 py-2.5">{pkr(c.minimumOrderAmountPaisa)}</td>
-            <td className="px-4 py-2.5 text-xs">{new Date(c.startDate).toLocaleDateString()} → {new Date(c.endDate).toLocaleDateString()}</td>
+            <td className="px-4 py-2.5 text-xs">{new Date(c.startDate).toLocaleDateString()} <UiIcon name="arrow" size={18} /> {new Date(c.endDate).toLocaleDateString()}</td>
             <td className="px-4 py-2.5">{c._count?.usages ?? 0}×</td>
             <td className="px-4 py-2.5"><Badge value={c.isActive ? 'ACTIVE' : 'INACTIVE'} /></td>
             <td className="px-4 py-2.5 text-right">

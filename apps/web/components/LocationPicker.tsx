@@ -1,5 +1,8 @@
 'use client';
 
+import { ToastMessage } from '@/components/Toast';
+import { AppIcon } from './AppIcon';
+
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '@/lib/api';
@@ -111,9 +114,9 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
           SirfBazar uses your location to show nearby stores and faster delivery options.
         </p>
         <button className="btn-primary w-full" onClick={useGps} disabled={busy}>
-          {busy ? 'Detecting…' : '📍 Use my current location'}
+          {busy ? 'Detecting…' : <><AppIcon name="location" size={18} /> Use my current location</>}
         </button>
-        {error && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
+        {error && <ToastMessage>{error}</ToastMessage>}
         <div className="my-4 text-center text-xs uppercase tracking-wide text-stone-400">or pick an area</div>
         <div className="space-y-2">
           {areas.filter((a) => a.latitude != null && a.longitude != null).map((a, i) => (

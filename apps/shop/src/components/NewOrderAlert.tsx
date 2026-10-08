@@ -1,3 +1,4 @@
+import { ToastMessage } from './Toast';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, errorMessage, pkr } from '../lib/api';
@@ -143,7 +144,7 @@ export function NewOrderAlert() {
       <ul className="new-order-items">{order.items.slice(0, 3).map((item) => <li key={item.id}><span>{item.quantity} × {item.productNameSnapshot}</span><b>{pkr(item.totalPricePaisa)}</b></li>)}</ul>
       {order.items.length > 3 && <small>+{order.items.length - 3} more item lines</small>}
       <div className="new-order-meta"><span>{ageMinutes < 1 ? 'Received just now' : `Waiting ${ageMinutes} min`}</span><span>{visible.length > 1 ? `${visible.length - 1} more pending` : 'Respond to keep the order moving'}</span></div>
-      {error && <div className="new-order-error" role="alert">{error}</div>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       {rejecting && <div className="new-order-reject"><label htmlFor="persistent-order-reason">Reason for rejecting</label><textarea id="persistent-order-reason" rows={2} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="For example: item unavailable or shop closing" /><div className="row"><button type="button" className="btn danger" disabled={busy || !reason.trim()} onClick={() => void reject()}>{busy ? 'Confirming…' : 'Confirm rejection'}</button><button type="button" className="btn" disabled={busy} onClick={() => setRejecting(false)}>Cancel</button></div></div>}
       {!rejecting && <div className="new-order-actions"><button type="button" className="btn" onClick={() => navigate(`/orders?order=${encodeURIComponent(order.id)}`)}>Review details</button><button type="button" className="btn danger" disabled={busy} onClick={() => setRejecting(true)}>Reject</button><button type="button" className="btn primary" disabled={busy} onClick={() => void accept()}>{busy ? 'Accepting…' : 'Accept order'}</button></div>}
     </div>

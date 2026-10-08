@@ -3,15 +3,15 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 
 /** Keep keyboard focus inside an active modal and restore the trigger on close. */
-export function useModalFocus<T extends HTMLElement>(active: boolean, onClose?: () => void) {
+export function useModalFocus<T extends HTMLElement>(active: boolean, onClose?: () => void, restoreTo?: HTMLElement | null) {
   const ref = useRef<T>(null);
 
   useEffect(() => {
     if (!active) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     ref.current?.focus();
-    return () => previous?.focus();
-  }, [active]);
+    return () => (restoreTo?.isConnected ? restoreTo : previous)?.focus();
+  }, [active, restoreTo]);
 
   const onKeyDown = (event: KeyboardEvent<T>) => {
     if (event.key === 'Escape' && onClose) {

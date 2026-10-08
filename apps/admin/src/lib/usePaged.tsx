@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 
@@ -65,7 +66,7 @@ export function Pager({
         disabled={page <= 1}
         onClick={() => setPage(page - 1)}
       >
-        ←
+        <UiIcon name="back" size={18} />
       </button>
       <span className="text-slate-500">
         {page} / {totalPages}
@@ -75,7 +76,7 @@ export function Pager({
         disabled={page >= totalPages}
         onClick={() => setPage(page + 1)}
       >
-        →
+        <UiIcon name="arrow" size={18} />
       </button>
     </div>
   );

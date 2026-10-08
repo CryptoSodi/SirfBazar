@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
@@ -24,7 +25,7 @@ export default function Customers() {
         <h1 className="text-xl font-bold">Customers</h1>
         <input className={`${inputCls} max-w-xs`} placeholder="Search name, phone, email…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Customer', 'Contact', 'Orders', 'Wallet', 'Status', 'Joined', '']}>
         {items.map((u) => (
           <tr key={u.id} className="hover:bg-slate-50">

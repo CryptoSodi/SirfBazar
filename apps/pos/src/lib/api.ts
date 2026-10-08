@@ -1,3 +1,4 @@
+import { friendlyError } from './friendly-error';
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 const LS = { access: 'sbp.accessToken', refresh: 'sbp.refreshToken', user: 'sbp.user' };
@@ -32,6 +33,10 @@ export function logout() {
   location.href = '/login';
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 async function request(method: string, path: string, body?: unknown, retry = true): Promise<any> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   const token = localStorage.getItem(LS.access);
@@ -56,8 +61,8 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     /* empty */
   }
   if (!res.ok) {
-    const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
-    throw new Error(msg);
+    const msg = friendlyError(data?.message, res.status, path, data?.code);
+    throw new ApiError(msg, res.status);
   }
   return data;
 }

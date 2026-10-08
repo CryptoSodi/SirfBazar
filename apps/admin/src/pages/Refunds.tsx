@@ -1,3 +1,5 @@
+import { ToastMessage } from '../components/Toast';
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
@@ -28,7 +30,7 @@ export default function Refunds() {
           ))}
         </select>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Order', 'Customer', 'Shop', 'Amount', 'Reason', 'Status', '']}>
         {items.map((r) => (
           <tr key={r.id} className="hover:bg-slate-50">
@@ -45,7 +47,7 @@ export default function Refunds() {
                   <button className={btnDanger} onClick={() => { const notes = prompt('Rejection notes:'); if (notes !== null) act(r.id, 'reject', { notes }); }}>Reject</button>
                 </>
               )}
-              {r.status === 'APPROVED' && <button className={btnGhost} onClick={() => act(r.id, 'process')}>💸 Pay out</button>}
+              {r.status === 'APPROVED' && <button className={btnGhost} onClick={() => act(r.id, 'process')}><UiIcon name="cash" size={18} /> Pay out</button>}
             </td>
           </tr>
         ))}

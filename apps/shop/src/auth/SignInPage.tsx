@@ -122,7 +122,7 @@ export default function SignInPage() {
                 <Link to="/recover">Forgot password?</Link>
               </div>
 
-              {login.error && <p className="signin-request-error" role="alert">{signInError(login.error)}</p>}
+              {login.error && <ToastMessage>{signInError(login.error)}</ToastMessage>}
               <button type="submit" className="signin-submit" disabled={login.isPending} aria-busy={login.isPending}>{login.isPending ? 'Signing in…' : 'Sign in'}</button>
             </form>
 
@@ -150,3 +150,4 @@ export default function SignInPage() {
     </dialog>
   </div>
 }
+import { ToastMessage } from '../components/Toast';

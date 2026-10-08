@@ -1,4 +1,6 @@
 'use client';
+import { AppIcon as UiIcon } from './AppIcon';
+
 
 import Link from 'next/link';
 import Image from 'next/image';
@@ -78,15 +80,15 @@ export function Header() {
   const appearance = <button type="button" className="sb-icon-button" onClick={cycleTheme} aria-label={`Appearance: ${theme}. Change appearance`} title={`Appearance: ${theme}`}><Icon name={theme === 'dark' ? 'moon' : theme === 'system' ? 'system' : 'sun'} size={20} /></button>;
   const brand = <Link href="/" aria-label="SirfBazar home" className="sb-header-brand"><Image src="/brand/sirfbazar-horizontal-no-slogan.svg" alt="SirfBazar" width={154} height={39} priority /></Link>;
 
-  if (checkout) return <header className="sb-checkout-header"><div className="sb-site-container">{brand}<span className="sb-checkout-header-title">Checkout</span><Link href="/cart" className="sb-checkout-back">← <span>Back to basket</span></Link>{appearance}<Link href="/contact" className="sb-icon-button" aria-label="Help centre"><Icon name="help" /></Link></div></header>;
+  if (checkout) return <header className="sb-checkout-header"><div className="sb-site-container">{brand}<span className="sb-checkout-header-title">Checkout</span><Link href="/cart" className="sb-checkout-back"><UiIcon name="back" size={18} /> <span>Back to basket</span></Link>{appearance}<Link href="/contact" className="sb-icon-button" aria-label="Help centre"><Icon name="help" /></Link></div></header>;
 
   return <>
     <header className="sb-site-header">
-      <div className="sb-site-promise"><div className="sb-site-container"><span>Everyday essentials. From your neighbourhood.</span><Link href="/contact">Need a hand? We’re here to help&nbsp; ›</Link></div></div>
+      <div className="sb-site-promise"><div className="sb-site-container"><span>Everyday essentials. From your neighbourhood.</span><Link href="/contact">Need a hand? We’re here to help&nbsp; <UiIcon name="chevron" size={18} /></Link></div></div>
       <div className="sb-site-container sb-site-mainbar">
         {brand}
-        <button type="button" onClick={() => setPickerOpen(true)} className="sb-site-location"><span className="sb-pin"><Icon name="pin" size={20} /></span><span><small>{location?.label === FALLBACK_LOCATION.label ? 'Example area' : 'Shops near'}</small><strong>{location?.label ?? 'Choose your area'} <span aria-hidden="true">⌄</span></strong></span></button>
-        <form className="sb-site-search" role="search" onSubmit={(event) => { event.preventDefault(); if (q.trim()) router.push(`/search?q=${encodeURIComponent(q.trim())}`); }}><label htmlFor="site-search" className="sr-only">Search products and shops</label><Icon name="search" size={19} /><input id="site-search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search milk, eggs, bread and more" /><button type="submit" aria-label="Search">→</button></form>
+        <button type="button" onClick={() => setPickerOpen(true)} className="sb-site-location"><span className="sb-pin"><Icon name="pin" size={20} /></span><span><small>{location?.label === FALLBACK_LOCATION.label ? 'Example area' : 'Shops near'}</small><strong>{location?.label ?? 'Choose your area'} <Icon name="down" size={16} /></strong></span></button>
+        <form className="sb-site-search" role="search" onSubmit={(event) => { event.preventDefault(); if (q.trim()) router.push(`/search?q=${encodeURIComponent(q.trim())}`); }}><label htmlFor="site-search" className="sr-only">Search products and shops</label><Icon name="search" size={19} /><input id="site-search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search milk, eggs, bread and more" /><button type="submit" aria-label="Search"><UiIcon name="arrow" size={18} /></button></form>
         {appearance}
         <Link href="/orders" className="sb-header-orders"><Icon name="history" size={19} /> <span>Orders</span></Link>
         <Link href="/cart" className="sb-site-basket" aria-label={`Basket with ${cartCount} items`}><Image src="/brand/sirfbazar-basket-white.svg" alt="" width={20} height={20} /><span>Basket</span><b>{cartCount}</b></Link>

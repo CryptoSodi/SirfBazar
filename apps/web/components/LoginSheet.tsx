@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastMessage } from '@/components/Toast';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -183,7 +184,7 @@ export function LoginSheet({
           </div>
         )}
 
-        {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <ToastMessage>{error}</ToastMessage>}
         <p className="mt-4 text-center text-[11px] text-stone-500">Review our <Link href="/terms" target="_blank" className="underline">terms</Link> and <Link href="/privacy-policy" target="_blank" className="underline">privacy notice</Link> before continuing. No marketing signup is preselected.</p>
         <p className="mt-2 text-center text-[11px] text-stone-500">Use only a code sent to your phone. Your basket remains here while you sign in.</p>
       </div>

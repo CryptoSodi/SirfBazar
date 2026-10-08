@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
@@ -19,7 +20,7 @@ export default function Support() {
           {STATUSES.map((s) => <option key={s} value={s}>{s ? s.replace(/_/g, ' ') : 'All statuses'}</option>)}
         </select>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Ticket', 'Category', 'Order', 'Customer', 'Priority', 'Status', 'Updated', '']}>
         {items.map((t) => (
           <tr key={t.id} className="hover:bg-slate-50">

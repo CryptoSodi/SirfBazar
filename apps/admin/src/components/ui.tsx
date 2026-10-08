@@ -1,3 +1,4 @@
+import { AppIcon as UiIcon } from './AppIcon';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { tone } from '../lib/api';
@@ -52,30 +53,12 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     return () => { if (dialog?.open) dialog.close(); previous?.focus(); };
   }, []);
   return createPortal(<dialog ref={dialogRef} className="sb-modal" aria-label={title} onCancel={(e) => { e.preventDefault(); closeRef.current(); }} onClick={(e) => { if (e.target === e.currentTarget) closeRef.current(); }}>
-    <div className="sb-modal-head"><h2 className="ops-panel-title">{title}</h2><button type="button" data-modal-close className="ops-button" aria-label={`Close ${title}`} onClick={() => closeRef.current()}>✕</button></div>
+    <div className="sb-modal-head"><h2 className="ops-panel-title">{title}</h2><button type="button" data-modal-close className="ops-button" aria-label={`Close ${title}`} onClick={() => closeRef.current()}><UiIcon name="close" size={18} /></button></div>
     {children}
   </dialog>, document.body);
 }
 
-export function useToast() {
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  useEffect(() => {
-    if (!msg) return;
-    const t = setTimeout(() => setMsg(null), 3500);
-    return () => clearTimeout(t);
-  }, [msg]);
-  const toast = useCallback((text: string, ok = true) => setMsg({ text, ok }), []);
-  const node = msg ? (
-    <div
-      className={`fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-lg ${
-        msg.ok ? 'bg-emerald-600' : 'bg-red-600'
-      }`}
-    >
-      {msg.text}
-    </div>
-  ) : null;
-  return { toast, node };
-}
+export { useToast } from './Toast';
 
 /** Tiny inline SVG bar chart for orders-by-day. */
 export function BarChart({ data, height = 120 }: { data: Array<{ label: string; value: number }>; height?: number }) {

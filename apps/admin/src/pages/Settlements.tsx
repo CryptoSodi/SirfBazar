@@ -1,3 +1,5 @@
+import { ToastMessage } from '../components/Toast';
+import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { usePaged } from '../lib/usePaged';
@@ -40,14 +42,14 @@ export default function Settlements() {
         <select className={`${inputCls} w-auto`} value={status} onChange={(e) => setStatus(e.target.value)}>
           {['', 'PENDING', 'PROCESSING', 'PAID', 'ON_HOLD', 'FAILED'].map((s) => <option key={s} value={s}>{s || 'All statuses'}</option>)}
         </select>
-        <button className={btnCls} onClick={() => setGenerating(true)}>⚙ Generate settlements</button>
+        <button className={btnCls} onClick={() => setGenerating(true)}><UiIcon name="settings" size={18} /> Generate settlements</button>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Shop', 'Period', 'Amount', 'Status', 'Paid at', 'Reference', '']}>
         {items.map((s) => (
           <tr key={s.id} className="hover:bg-slate-50">
             <td className="px-4 py-2.5 font-medium">{s.merchant?.shopName}</td>
-            <td className="px-4 py-2.5 text-xs">{new Date(s.startDate).toLocaleDateString()} → {new Date(s.endDate).toLocaleDateString()}</td>
+            <td className="px-4 py-2.5 text-xs">{new Date(s.startDate).toLocaleDateString()} <UiIcon name="arrow" size={18} /> {new Date(s.endDate).toLocaleDateString()}</td>
             <td className="px-4 py-2.5 font-semibold">{pkr(s.amountPaisa)}</td>
             <td className="px-4 py-2.5"><Badge value={s.status} /></td>
             <td className="px-4 py-2.5 text-xs">{s.paidAt ? new Date(s.paidAt).toLocaleString() : '—'}</td>

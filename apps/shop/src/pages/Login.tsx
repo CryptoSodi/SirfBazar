@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
@@ -106,7 +107,7 @@ export default function Login() {
           </>
         )}
 
-        {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <ToastMessage>{error}</ToastMessage>}
         <p className="mt-3 text-center text-[11px] text-slate-400">Use your registered merchant account. New-shop onboarding is not available from this sign-in screen yet.</p>
       </div>
     </div>

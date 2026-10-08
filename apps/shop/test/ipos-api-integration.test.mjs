@@ -29,6 +29,7 @@ test('POS responses invalidate only the affected merchant caches after a confirm
     const memoryUrl = asModule(readFileSync(new URL('../src/lib/memoryCache.ts', import.meta.url), 'utf8'));
     const cache = await import(memoryUrl);
     const source = readFileSync(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
+      .replace("'./friendly-error'", JSON.stringify(asModule(readFileSync(new URL('../src/lib/friendly-error.ts', import.meta.url), 'utf8'))))
       .replace("'./memoryCache'", JSON.stringify(memoryUrl))
       .replaceAll('import.meta.env', '({ VITE_API_URL: "https://api.example.test/api" })');
     const { api } = await import(asModule(source));

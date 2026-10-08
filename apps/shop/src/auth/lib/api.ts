@@ -8,7 +8,7 @@ export class ApiError extends Error {
 async function readError(response: Response) {
   try {
     const data = await response.json()
-    return Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${response.status})`
+    return friendlyError(data?.message, response.status)
   } catch { return `Request failed (${response.status})` }
 }
 
@@ -96,3 +96,4 @@ export const merchantApi = {
     return result
   },
 }
+import { friendlyError } from '../../lib/friendly-error';

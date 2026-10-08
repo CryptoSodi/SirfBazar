@@ -1,4 +1,5 @@
 'use client';
+import { friendlyError } from './friendly-error';
 
 /**
  * SirfBazar API client. Handles three header concerns transparently:
@@ -86,9 +87,13 @@ async function ensureGuestToken(): Promise<string> {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
-    super(message);
+  code?: string;
+  details?: any;
+  constructor(status: number, message: string, code?: string, details?: any) {
+    super(friendlyError(message, status, '', code));
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -117,8 +122,8 @@ async function rawRequest(method: string, path: string, body?: unknown, retry = 
     /* empty */
   }
   if (!res.ok) {
-    const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
-    throw new ApiError(res.status, msg);
+    const msg = friendlyError(data?.message, res.status, path, data?.code);
+    throw new ApiError(res.status, msg, data?.code, data);
   }
   return data;
 }
