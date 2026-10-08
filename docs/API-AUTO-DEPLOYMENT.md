@@ -21,7 +21,7 @@ The consolidation moves the release source to `master`. The historical first-run
 
 The deployment job requires the **release-checks** aggregate to pass. That aggregate runs even after a failed dependency and rejects failed, skipped, cancelled or missing results from all seven gate groups: deployment tools, API, web, admin, all remaining clients, browser fixtures and database regressions. It accepts only a `push` to `refs/heads/master` with the **repository-level** variable `SIRFBAZAR_API_DEPLOY_ENABLED` equal to `true`. Missing or false means skipped. Pull requests, other branches (including `codex/server-api-deployment`), tags and manual CI dispatch cannot deploy. Deployment concurrency does not cancel an in-flight promotion; a server lock also prevents overlapping promotions.
 
-Protect `master` with pull requests, the required `release-checks` status, an up-to-date branch, conversation resolution and no administrator bypass, force pushes or deletion. Require one approving review while another eligible reviewer is available. Do not bypass these requirements to complete a release. The environment must keep Selected branches and tags with the exact Branch rule `master`; keep its existing secrets unchanged.
+Protect `master` with pull requests, the required `release-checks` status, an up-to-date branch, conversation resolution and no administrator bypass, force pushes or deletion. On 8 October 2026 the owner rescinded the independent-review requirement: pull requests remain required, but the required approving-review count is zero. Do not bypass the remaining requirements to complete a release. The environment must keep Selected branches and tags with the exact Branch rule `master`; keep its existing secrets unchanged.
 
 ## Activation Procedure
 
