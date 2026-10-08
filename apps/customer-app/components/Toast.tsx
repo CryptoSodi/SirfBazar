@@ -1,6 +1,7 @@
-import { Children, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, isValidElement, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StatusBar, Text, View, useWindowDimensions } from 'react-native';
 import { friendlyError } from '../lib/friendly-error';
+import { onSessionInvalidated, toastSessionGeneration } from '../lib/toast-session';
 
 type Message = { id: number; text: string; ok: boolean };
 let sequence = 0;
@@ -16,6 +17,12 @@ export function toast(text: string, ok = true) {
   emit();
 }
 function dismiss(id: number) { queue = queue.filter(item => item.id !== id); emit(); }
+export function useToast() {
+  const generation = useSyncExternalStore(onSessionInvalidated, toastSessionGeneration, toastSessionGeneration);
+  return useCallback((text: string, ok = true) => {
+    if (toastSessionGeneration() === generation) toast(text, ok);
+  }, [generation]);
+}
 function textOf(node: ReactNode): string {
   return Children.toArray(node).map(item => typeof item === 'string' || typeof item === 'number' ? String(item) : isValidElement<{ children?: ReactNode }>(item) ? textOf(item.props.children) : '').join('');
 }
@@ -35,7 +42,8 @@ export function ToastHost({ active = true }: { active?: boolean }) {
     hosts.push(id);
     const sync = () => setState({ messages: [...queue], host: hosts.at(-1) });
     listeners.add(sync); emit();
-    return () => { listeners.delete(sync); hosts = hosts.filter(item => item !== id); emit(); };
+    const unsubscribe = onSessionInvalidated(() => { queue = []; emit(); });
+    return () => { unsubscribe(); listeners.delete(sync); hosts = hosts.filter(item => item !== id); emit(); };
   }, [active, id]);
   useEffect(() => {
     let mounted = true;

@@ -1,4 +1,4 @@
-import { toast, ToastHost } from '../components/Toast';
+import { useToast, ToastHost } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,6 +10,7 @@ import { api, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function ProductsScreen() {
+  const toast = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<any[]>([]);
   const [q, setQ] = useState('');

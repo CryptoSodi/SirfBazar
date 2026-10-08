@@ -1,25 +1,33 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { api, getAuthVersion, getUser } from './api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api, API_URL, getAuthVersion, getUser } from './api';
 
 /**
  * Expo push registration. Requires a development/production build —
  * Expo Go cannot receive remote pushes, so everything is silently best-effort.
  */
 
-let registeredToken: { token: string; owner: string } | null = null;
+let registeredToken: { token: string; owner: string; generation: number } | null = null;
 let unregistering = false;
 
 // Show incoming alerts while the app is open (banner + notification centre).
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const allowed = await canReceivePush(notification.request.content.data);
+    return { shouldShowBanner: allowed, shouldShowList: allowed, shouldPlaySound: allowed, shouldSetBadge: false };
+  },
 });
+
+export async function canReceivePush(data: any): Promise<boolean> {
+  const generation = getAuthVersion();
+  const [user, context] = await Promise.all([getUser(), AsyncStorage.getItem('sbm.authContext')]);
+  if (generation !== getAuthVersion() || context !== 'merchant' || !user?.id) return false;
+  const shopId = user.merchant?.id ?? user.staffOf?.find?.((staff: any) => staff.status === 'ACTIVE')?.merchantId;
+  return (data?.audience === 'MERCHANT' && !!shopId && data.scopeId === shopId) ||
+    (data?.audience === 'ACCOUNT' && data.scopeId === user.id);
+}
 
 async function deviceToken(): Promise<string | null> {
   const projectId: string | undefined = (Constants.expoConfig as any)?.extra?.eas?.projectId;
@@ -32,11 +40,13 @@ export async function registerForPush(): Promise<void> {
   try {
     // Never re-register mid-logout: a refresh triggered by the remove call would
     // otherwise resubscribe the outgoing user and pin the token to them.
-    if (unregistering) return;
     const generation = getAuthVersion();
-    const owner = (await getUser())?.id;
+    const user = await getUser();
+    const context = await AsyncStorage.getItem('sbm.authContext');
+    const shopId = user?.merchant?.id ?? user?.staffOf?.find?.((staff: any) => staff.status === 'ACTIVE')?.merchantId;
+    const owner = context === 'merchant' && shopId ? `${user.id}:MERCHANT:${shopId}` : null;
     if (!owner || generation !== getAuthVersion()) return;
-    if (registeredToken?.owner === owner) return;
+    if (registeredToken?.owner === owner && registeredToken.generation === generation) return;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Order alerts',
@@ -52,29 +62,33 @@ export async function registerForPush(): Promise<void> {
     if (status !== 'granted') return;
     const token = await deviceToken();
     if (!token) return;
-    if (generation !== getAuthVersion() || (await getUser())?.id !== owner || unregistering) return;
+    if (generation !== getAuthVersion() || context !== await AsyncStorage.getItem('sbm.authContext') || (await getUser())?.id !== user.id) return;
     await api.post('/notifications/push-token', {
       token,
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
     });
-    if (generation !== getAuthVersion() || (await getUser())?.id !== owner) return;
-    registeredToken = { token, owner };
+    if (generation !== getAuthVersion() || context !== await AsyncStorage.getItem('sbm.authContext') || (await getUser())?.id !== user.id) return;
+    registeredToken = { token, owner, generation };
   } catch {
     // No push in Expo Go / permission denied / offline — never break the app.
   }
 }
 
 /** Stop alerts to this device (call while still authenticated, before clearing tokens). */
-export async function unregisterPush(): Promise<void> {
+export async function unregisterPush(access?: string | null, generation?: number): Promise<void> {
   // Re-entrancy guard: if our remove call itself 401s, request() calls clearAuth()
   // which calls back into unregisterPush — without this, that loops forever.
   if (unregistering) return;
   unregistering = true;
   try {
-    const token = registeredToken?.token ?? (await deviceToken());
-    registeredToken = null;
+    const outgoing = generation == null || registeredToken?.generation === generation ? registeredToken : null;
+    const token = outgoing?.token ?? (await deviceToken());
+    if (outgoing && registeredToken === outgoing) registeredToken = null;
     if (!token) return;
-    await api.post('/notifications/push-token/remove', { token });
+    if (access) await fetch(`${API_URL}/notifications/push-token/remove`, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${access}` },
+      body: JSON.stringify({ token }),
+    });
   } catch {
     // Best-effort — the server prunes dead tokens on delivery failures anyway.
   } finally {

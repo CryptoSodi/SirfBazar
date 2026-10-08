@@ -1,4 +1,3 @@
-import { ToastMessage } from '../components/Toast';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Barcode, CheckCircle2, History, Keyboard, Monitor, Pause, Plus, Printer, RefreshCw, Search, Settings, ShoppingBasket, Trash2, Wallet } from 'lucide-react';
@@ -39,7 +38,7 @@ export default function IPos() {
       ? 'The running API does not yet include the iPOS update. Deploy the updated POS backend, then retry.' : `${errorMessage(cause)} Check API access or ask the shop owner for POS permission.`); });
     return () => { active = false; };
   }, [attempt, user?.id]);
-  if (error) return <section className="ops-panel"><h1 className="ops-page-title">iPOS</h1><ToastMessage>{error}</ToastMessage><button className="ops-button" onClick={() => setAttempt((v) => v + 1)}>Retry connection</button></section>;
+  if (error) return <section className="ops-panel"><h1 className="ops-page-title">iPOS</h1><p className="ipos-error" role="alert">{error}</p><button className="ops-button" onClick={() => setAttempt((v) => v + 1)}>Retry connection</button></section>;
   if (!profile || !user?.id) return <section className="ops-panel" role="status">Loading iPOS and checking cashier access…</section>;
   return <Counter key={`${profile.id}:${user.id}`} profile={profile} userId={user.id} cashier={user.fullName || user.phoneNumber || 'Cashier'} />;
 }
@@ -62,6 +61,9 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
   const setNotice = (text: string) => setNoticeState({ text });
   const { toast, node: toastNode } = useToast();
   useEffect(() => { if (notice) toast(notice.text); }, [notice, toast]);
+  const recoveryError = !!state?.pending || /bill has not been cleared|bill is retained|do not take payment again|saved sale|contact support/i.test(error);
+  const paymentFieldError = dialog === 'payment' && /cash received|cash amount|enter cash/i.test(error) && !recoveryError;
+  useEffect(() => { if (error && !recoveryError && !paymentFieldError) toast(error, false); }, [error, recoveryError, paymentFieldError, toast]);
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [query, setQuery] = useState('');
   const [catalogueError, setCatalogueError] = useState('');
@@ -228,7 +230,7 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
     if (commit({ ...current, draft: ticket(), held: [...current.held, current.draft] })) { resetEntry(); setNotice('Bill held in this browser.'); setError(''); scanInput.current?.focus(); }
   }
   function pay() {
-    if (locked || !state?.draft.lines.length) { setError('Add items and finish pending scans before taking payment.'); return; }
+    if (locked || !state?.draft.lines.length) { toast('Add items and finish pending scans before taking payment.', false); return; }
     if (!navigator.onLine) { setError('Reconnect before completing a sale. The unpaid bill stays in this browser.'); return; }
     setCash(''); setError(''); setDialog('payment');
   }
@@ -335,7 +337,7 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
     <div className="ipos-statusbar"><span><strong>Cashier</strong> {cashier}</span><span><strong>Date</strong> {new Date().toLocaleDateString('en-PK')}</span><span><strong>Mode</strong> {voidMode ? 'VOID · unpaid items only' : 'SALE · cash'}</span><span><strong>Connection</strong> {online ? 'Browser online · API required' : 'Offline · checkout unavailable'}</span><span><strong>Keys</strong> {state.settings.shortcuts ? shortcutProfiles.find((p) => p.id === state.settings.shortcutProfile)?.label : 'Disabled'}</span></div>
     {!ownsCounter && <div className="ipos-notice" role="status"><strong>Read-only counter</strong><p>Another tab may be using this cashier’s counter. Close it before continuing here.</p><button className="ops-button" onClick={() => setLockAttempt((v) => v + 1)}>Use this tab</button></div>}
     {state.pending && <section className="ipos-notice ipos-pending"><h2>Sale result needs confirmation</h2><p>Do not charge again or create another bill. This request is saved in this browser.</p><p className="ipos-code">Reference: {state.pending.requestId}</p><div className="ipos-actions"><button className="ops-button ops-button-primary" disabled={busy || !ownsCounter} onClick={() => void checkPending()}>Check saved sale</button><button className="ops-button" disabled={busy || !ownsCounter} onClick={() => void sendSale(state.pending!)}>Retry same request</button></div></section>}
-    {error && <div className="ipos-error" role="alert">{error}<button type="button" className="ops-button" onClick={() => setError('')}>Dismiss message</button></div>}
+    {error && recoveryError && <div className="ipos-error" role="alert">{error}</div>}
     <p className="ipos-feedback" role="status">{scanCount ? `Looking up ${scanCount} scan${scanCount === 1 ? '' : 's'}…` : ''}</p>
 
     {view === 'register' && <>
@@ -369,7 +371,7 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
 
     {view === 'settings' && <IPosSettings settings={state.settings} disabled={locked} cashier={cashier} isOwner={profile.isOwner} onDirty={markSettingsDirty} onSave={(settings) => commit({ ...state, settings })} />}
 
-    {dialog === 'payment' && <Modal title="Cash payment" onClose={() => { if (!busy) setDialog(null); }}><div className="ipos-payment"><p>Total payable<strong>{money(subtotal)}</strong></p><label className="ipos-field" htmlFor="ipos-cash">Cash received<input id="ipos-cash" ref={cashInput} className="ops-input" inputMode="decimal" autoComplete="off" value={cash} onChange={(e) => setCash(e.target.value)} disabled={busy || !!state.pending} aria-describedby="ipos-cash-help" /></label><small id="ipos-cash-help">Scan items before opening payment. Confirm the cash received manually.</small><div className="ipos-actions">{[subtotal, ...[50000, 100000, 500000].filter((v) => v > subtotal)].map((value) => <button className="ops-button" key={value} disabled={busy || !!state.pending} onClick={() => setCash((value / 100).toFixed(2))}>{money(value)}</button>)}</div><p>Change due<strong>{amount !== null && amount >= subtotal ? money(amount - subtotal) : 'Enter cash received'}</strong></p>{error && <ToastMessage>{error}</ToastMessage>}<button type="button" className="ops-button ops-button-primary" disabled={busy || !!state.pending || !ownsCounter} onClick={() => {
+    {dialog === 'payment' && <Modal title="Cash payment" onClose={() => { if (!busy) setDialog(null); }}><div className="ipos-payment"><p>Total payable<strong>{money(subtotal)}</strong></p><label className="ipos-field" htmlFor="ipos-cash">Cash received<input id="ipos-cash" ref={cashInput} className="ops-input" inputMode="decimal" autoComplete="off" value={cash} onChange={(e) => setCash(e.target.value)} disabled={busy || !!state.pending} aria-describedby="ipos-cash-help ipos-cash-error" /></label><small id="ipos-cash-help">Scan items before opening payment. Confirm the cash received manually.</small>{paymentFieldError && <p id="ipos-cash-error" className="ipos-inline-error" role="alert">{error}</p>}<div className="ipos-actions">{[subtotal, ...[50000, 100000, 500000].filter((v) => v > subtotal)].map((value) => <button className="ops-button" key={value} disabled={busy || !!state.pending} onClick={() => setCash((value / 100).toFixed(2))}>{money(value)}</button>)}</div><p>Change due<strong>{amount !== null && amount >= subtotal ? money(amount - subtotal) : 'Enter cash received'}</strong></p><button type="button" className="ops-button ops-button-primary" disabled={busy || !!state.pending || !ownsCounter} onClick={() => {
       try { const payload = paymentPayload(state.draft, state.settings, cash); if (commit({ ...state, pending: payload })) void sendSale(payload); }
       catch (cause) { setError(errorMessage(cause)); cashInput.current?.focus(); }
     }}>{busy ? 'Saving sale…' : 'Complete cash sale'}</button><p className="ipos-muted">Only select this after collecting cash. Printing will not create another sale.</p>{state.pending && !busy && <button className="ops-button" onClick={() => setDialog(null)}>Close and check saved sale</button>}</div></Modal>}

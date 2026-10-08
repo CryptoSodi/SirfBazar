@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { IS_PUBLIC_KEY } from '../decorators';
+import { ALLOW_INACTIVE_RIDER_KEY, IS_PUBLIC_KEY } from '../decorators';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserRole } from '../constants';
 
@@ -38,11 +38,12 @@ export class JwtAuthGuard implements CanActivate {
             })
           : undefined;
         const role = payload.role as UserRole;
+        const allowInactiveRider = this.reflector.getAllAndOverride<boolean>(ALLOW_INACTIVE_RIDER_KEY, [context.getHandler(), context.getClass()]);
         const member = user?.status === 'ACTIVE' && (
           (role === UserRole.CUSTOMER && !!user.customer) ||
           (role === UserRole.MERCHANT_OWNER && !!user.merchant) ||
           (role === UserRole.MERCHANT_STAFF && user.staffOf.some((staff) => staff.merchant.user.status === 'ACTIVE')) ||
-          (role === UserRole.RIDER && !!user.rider && user.rider.isActive) ||
+          (role === UserRole.RIDER && !!user.rider && (allowInactiveRider || (user.rider.isActive && user.rider.approvalStatus === 'APPROVED'))) ||
           ([UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.SUPPORT_AGENT, UserRole.FINANCE_ADMIN] as UserRole[]).includes(role) && user.role === role
         );
         if (member && user && (payload.sid === undefined || session?.role === role)) {

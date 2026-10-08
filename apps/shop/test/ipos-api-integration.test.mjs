@@ -8,8 +8,7 @@ const asModule = (source) => `data:text/javascript;base64,${Buffer.from(ts.trans
 }).outputText).toString('base64')}`;
 
 test('POS responses invalidate only the affected merchant caches after a confirmed sale', async () => {
-  const previous = { window: globalThis.window, localStorage: globalThis.localStorage, fetch: globalThis.fetch };
-  let merchantId = 'shop-a';
+  const previous = { window: globalThis.window, localStorage: globalThis.localStorage, fetch: globalThis.fetch, navigator: globalThis.navigator };
   let responseStatus = 200;
   let productEvents = 0;
   const requests = [];
@@ -18,7 +17,13 @@ test('POS responses invalidate only the affected merchant caches after a confirm
   browser.clearTimeout = clearTimeout;
   browser.addEventListener('sb:products', () => { productEvents++; });
   globalThis.window = browser;
-  globalThis.localStorage = { getItem: (key) => key === 'sbs.user' ? JSON.stringify({ merchant: { id: merchantId } }) : null };
+  const stored = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => stored.get(key) ?? null,
+    setItem: (key, value) => stored.set(key, String(value)),
+    removeItem: (key) => stored.delete(key),
+  };
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks: { request: async (_key, work) => work() } } });
   globalThis.fetch = async (url, request) => {
     requests.push({ url, method: request.method });
     return new Response(JSON.stringify(responseStatus === 200 ? { id: 'fixture-sale' } : { message: 'Stock changed; review this bill.' }), {
@@ -28,16 +33,18 @@ test('POS responses invalidate only the affected merchant caches after a confirm
   try {
     const memoryUrl = asModule(readFileSync(new URL('../src/lib/memoryCache.ts', import.meta.url), 'utf8'));
     const cache = await import(memoryUrl);
+    const sessionUrl = asModule(readFileSync(new URL('../src/lib/browserSession.ts', import.meta.url), 'utf8'));
     const source = readFileSync(new URL('../src/lib/api.ts', import.meta.url), 'utf8')
       .replace("'./friendly-error'", JSON.stringify(asModule(readFileSync(new URL('../src/lib/friendly-error.ts', import.meta.url), 'utf8'))))
       .replace("'./memoryCache'", JSON.stringify(memoryUrl))
+      .replace("'./browserSession'", JSON.stringify(sessionUrl))
       .replaceAll('import.meta.env', '({ VITE_API_URL: "https://api.example.test/api" })');
-    const { api } = await import(asModule(source));
+    const { api, storeAuth } = await import(asModule(source));
+    storeAuth({ accessToken: `a.${Buffer.from(JSON.stringify({ role: 'MERCHANT_OWNER' })).toString('base64url')}.b`, refreshToken: 'fixture-refresh', user: { id: 'owner-a', merchant: { id: 'shop-a' } } });
     const seed = () => {
       for (const key of ['products:1', 'catalog:all', 'dashboard', 'orders:1', 'riders']) cache.writeMemory(key, 'last-confirmed');
     };
-    merchantId = 'shop-b'; seed();
-    merchantId = 'shop-a'; seed();
+    seed();
 
     responseStatus = 409;
     await assert.rejects(api.post('/pos/sales', { requestId: 'fixture-sale' }), /Stock changed/);
@@ -55,14 +62,14 @@ test('POS responses invalidate only the affected merchant caches after a confirm
     assert.equal(cache.readMemory('orders:1'), 'last-confirmed');
     assert.equal(cache.readMemory('riders'), 'last-confirmed');
     assert.equal(productEvents, 1);
-    merchantId = 'shop-b';
-    assert.equal(cache.readMemory('products:1'), 'last-confirmed', 'another merchant cache remains isolated');
+    assert.equal(cache.readMemory('products:1'), undefined, 'the confirmed sale invalidates its own session cache');
     assert.equal(requests.length, 3, 'a rejected financial request is not automatically replayed');
     assert.ok(requests.every(({ url, method }) => url.startsWith('https://api.example.test/api/pos/') && method === 'POST'));
     cache.clearMemory();
   } finally {
     for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) delete globalThis[key];
+      if (key === 'navigator') Object.defineProperty(globalThis, key, { configurable: true, value });
+      else if (value === undefined) delete globalThis[key];
       else globalThis[key] = value;
     }
   }

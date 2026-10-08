@@ -8,7 +8,7 @@ const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID?.trim() || (import.meta.en
 if (apiKey) setOptions({ key: apiKey, v: 'weekly', language: 'en', region: 'PK' })
 
 type Coordinates = { lat: number; lng: number }
-type Props = { latitude: string; longitude: string; onSelect: (coordinates: Coordinates) => void }
+type Props = { latitude: string; longitude: string; onSelect: (coordinates: Coordinates) => void; onError?: () => void }
 
 function validCoordinates(latitude: string, longitude: string): Coordinates | null {
   if (!latitude.trim() || !longitude.trim()) return null
@@ -23,7 +23,7 @@ function markerCoordinates(position: google.maps.marker.AdvancedMarkerElement['p
   return { lat: position.lat, lng: position.lng }
 }
 
-export default function GooglePinMap({ latitude, longitude, onSelect }: Props) {
+export default function GooglePinMap({ latitude, longitude, onSelect, onError }: Props) {
   const elementRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null)
@@ -67,7 +67,7 @@ export default function GooglePinMap({ latitude, longitude, onSelect }: Props) {
           if (point) onSelectRef.current(point)
         })
       } catch {
-        if (!cancelled) setError('Google Maps could not load. Check the API key, billing, and allowed website origins.')
+        if (!cancelled) { setError('Map could not load. Retry the map or enter coordinates.'); onError?.() }
       }
     }
     void initialize()

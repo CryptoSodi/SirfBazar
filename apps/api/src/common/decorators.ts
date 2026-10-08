@@ -5,6 +5,10 @@ export const IS_PUBLIC_KEY = 'isPublic';
 /** Marks a route as accessible without a JWT (guest browsing, auth endpoints). */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
+export const ALLOW_INACTIVE_RIDER_KEY = 'allowInactiveRider';
+/** Permit an existing pending rider to read only their own account status. */
+export const AllowInactiveRider = () => SetMetadata(ALLOW_INACTIVE_RIDER_KEY, true);
+
 export const ROLES_KEY = 'roles';
 export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
 

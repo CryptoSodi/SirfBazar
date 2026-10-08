@@ -1,4 +1,4 @@
-import { toast, ToastHost } from '../components/Toast';
+import { useToast, ToastHost } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { IconLabel } from '../components/IconLabel';
 import { useCallback, useEffect, useState } from 'react';
@@ -20,6 +20,7 @@ import { colors, s } from '../lib/theme';
  * Images come from the catalog, so the merchant only sets price + stock.
  */
 export default function CatalogScreen() {
+  const toast = useToast();
   const [q, setQ] = useState('');
   const [items, setItems] = useState<any[]>([]);
   const [page, setPage] = useState(1);
@@ -151,6 +152,7 @@ export default function CatalogScreen() {
 }
 
 function AddModal({ product, onClose, onAdded }: any) {
+  const toast = useToast();
   const [priceRs, setPriceRs] = useState('');
   const [stock, setStock] = useState('');
   const [busy, setBusy] = useState(false);

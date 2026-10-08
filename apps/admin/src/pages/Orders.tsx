@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, pkr } from '../lib/api';
+import { orderRepairOptions } from '../lib/order-repair';
 import { usePaged, Pager } from '../lib/usePaged';
 import { Badge, Modal, Table, btnDanger, btnGhost, inputCls, useToast } from '../components/ui';
 
@@ -51,22 +52,32 @@ export default function Orders() {
 
 function OrderModal({ orderId, onClose, toast, reload }: any) {
   const [order, setOrder] = useState<any>(null);
+  const [reason, setReason] = useState('');
+  const [repairStatus, setRepairStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [returnReview, setReturnReview] = useState<any[] | null>(null);
 
   const load = () => api.get(`/admin/orders/${orderId}`).then(setOrder).catch((e) => toast(e.message, false));
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [orderId]);
 
   if (!order) return null;
 
-  const act = async (fn: () => Promise<any>) => {
+  const act = async (fn: () => Promise<any>, success = 'Done') => {
+    if (busy) return;
+    setBusy(true);
     try {
-      await fn();
-      toast('Done');
+      const response = await fn();
+      if (response?.returnReviewRequired) setReturnReview(response.returnReview ?? []);
+      toast(success);
+      setRepairStatus('');
       await load();
       reload();
     } catch (e: any) {
       toast(e.message, false);
-    }
+    } finally { setBusy(false); }
   };
+
+  const repairOptions = orderRepairOptions(order);
 
   return (
     <Modal title={`Order ${order.orderNumber}`} onClose={onClose}>
@@ -109,17 +120,24 @@ function OrderModal({ orderId, onClose, toast, reload }: any) {
           </ul>
         </details>
 
+        {returnReview && <section className="rounded-xl border border-amber-500 p-3" role="status"><h3 className="font-semibold">Return review required</h3><p>This cancellation happened after pickup. Review returned goods and stock manually; no automatic restock was made.</p>{returnReview.map((entry: any) => <p key={entry.orderId}>Order {entry.orderId}: {entry.items?.length ?? 0} product lines to review.</p>)}</section>}
+
+        <label className="block text-sm font-medium">Reason for cancellation or status repair
+          <textarea className={`${inputCls} mt-1 w-full`} value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="Describe the verified reason (up to 500 characters)" />
+        </label>
+        <p className="text-xs text-slate-500">{reason.trim().length}/500 characters. The API checks current payment, rider and pickup evidence again when saving.</p>
+
         <div className="flex flex-wrap gap-2">
-          <button className={btnDanger} onClick={() => { const reason = prompt('Cancellation reason:'); if (reason) act(() => api.post(`/admin/orders/${orderId}/cancel`, { reason })); }}>
+          <button className={btnDanger} disabled={busy || !reason.trim()} onClick={() => void act(() => api.post(`/admin/orders/${orderId}/cancel`, { reason: reason.trim() }), 'Order cancelled. Review stock disposition below if required.')}>
             Cancel order
           </button>
-          <button className={btnGhost} onClick={() => { const amount = prompt('Refund amount in Rs (blank = full):'); const reason = prompt('Refund reason:') || 'Admin refund'; act(() => api.post(`/admin/orders/${orderId}/refund`, { amountPaisa: amount ? Math.round(Number(amount) * 100) : undefined, reason })); }}>
+          <button className={btnGhost} disabled={busy} onClick={() => { const amount = prompt('Refund amount in Rs (blank = full):'); const refundReason = prompt('Refund reason:') || 'Admin refund'; void act(() => api.post(`/admin/orders/${orderId}/refund`, { amountPaisa: amount ? Math.round(Number(amount) * 100) : undefined, reason: refundReason }), 'Refund request recorded.'); }}>
             Issue refund
           </button>
-          <button className={btnGhost} onClick={() => { const status = prompt('New status (e.g. DELIVERED, FAILED_DELIVERY):'); const reason = prompt('Override reason:') || ''; if (status) act(() => api.post(`/admin/orders/${orderId}/status`, { status: status.toUpperCase(), reason })); }}>
-            Override status
-          </button>
         </div>
+        {repairOptions.length > 0 && <div className="rounded-xl border border-slate-200 p-3"><label className="block font-medium">Forward status repair
+          <select className={`${inputCls} mt-1 w-full`} value={repairStatus} onChange={(event) => setRepairStatus(event.target.value)}><option value="">Choose a valid next status</option>{repairOptions.map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select>
+        </label><p className="my-2 text-xs leading-normal text-slate-500">Available before rider assignment and pickup when payment is confirmed or cash is due on delivery. The server checks the latest evidence before saving.</p><button className={btnGhost} disabled={busy || !repairOptions.includes(repairStatus) || !reason.trim()} onClick={() => void act(() => api.post(`/admin/orders/${orderId}/status`, { status: repairStatus, reason: reason.trim() }), 'Order status repaired and audited.')}>Save status repair</button></div>}
       </div>
     </Modal>
   );

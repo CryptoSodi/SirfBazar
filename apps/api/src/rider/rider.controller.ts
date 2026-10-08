@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RiderService } from './rider.service';
-import { AuthUser, CurrentUser, Roles } from '../common/decorators';
+import { AuthUser, CurrentUser, Roles, AllowInactiveRider } from '../common/decorators';
 import { UserRole } from '../common/constants';
 
 class LocationDto {
@@ -69,6 +69,7 @@ export class RiderController {
   constructor(private readonly rider: RiderService) {}
 
   @Get('profile')
+  @AllowInactiveRider()
   profile(@CurrentUser() user: AuthUser) {
     return this.rider.profile(user.userId);
   }

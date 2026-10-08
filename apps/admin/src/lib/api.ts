@@ -1,36 +1,33 @@
 import { friendlyError } from './friendly-error';
+import { browserSession } from './browserSession';
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 const LS = { access: 'sba.accessToken', refresh: 'sba.refreshToken', user: 'sba.user' };
+const session = browserSession('sba');
+export const captureSession = session.read;
+export const sessionIsCurrent = session.sameOwner;
 
 export function getUser(): any | null {
-  try {
-    return JSON.parse(localStorage.getItem(LS.user) || 'null');
-  } catch {
-    return null;
-  }
+  return session.read().user;
 }
 
 export function isLoggedIn() {
-  return !!localStorage.getItem(LS.access);
+  return !!session.read().access;
 }
 
 export function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
-  localStorage.setItem(LS.access, data.accessToken);
-  localStorage.setItem(LS.refresh, data.refreshToken);
-  localStorage.setItem(LS.user, JSON.stringify(data.user));
+  session.write(data);
 }
 
 export function logout() {
-  localStorage.removeItem(LS.access);
-  localStorage.removeItem(LS.refresh);
-  localStorage.removeItem(LS.user);
+  session.clear();
   location.href = '/login';
 }
 
 async function request(method: string, path: string, body?: unknown, retry = true): Promise<any> {
+  const captured = session.read();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
-  const token = localStorage.getItem(LS.access);
+  const token = captured.access;
   if (token) headers.authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}${path}`, {
@@ -39,10 +36,14 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     body: body != null ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401 && retry && localStorage.getItem(LS.refresh)) {
-    const ok = await tryRefresh();
-    if (ok) return request(method, path, body, false);
-    logout();
+  if (!session.sameGeneration(captured)) throw new Error('Your session changed. Refresh this page.');
+  if (res.status === 401 && retry && captured.refresh) {
+    const refreshed = await session.renew(captured, `${API_URL}/auth/refresh-token`);
+    if (refreshed) {
+      if (!session.sameOwner(captured)) throw new Error('Your session changed. Refresh this page.');
+      return request(method, path, body, false);
+    }
+    if (!session.read().access) location.href = '/login';
   }
 
   let data: any = null;
@@ -51,26 +52,12 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   } catch {
     /* empty */
   }
+  if (!session.sameGeneration(captured)) throw new Error('Your session changed. Refresh this page.');
   if (!res.ok) {
     const msg = friendlyError(data?.message, res.status, path, data?.code);
     throw new Error(msg);
   }
   return data;
-}
-
-async function tryRefresh(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_URL}/auth/refresh-token`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refreshToken: localStorage.getItem(LS.refresh) }),
-    });
-    if (!res.ok) return false;
-    storeAuth(await res.json());
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 export const api = {
@@ -81,7 +68,8 @@ export const api = {
 };
 
 export function pkr(paisa: number | null | undefined): string {
-  return `Rs ${Math.round((paisa ?? 0) / 100).toLocaleString()}`;
+  const amount = paisa ?? 0;
+  return `Rs ${(amount / 100).toLocaleString('en-PK', { minimumFractionDigits: amount % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 export function tone(status: string): string {

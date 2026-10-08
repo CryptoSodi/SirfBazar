@@ -1,6 +1,6 @@
 export function formatPKR(paisa: number | null | undefined): string {
   if (paisa == null || !Number.isFinite(paisa)) return 'Amount unavailable';
-  return `Rs ${Math.round(paisa / 100).toLocaleString('en-PK')}`;
+  return `Rs ${(paisa / 100).toLocaleString('en-PK', { minimumFractionDigits: paisa % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 export const STATUS_LABELS: Record<string, string> = {

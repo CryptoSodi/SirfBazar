@@ -15,13 +15,14 @@ const { RiderService } = require('../src/rider/rider.service.ts');
 const { OrderOtpInterceptor } = require('../src/common/order-otp.interceptor.ts');
 const { MerchantProductsService } = require('../src/merchant/merchant-products.service.ts');
 const { MerchantOrdersService } = require('../src/orders/merchant-orders.service.ts');
+const { CustomersService } = require('../src/customers/customers.service.ts');
+const { CartService } = require('../src/cart/cart.service.ts');
+const { AdminMarketplaceService } = require('../src/admin/admin-marketplace.service.ts');
+const { MerchantPeopleService } = require('../src/merchant/merchant-people.service.ts');
 const { of, firstValueFrom } = require('rxjs');
 const { OrderStatus, PaymentStatus } = require('../src/common/constants.ts');
 
-const url = new URL(process.env.DATABASE_URL || 'postgresql://invalid/invalid');
-if (!['127.0.0.1', 'localhost'].includes(url.hostname) || !/remediation|test/i.test(url.pathname)) {
-  throw new Error('test:remediation requires a local disposable test database');
-}
+const url = require('./disposable-database.cjs').disposableUrl();
 const prisma = new PrismaService();
 const realtime = { emitToOrder() {}, emitToMerchant() {}, emitToRider() {}, emitToUser() {}, emitToAdmins() {} };
 const notifications = { async notify() { return null; }, async notifyMany() {} };
@@ -31,6 +32,9 @@ const refunds = new RefundsService(prisma, notifications);
 const status = new OrderStatusService(prisma, realtime);
 const orders = new OrdersService(prisma, null, coupons, refunds, notifications, realtime, access, new PricingService(), status);
 const settlements = new SettlementsService(prisma, notifications);
+const customers = new CustomersService(prisma, access);
+const baskets = new CartService(prisma, coupons, new PricingService());
+const admin = new AdminMarketplaceService(prisma, { log: async () => {} }, notifications, orders, status, refunds);
 after(async () => prisma.$disconnect());
 
 async function merchant(suffix) {
@@ -289,6 +293,7 @@ test('linked support orders, rider location and nested OTP projection respect te
   const riderService = new RiderService(prisma, access, notifications, realtime, status, null);
   await assert.rejects(riderService.updateLocation(riderUser.id, { orderId: order.id, latitude: 31.5, longitude: 74.3 }));
   await prisma.order.update({ where: { id: order.id }, data: { riderId: rider.id } });
+  await prisma.rider.update({ where: { id: rider.id }, data: { currentOrderId: order.id } });
   await riderService.updateLocation(riderUser.id, { orderId: order.id, latitude: 31.5, longitude: 74.3 });
   await prisma.order.update({ where: { id: order.id }, data: { status: OrderStatus.DELIVERED } });
   await assert.rejects(riderService.updateLocation(riderUser.id, { orderId: order.id, latitude: 31.6, longitude: 74.4 }));
@@ -384,4 +389,244 @@ test('bulk rows are idempotent and stale update preview cannot overwrite a sale'
     await assert.rejects(bulk.bulkUpload(shop.userId, { ...partialDto, previewToken: partialPreview.previewToken, items: [{ ...partialDto.items[0], stockQuantity: 99 }, partialDto.items[1]] }), /Import preview expired or changed/);
   } finally { Date.now = beforeExpiry; }
   assert.equal(await prisma.product.count({ where: { name: `Expired partial ${suffix}` } }), 0, 'expired unaudited row never writes after category becomes active');
+});
+
+test('address edit and deletion cannot strip an active checkout delivery snapshot', async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix);
+  const item = await listing(shop, suffix, 2);
+  const buyer = await customer(suffix);
+  const cart = await cartFor(buyer, item);
+  const quote = await orders.quoteOrder(buyer.user.id, { cartId: cart.id, deliveryAddressId: buyer.address.id, paymentMethod: 'COD' });
+  const placed = await orders.placeOrder(buyer.user.id, request(buyer, cart, quote));
+  await assert.rejects(customers.updateAddress(buyer.user.id, buyer.address.id, { fullAddress: 'Moved after checkout' }), (error) => error.getResponse?.().code === 'ADDRESS_IN_USE');
+  await assert.rejects(customers.deleteAddress(buyer.user.id, buyer.address.id), (error) => error.getResponse?.().code === 'ADDRESS_IN_USE');
+  const saved = await prisma.order.findUnique({ where: { id: placed.id } });
+  assert.equal(saved.deliveryAddressId, buyer.address.id);
+  assert.equal((await prisma.customerAddress.findUnique({ where: { id: buyer.address.id } })).fullAddress, 'Disposable test address');
+  await orders.cancelByAdmin(buyer.user.id, placed.id, 'Fixture address release');
+  await customers.updateAddress(buyer.user.id, buyer.address.id, { fullAddress: 'Moved after cancellation' });
+  await customers.deleteAddress(buyer.user.id, buyer.address.id);
+  assert.equal(await prisma.customerAddress.findUnique({ where: { id: buyer.address.id } }), null);
+});
+
+test('guest merge rolls back combined overstock and consumes a successfully merged guest context', async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix);
+  const item = await listing(shop, suffix, 5);
+  const buyer = await customer(suffix);
+  const token = randomUUID();
+  const guest = await prisma.guestSession.create({ data: { sessionToken: token, expiresAt: new Date(Date.now() + 3600_000) } });
+  const customerOwner = await baskets.ownerFromCustomerUser(buyer.user.id);
+  const guestOwner = await baskets.ownerFromGuestToken(token);
+  await baskets.addItem(customerOwner, item.id, 3);
+  await baskets.addItem(guestOwner, item.id, 3);
+  await assert.rejects(baskets.mergeGuestCart(token, buyer.user.id), /Only 5 in stock/);
+  assert.equal((await prisma.cart.findFirst({ where: { guestSessionId: guest.id } })).status, 'ACTIVE');
+  assert.equal((await prisma.cartItem.findFirst({ where: { cart: { customerId: buyer.profile.id } } })).quantity, 3);
+  const guestCart = await prisma.cart.findFirst({ where: { guestSessionId: guest.id } });
+  await prisma.cartItem.update({ where: { cartId_merchantProductId: { cartId: guestCart.id, merchantProductId: item.id } }, data: { quantity: 2 } });
+  const merged = await baskets.mergeGuestCart(token, buyer.user.id);
+  assert.equal(merged.groups.flatMap((group) => group.items).find((entry) => entry.merchantProductId === item.id).quantity, 5);
+  assert.equal((await prisma.cart.findUnique({ where: { id: guestCart.id } })).status, 'MERGED');
+  await assert.rejects(baskets.addItem(guestOwner, item.id, 1), /already merged/i);
+  assert.equal(await prisma.cart.count({ where: { guestSessionId: guest.id, status: 'ACTIVE' } }), 0);
+});
+
+test('admin status repair rolls back status and timeline if audit persistence fails', async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix);
+  const buyer = await customer(suffix);
+  const order = await prisma.order.create({ data: { orderNumber: `T-${randomUUID()}`, customerId: buyer.profile.id, merchantId: shop.id, status: OrderStatus.SENT_TO_MERCHANT, channel: 'ONLINE', paymentMethod: 'COD', paymentStatus: PaymentStatus.CASH_PENDING } });
+  const faultyPrisma = new Proxy(prisma, { get(target, key) {
+    if (key !== '$transaction') return Reflect.get(target, key);
+    return (work, options) => target.$transaction((tx) => work(new Proxy(tx, { get(inner, model) {
+      if (model === 'auditLog') return new Proxy(inner.auditLog, { get(delegate, method) { if (method === 'create') return async () => { throw Error('fixture audit unavailable'); }; return Reflect.get(delegate, method); } });
+      return Reflect.get(inner, model);
+    } })), options);
+  } });
+  const faulty = new AdminMarketplaceService(faultyPrisma, { log: async () => {} }, notifications, orders, status, refunds);
+  await assert.rejects(faulty.overrideOrderStatus(buyer.user.id, order.id, OrderStatus.MERCHANT_ACCEPTED, 'Review evidence'), /fixture audit unavailable/);
+  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.SENT_TO_MERCHANT);
+  assert.equal(await prisma.orderTimelineEntry.count({ where: { orderId: order.id, status: OrderStatus.MERCHANT_ACCEPTED } }), 0);
+  await admin.overrideOrderStatus(buyer.user.id, order.id, OrderStatus.MERCHANT_ACCEPTED, 'Review evidence');
+  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.MERCHANT_ACCEPTED);
+  assert.equal(await prisma.auditLog.count({ where: { entityId: order.id, action: 'ORDER_STATUS_OVERRIDE' } }), 1);
+});
+
+test('rider approval versus rejection, then assignment versus deactivation, have one durable winner', async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix);
+  const buyer = await customer(suffix);
+  const people = new MerchantPeopleService(prisma, access, { log: async () => {} }, notifications);
+  const dispatch = new MerchantOrdersService(prisma, access, notifications, realtime, orders, status);
+  const applicantUser = await prisma.user.create({ data: { role: 'RIDER', status: 'ACTIVE', phoneNumber: `+94${suffix}` } });
+  const applicant = await prisma.rider.create({ data: { merchantId: shop.id, userId: applicantUser.id, fullName: 'Applicant', phoneNumber: `+95${suffix}`, approvalStatus: 'PENDING', isActive: false } });
+  const decisions = await Promise.allSettled([people.approveRider(shop.userId, applicant.id), people.rejectRider(shop.userId, applicant.id)]);
+  assert.equal(decisions.filter((entry) => entry.status === 'fulfilled').length, 1);
+  const durable = await prisma.rider.findUnique({ where: { id: applicant.id } });
+  assert.equal(durable?.approvalStatus ?? 'REJECTED', decisions[0].status === 'fulfilled' ? 'APPROVED' : 'REJECTED');
+  assert.equal(await prisma.auditLog.count({ where: { entityId: applicant.id, action: { in: ['RIDER_APPROVED', 'RIDER_REJECTED'] } } }), 1);
+
+  const riderUser = await prisma.user.create({ data: { role: 'RIDER', status: 'ACTIVE', phoneNumber: `+96${suffix}` } });
+  const rider = await prisma.rider.create({ data: { merchantId: shop.id, userId: riderUser.id, fullName: 'Assignment rider', phoneNumber: `+97${suffix}`, approvalStatus: 'APPROVED', isActive: true, currentStatus: 'IDLE' } });
+  const order = await prisma.order.create({ data: { orderNumber: `T-${randomUUID()}`, customerId: buyer.profile.id, merchantId: shop.id, status: OrderStatus.READY_FOR_PICKUP } });
+  const attempts = await Promise.allSettled([dispatch.assignRider(shop.userId, order.id, rider.id), people.setRiderActive(shop.userId, rider.id, false)]);
+  assert.equal(attempts.filter((entry) => entry.status === 'fulfilled').length, 1);
+  const savedRider = await prisma.rider.findUnique({ where: { id: rider.id } });
+  const savedOrder = await prisma.order.findUnique({ where: { id: order.id } });
+  if (attempts[0].status === 'fulfilled') {
+    assert.equal(savedOrder.riderId, rider.id);
+    assert.equal(savedRider.currentOrderId, order.id);
+    assert.equal(savedRider.isActive, true);
+  } else {
+    assert.equal(savedOrder.riderId, null);
+    assert.equal(savedRider.currentOrderId, null);
+    assert.equal(savedRider.isActive, false);
+  }
+});
+
+test('admin cancellation restores pre-pickup stock, flags post-pickup return and releases only matching rider assignment', async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix);
+  const item = await listing(shop, suffix, 2);
+  const buyer = await customer(suffix);
+  const place = async () => {
+    const cart = await cartFor(buyer, item);
+    const quote = await orders.quoteOrder(buyer.user.id, { cartId: cart.id, deliveryAddressId: buyer.address.id, paymentMethod: 'COD' });
+    return orders.placeOrder(buyer.user.id, request(buyer, cart, quote));
+  };
+  const first = await place();
+  assert.equal((await prisma.merchantProduct.findUnique({ where: { id: item.id } })).stockQuantity, 1);
+  const pre = await orders.cancelByAdmin(buyer.user.id, first.id, 'Damaged before pickup');
+  assert.equal(pre.returnReviewRequired, false);
+  assert.equal((await prisma.merchantProduct.findUnique({ where: { id: item.id } })).stockQuantity, 2);
+  const second = await place();
+  const riderUser = await prisma.user.create({ data: { role: 'RIDER', status: 'ACTIVE', phoneNumber: `+98${suffix}` } });
+  const rider = await prisma.rider.create({ data: { merchantId: shop.id, userId: riderUser.id, fullName: 'Return rider', phoneNumber: `+99${suffix}`, approvalStatus: 'APPROVED', isActive: true } });
+  await prisma.order.update({ where: { id: second.id }, data: { status: OrderStatus.ON_THE_WAY, pickedUpAt: new Date(), riderId: rider.id } });
+  await prisma.rider.update({ where: { id: rider.id }, data: { currentOrderId: second.id, currentStatus: 'ASSIGNED' } });
+  const post = await orders.cancelByAdmin(buyer.user.id, second.id, 'Damaged after pickup');
+  assert.equal(post.returnReviewRequired, true);
+  assert.equal(post.returnReview[0].items[0].merchantProductId, item.id);
+  assert.equal((await prisma.merchantProduct.findUnique({ where: { id: item.id } })).stockQuantity, 1);
+  assert.equal((await prisma.rider.findUnique({ where: { id: rider.id } })).currentOrderId, null);
+
+  const other = await prisma.order.create({ data: { orderNumber: `T-${randomUUID()}`, customerId: buyer.profile.id, merchantId: shop.id, status: OrderStatus.READY_FOR_PICKUP } });
+  const stale = await prisma.order.create({ data: { orderNumber: `T-${randomUUID()}`, customerId: buyer.profile.id, merchantId: shop.id, status: OrderStatus.ON_THE_WAY, pickedUpAt: new Date(), riderId: rider.id } });
+  await prisma.rider.update({ where: { id: rider.id }, data: { currentOrderId: other.id, currentStatus: 'ASSIGNED' } });
+  await orders.cancelByAdmin(buyer.user.id, stale.id, 'Legacy stale assignment');
+  assert.equal((await prisma.rider.findUnique({ where: { id: rider.id } })).currentOrderId, other.id);
+});
+
+function ownerLockBarrier() {
+  let locked, release, entering;
+  const hasLock = new Promise((resolve) => { locked = resolve; });
+  const mayCommit = new Promise((resolve) => { release = resolve; });
+  const entered = new Promise((resolve) => { entering = resolve; });
+  let paused = false;
+  const proxy = new Proxy(prisma, { get(target, key) {
+    if (key !== '$transaction') return Reflect.get(target, key);
+    return (work, options) => target.$transaction((tx) => work(new Proxy(tx, { get(inner, member) {
+      if (member !== '$queryRaw') return Reflect.get(inner, member);
+      return async (...args) => {
+        entering();
+        const rows = await inner.$queryRaw(...args);
+        if (!paused) { paused = true; locked(); await mayCommit; }
+        return rows;
+      };
+    } })), options);
+  } });
+  return { proxy, hasLock, entered, release };
+}
+
+function ownerLockEntry() {
+  let entering;
+  const entered = new Promise((resolve) => { entering = resolve; });
+  const proxy = new Proxy(prisma, { get(target, key) {
+    if (key !== '$transaction') return Reflect.get(target, key);
+    return (work, options) => target.$transaction((tx) => work(new Proxy(tx, { get(inner, member) {
+      if (member !== '$queryRaw') return Reflect.get(inner, member);
+      return (...args) => { entering(); return inner.$queryRaw(...args); };
+    } })), options);
+  } });
+  return { proxy, entered };
+}
+
+function boundedBarrier(promise) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('Owner-lock barrier timed out')), 4000); })])
+    .finally(() => clearTimeout(timer));
+}
+
+test('checkout-first owner lock rejects simultaneous address edit and delete without losing drop-off', async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix), item = await listing(shop, suffix, 1), buyer = await customer(suffix);
+  const cart = await cartFor(buyer, item);
+  const quote = await orders.quoteOrder(buyer.user.id, { cartId: cart.id, deliveryAddressId: buyer.address.id, paymentMethod: 'COD' });
+  const winner = ownerLockBarrier();
+  const placing = new OrdersService(winner.proxy, null, coupons, refunds, notifications, realtime, access, new PricingService(), status);
+  const placement = placing.placeOrder(buyer.user.id, request(buyer, cart, quote));
+  try {
+    await boundedBarrier(winner.hasLock);
+    const editEntry = ownerLockEntry(), deleteEntry = ownerLockEntry();
+    const edit = new CustomersService(editEntry.proxy, access).updateAddress(buyer.user.id, buyer.address.id, { fullAddress: 'Racing address edit' });
+    const deletion = new CustomersService(deleteEntry.proxy, access).deleteAddress(buyer.user.id, buyer.address.id);
+    await boundedBarrier(Promise.all([editEntry.entered, deleteEntry.entered]));
+    winner.release();
+    const placed = await placement;
+    const result = await Promise.allSettled([edit, deletion]);
+    assert.equal(result.filter((entry) => entry.status === 'rejected').length, 2);
+    assert.ok(result.every((entry) => entry.reason?.getResponse?.().code === 'ADDRESS_IN_USE'));
+    assert.equal((await prisma.order.findUnique({ where: { id: placed.id } })).deliveryAddressId, buyer.address.id);
+    assert.equal((await prisma.customerAddress.findUnique({ where: { id: buyer.address.id } })).fullAddress, 'Disposable test address');
+  } finally { winner.release(); }
+});
+
+test('address edit or delete holding the owner lock invalidates a quoted checkout before any sale write', async () => {
+  for (const change of ['edit', 'delete']) {
+    const suffix = randomUUID().slice(0, 8);
+    const shop = await merchant(suffix), item = await listing(shop, suffix, 1), buyer = await customer(suffix);
+    const cart = await cartFor(buyer, item);
+    const quote = await orders.quoteOrder(buyer.user.id, { cartId: cart.id, deliveryAddressId: buyer.address.id, paymentMethod: 'COD' });
+    const winner = ownerLockBarrier();
+    const changing = new CustomersService(winner.proxy, access);
+    const mutation = change === 'edit'
+      ? changing.updateAddress(buyer.user.id, buyer.address.id, { fullAddress: 'Moved before checkout' })
+      : changing.deleteAddress(buyer.user.id, buyer.address.id);
+    try {
+      await boundedBarrier(winner.hasLock);
+      const contender = ownerLockEntry();
+      const placingService = new OrdersService(contender.proxy, null, coupons, refunds, notifications, realtime, access, new PricingService(), status);
+      const placing = placingService.placeOrder(buyer.user.id, request(buyer, cart, quote));
+      await boundedBarrier(contender.entered);
+      winner.release();
+      await mutation;
+      await assert.rejects(placing);
+      assert.equal(await prisma.order.count({ where: { customerId: buyer.profile.id } }), 0, change);
+      assert.equal(await prisma.payment.count({ where: { customerId: buyer.profile.id } }), 0, change);
+      assert.equal((await prisma.merchantProduct.findUnique({ where: { id: item.id } })).stockQuantity, 1, change);
+    } finally { winner.release(); }
+  }
+});
+
+test('guest add racing merge cannot create a second basket or exceed stock at checkout', async () => {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix), item = await listing(shop, suffix, 3), buyer = await customer(suffix);
+  const token = randomUUID();
+  const guest = await prisma.guestSession.create({ data: { sessionToken: token, expiresAt: new Date(Date.now() + 3600_000) } });
+  const owner = await baskets.ownerFromGuestToken(token);
+  await baskets.addItem(await baskets.ownerFromCustomerUser(buyer.user.id), item.id, 1);
+  await baskets.addItem(owner, item.id, 1);
+  const attempts = await Promise.allSettled([baskets.mergeGuestCart(token, buyer.user.id), baskets.addItem(owner, item.id, 1)]);
+  if (attempts[0].status === 'rejected') await baskets.mergeGuestCart(token, buyer.user.id);
+  assert.equal((await prisma.cart.count({ where: { guestSessionId: guest.id, status: 'ACTIVE' } })), 0);
+  assert.equal((await prisma.cart.count({ where: { guestSessionId: guest.id, status: 'MERGED' } })), 1);
+  const cart = await prisma.cart.findFirst({ where: { customerId: buyer.profile.id, status: 'ACTIVE' }, include: { items: true } });
+  assert.ok(cart.items[0].quantity >= 2 && cart.items[0].quantity <= 3);
+  const quote = await orders.quoteOrder(buyer.user.id, { cartId: cart.id, deliveryAddressId: buyer.address.id, paymentMethod: 'COD' });
+  const placed = await orders.placeOrder(buyer.user.id, request(buyer, cart, quote));
+  assert.ok(placed.id);
+  assert.equal((await prisma.merchantProduct.findUnique({ where: { id: item.id } })).stockQuantity, 3 - cart.items[0].quantity);
+  await assert.rejects(baskets.addItem(owner, item.id, 1), /already merged/i);
 });

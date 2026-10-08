@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, type ReactNode, Children, isValidElement } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode, Children, isValidElement } from 'react';
 import { createPortal } from 'react-dom';
 import { friendlyError } from '../lib/friendly-error';
 
@@ -16,7 +16,26 @@ export function toast(text: string, ok = true) {
   emit();
 }
 function dismiss(id: number) { queue = queue.filter(item => item.id !== id); emit(); }
-export function useToast() { return { toast, node: null }; }
+function sessionMarker() {
+  if (typeof localStorage === 'undefined') return 'server';
+  try {
+    const snapshot = JSON.parse(localStorage.getItem('sb.session') || 'null');
+    return snapshot ? `${snapshot.epoch}:${snapshot.identity}` : 'legacy';
+  } catch { return 'unavailable'; }
+}
+function subscribeSession(listener: () => void) {
+  const stored = (event: StorageEvent) => { if (event.key === 'sb.session') listener(); };
+  window.addEventListener('sb:session', listener);
+  window.addEventListener('storage', stored);
+  return () => { window.removeEventListener('sb:session', listener); window.removeEventListener('storage', stored); };
+}
+export function useToast() {
+  const owner = useSyncExternalStore(subscribeSession, sessionMarker, () => 'server');
+  const scopedToast = useCallback((text: string, ok = true) => {
+    if (sessionMarker() === owner) toast(text, ok);
+  }, [owner]);
+  return { toast: scopedToast, node: null };
+}
 function textOf(node: ReactNode): string {
   return Children.toArray(node).map(item => typeof item === 'string' || typeof item === 'number' ? String(item) : isValidElement<{ children?: ReactNode }>(item) ? textOf(item.props.children) : '').join('');
 }
@@ -33,15 +52,27 @@ export function ToastHost() {
   useEffect(() => {
     const sync = () => setMessages([...queue]);
     listeners.add(sync); sync();
+    let owner = sessionMarker();
+    const sessionChanged = () => {
+      const next = sessionMarker();
+      if (next === owner) return;
+      owner = next;
+      queue = [];
+      emit();
+    };
+    const stored = (event: StorageEvent) => { if (event.key === 'sb.session') sessionChanged(); };
+    window.addEventListener('sb:session', sessionChanged);
+    window.addEventListener('storage', stored);
     const locate = () => {
-      const dialogs = Array.from(document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]'));
+      const dialogs = Array.from(document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]'))
+        .filter((dialog) => dialog.getClientRects().length > 0 && getComputedStyle(dialog).visibility !== 'hidden');
       setTarget(dialogs.at(-1) ?? document.fullscreenElement as HTMLElement ?? document.body);
     };
     locate();
     const observer = new MutationObserver(locate);
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'hidden', 'style', 'class', 'aria-modal'] });
     document.addEventListener('fullscreenchange', locate);
-    return () => { listeners.delete(sync); observer.disconnect(); document.removeEventListener('fullscreenchange', locate); };
+    return () => { listeners.delete(sync); observer.disconnect(); document.removeEventListener('fullscreenchange', locate); window.removeEventListener('sb:session', sessionChanged); window.removeEventListener('storage', stored); };
   }, []);
   const current = messages[0];
   useEffect(() => {

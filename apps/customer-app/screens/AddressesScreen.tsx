@@ -1,11 +1,12 @@
 import { ToastMessage } from '../components/Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import type { RootStackParamList } from '../App';
 import { LoginSheet } from '../components/LoginSheet';
 import { api, isLoggedIn } from '../lib/api';
+import { onSessionInvalidated, toastSessionGeneration } from '../lib/toast-session';
 import { useTheme } from '../lib/theme';
 import { Icon, Notice, StatePanel, usePageInset } from '../components/CustomerUI';
 
@@ -21,25 +22,38 @@ export default function AddressesScreen() {
   const [deleteId, setDeleteId] = useState('');
   const [busy, setBusy] = useState(false);
   const mutationLock = useRef(false);
+  const mutationAttempt = useRef(0);
   const generation = useRef(0);
+  useEffect(() => onSessionInvalidated(() => {
+    generation.current++;
+    mutationAttempt.current++;
+    mutationLock.current = false;
+    setAddresses(null);
+    setError('');
+    setDeleteId('');
+    setBusy(false);
+  }), []);
   const load = useCallback(() => {
     const current = ++generation.current;
+    const session = toastSessionGeneration();
     void (async () => {
       const ok = await isLoggedIn();
-      if (current !== generation.current) return;
+      if (current !== generation.current || session !== toastSessionGeneration()) return;
       setNeedLogin(!ok);
       if (!ok) { setAddresses(null); return; }
       const result = await api.get('/customer/addresses');
-      if (current === generation.current) { setAddresses(result); setError(''); }
-    })().catch((cause) => { if (current === generation.current) setError(`${cause.message} Reload addresses to retry.`); });
+      if (current === generation.current && session === toastSessionGeneration()) { setAddresses(result); setError(''); }
+    })().catch((cause) => { if (current === generation.current && session === toastSessionGeneration()) setError(`${cause.message} Reload addresses to retry.`); });
   }, []);
   useFocusEffect(useCallback(() => { load(); return () => { generation.current++; }; }, [load]));
   const mutate = async (action: () => Promise<any>, failure: string) => {
     if (mutationLock.current) return;
+    const session = toastSessionGeneration();
+    const attempt = ++mutationAttempt.current;
     mutationLock.current = true; setBusy(true);
-    try { await action(); setDeleteId(''); load(); }
-    catch (cause: any) { setError(`${cause.message} ${failure}`); }
-    finally { mutationLock.current = false; setBusy(false); }
+    try { await action(); if (session === toastSessionGeneration() && attempt === mutationAttempt.current) { setDeleteId(''); load(); } }
+    catch (cause: any) { if (session === toastSessionGeneration() && attempt === mutationAttempt.current) setError(`${cause.message} ${failure}`); }
+    finally { if (attempt === mutationAttempt.current) { mutationLock.current = false; setBusy(false); } }
   };
   return <View style={s.screen}>
     {needLogin ? <StatePanel title="Keep your places together" message="Sign in to save home, work and other delivery addresses." action="Sign in" onPress={() => setShowLogin(true)} /> :

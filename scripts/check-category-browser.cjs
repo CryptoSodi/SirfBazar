@@ -38,9 +38,9 @@ module.exports = async (page, baseUrl) => {
   await page.getByRole('button', { name: 'Collapse Fruits & Vegetables', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Fresh Fruits', exact: true }).click();
   await page.getByRole('checkbox', { name: 'Already in my shop: Bananas', exact: true }).waitFor();
-  await page.getByRole('checkbox', { name: 'Select visible', exact: true }).check();
-  await page.getByRole('checkbox', { name: 'Deselect visible', exact: true }).uncheck();
-  await page.getByRole('checkbox', { name: 'Select visible', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Select loaded', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Deselect loaded', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Select loaded', exact: true }).check();
   await page.getByRole('button', { name: 'Fresh Vegetables', exact: true }).click();
   await page.locator('.catalog-product-name').getByText('Arvi', { exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Fresh Vegetables', exact: true }).waitFor();
@@ -69,9 +69,9 @@ module.exports = async (page, baseUrl) => {
     await review.getByLabel(/Stock quantity for/).nth(index).fill('5');
   }
   await page.screenshot({ path: 'output/playwright/categories-desktop.png', fullPage: true });
-  await page.getByRole('combobox', { name: 'Sort products on this page' }).selectOption('za');
+  await page.getByRole('combobox', { name: 'Sort loaded products' }).selectOption('za');
   if (await page.locator('.catalog-product-name').first().textContent() !== 'Bananas') throw Error('Visible-page sort failed');
-  await page.getByRole('combobox', { name: 'Sort products on this page' }).selectOption('az');
+  await page.getByRole('combobox', { name: 'Sort loaded products' }).selectOption('az');
   await page.getByRole('button', { name: 'Import products', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   await page.keyboard.press('Escape');
@@ -91,9 +91,9 @@ module.exports = async (page, baseUrl) => {
   await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();
   failCatalog = true;
   await page.getByRole('searchbox', { name: 'Search catalog', exact: true }).fill('broken');
-  await page.getByRole('button', { name: 'Retry', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Retry catalogue', exact: true }).waitFor();
   failCatalog = false;
-  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry catalogue', exact: true }).click();
   await page.getByText('No catalog products match “broken”.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Show all products', exact: true }).click();
   await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();

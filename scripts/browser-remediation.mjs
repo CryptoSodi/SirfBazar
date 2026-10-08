@@ -200,6 +200,11 @@ try {
   await trigger.click();
   await posPage.getByRole('button', { name: 'Complete sale' }).click();
   await posPage.getByText('Check saved sale before charging again').waitFor();
+  await dialog.waitFor({ state: 'hidden' });
+  const recoveryPanel = posPage.getByRole('status').filter({ hasText: 'Check saved sale before charging again' });
+  assert.equal(await recoveryPanel.isVisible(), true, 'saved-sale recovery remains visible outside the closed cash dialog');
+  assert.equal(await recoveryPanel.evaluate((node) => node === document.activeElement && node.tabIndex === -1), true, 'keyboard focus moves to durable recovery');
+  assert.equal(await trigger.isDisabled(), true, 'cash cannot be charged again before the saved sale is checked');
   const saved = await posPage.evaluate(() => JSON.parse(localStorage.getItem('sbp.saleRecovery.v1')));
   assert.equal(saved.payload.requestId, pendingSale.requestId);
   assert.deepEqual(saved.payload.items, pendingSale.items);
@@ -416,12 +421,12 @@ try {
   await shopPage.getByRole('heading', { name: 'Products', exact: true }).waitFor();
   await shopPage.getByRole('button', { name: 'Expand Grocery' }).click();
   await shopPage.getByRole('button', { name: 'Rice', exact: true }).click();
-  await shopPage.getByRole('checkbox', { name: 'Select visible', exact: true }).check();
+  await shopPage.getByRole('checkbox', { name: 'Select loaded', exact: true }).check();
   assert.equal(await shopPage.getByRole('checkbox', { name: /^Select product:/ }).count(), 1);
   assert.equal(await shopPage.getByRole('checkbox', { name: /^Already in my shop:/ }).isDisabled(), true);
   await shopPage.getByRole('button', { name: 'Tea', exact: true }).click();
   await shopPage.locator('.catalog-product-name').getByText('Fixture Tea', { exact: true }).waitFor();
-  await shopPage.locator('article.catalog-card').filter({ hasText: 'Fixture Tea' }).getByRole('checkbox', { name: 'Select product' }).check();
+  await shopPage.locator('article.catalog-card').filter({ hasText: 'Fixture Tea' }).getByRole('checkbox', { name: /^Select product:/ }).check();
   await shopPage.getByRole('button', { name: 'Add 2 products to shop', exact: true }).waitFor();
   await shopPage.getByRole('button', { name: 'Grocery', exact: true }).click();
   const review = shopPage.getByRole('complementary', { name: 'Selected products' });

@@ -52,7 +52,7 @@ export class NotificationsController {
     @Body() dto: WebPushSubscriptionDto,
     @Headers('user-agent') userAgent?: string,
   ) {
-    return this.webPush.subscribe(user.userId, {
+    return this.webPush.subscribe(user, {
       endpoint: dto.endpoint,
       keys: { p256dh: dto.p256dh, auth: dto.auth },
     }, userAgent);
@@ -60,31 +60,31 @@ export class NotificationsController {
 
   @Post('web-push/unsubscribe')
   unsubscribeWebPush(@CurrentUser() user: AuthUser, @Body() dto: WebPushUnsubscribeDto) {
-    return this.webPush.unsubscribe(user.userId, dto.endpoint);
+    return this.webPush.unsubscribe(user, dto.endpoint);
   }
 
   @Post('push-token')
   saveToken(@CurrentUser() user: AuthUser, @Body() dto: PushTokenDto) {
-    return this.expoPush.saveToken(user.userId, user.sessionId, dto.token, dto.platform);
+    return this.expoPush.saveToken(user, dto.token, dto.platform);
   }
 
   @Post('push-token/remove')
   removeToken(@CurrentUser() user: AuthUser, @Body() dto: PushTokenDto) {
-    return this.expoPush.removeToken(user.userId, dto.token);
+    return this.expoPush.removeToken(user, dto.token);
   }
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('unread') unread?: string) {
-    return this.notifications.list(user.userId, unread === 'true');
+  list(@CurrentUser() user: AuthUser, @Query('unread') unread?: string, @Query('scope') scope?: string) {
+    return this.notifications.list(user, unread === 'true', scope);
   }
 
   @Post(':id/read')
-  markRead(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.notifications.markRead(user.userId, id);
+  markRead(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query('scope') scope?: string) {
+    return this.notifications.markRead(user, id, scope);
   }
 
   @Post('read-all')
-  markAllRead(@CurrentUser() user: AuthUser) {
-    return this.notifications.markAllRead(user.userId);
+  markAllRead(@CurrentUser() user: AuthUser, @Query('scope') scope?: string) {
+    return this.notifications.markAllRead(user, scope);
   }
 }

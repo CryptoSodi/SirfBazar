@@ -1,5 +1,6 @@
 import { clearMemory, invalidateMemory } from './memoryCache';
 import { friendlyError } from './friendly-error';
+import { browserSession } from './browserSession';
 
 const configuredApiUrl = (import.meta.env?.VITE_API_URL || '').trim();
 
@@ -26,7 +27,7 @@ export const API_URL = configuredApiUrl;
 export type ApiErrorKind = 'config' | 'network' | 'timeout' | 'unauthorized' | 'permission' | 'http' | 'contract';
 export class ApiError extends Error {
   constructor(public kind: ApiErrorKind, message: string, public status?: number) {
-    super(friendlyError(message, status));
+    super(kind === 'http' || kind === 'unauthorized' ? message : friendlyError(message, status));
     this.name = 'ApiError';
   }
 }
@@ -36,6 +37,10 @@ export function errorMessage(error: unknown): string {
 }
 
 const LS = { access: 'sbs.accessToken', refresh: 'sbs.refreshToken', user: 'sbs.user' };
+const session = browserSession('sbs');
+export const captureSession = session.read;
+export const sessionIsCurrent = session.sameOwner;
+export const sessionGenerationIsCurrent = session.sameGeneration;
 
 export const MERCHANT_ROLES = ['MERCHANT_OWNER', 'MERCHANT_STAFF'];
 function merchantToken(token: string | null): boolean {
@@ -54,19 +59,15 @@ export function isMerchant(user: any): boolean {
 }
 
 export function getUser(): any | null {
-  try {
-    return JSON.parse(localStorage.getItem(LS.user) || 'null');
-  } catch {
-    return null;
-  }
+  return session.read().user;
 }
 
 export function isLoggedIn() {
-  return merchantToken(localStorage.getItem(LS.access)) && isMerchant(getUser());
+  return merchantToken(session.read().access) && isMerchant(getUser());
 }
 
 export function getAccessToken(): string | null {
-  return localStorage.getItem(LS.access);
+  return session.read().access;
 }
 
 export function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
@@ -75,29 +76,26 @@ export function storeAuth(data: { accessToken: string; refreshToken: string; use
   }
   const previous = getUser();
   if (previous?.id !== data.user?.id || previous?.merchant?.id !== data.user?.merchant?.id) clearMemory();
-  localStorage.setItem(LS.access, data.accessToken);
-  localStorage.setItem(LS.refresh, data.refreshToken);
-  localStorage.setItem(LS.user, JSON.stringify(data.user));
-  window.dispatchEvent(new Event('sb:session'));
+  session.write(data);
 }
 
 export function clearSession() {
   clearMemory();
-  localStorage.removeItem(LS.access);
-  localStorage.removeItem(LS.refresh);
-  localStorage.removeItem(LS.user);
-  window.dispatchEvent(new Event('sb:session'));
+  session.clear();
 }
 
 export async function logout() {
-  const refreshToken = localStorage.getItem(LS.refresh);
+  const captured = session.read();
+  clearSession();
   try {
-    if (refreshToken) await request('POST', '/auth/logout', { refreshToken }, false);
+    if (captured.refresh) await fetchWithTimeout(apiEndpoint('/auth/logout'), {
+      method: 'POST', headers: { 'content-type': 'application/json', ...(captured.access ? { authorization: `Bearer ${captured.access}` } : {}) },
+      body: JSON.stringify({ refreshToken: captured.refresh }),
+    });
   } catch {
     // Server revocation may be unreachable; still remove the local session.
   } finally {
-    clearSession();
-    location.assign('/sign-in');
+    if (!session.read().access) location.assign('/sign-in');
   }
 }
 
@@ -117,8 +115,9 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
 }
 
 async function request(method: string, path: string, body?: unknown, retry = true): Promise<any> {
+  const captured = session.read();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
-  const token = localStorage.getItem(LS.access);
+  const token = captured.access;
   if (token) headers.authorization = `Bearer ${token}`;
 
   const res = await fetchWithTimeout(apiEndpoint(path), {
@@ -127,12 +126,17 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     body: body != null ? JSON.stringify(body) : undefined,
   });
 
-  if (res.status === 401 && retry && localStorage.getItem(LS.refresh)) {
-    const refresh = await refreshOnce();
+  if (!session.sameGeneration(captured)) throw new ApiError('unauthorized', 'Your session changed. Refresh this page.', 401);
+  if (res.status === 401 && retry && captured.refresh) {
+    let refresh: 'ok' | 'invalid' | 'unavailable';
+    try { refresh = (await session.renew(captured, apiEndpoint('/auth/refresh-token'))) ? 'ok' : 'invalid'; }
+    catch { refresh = 'unavailable'; }
     // A mutation may have reached the server before its response was lost;
     // never automatically replay it after refreshing credentials.
-    if (refresh === 'ok' && method === 'GET') return request(method, path, body, false);
-    if (refresh === 'invalid') clearSession();
+    if (refresh === 'ok' && method === 'GET') {
+      if (!session.sameOwner(captured)) throw new ApiError('unauthorized', 'Your session changed. Refresh this page.', 401);
+      return request(method, path, body, false);
+    }
     if (refresh === 'unavailable') throw new ApiError('network', 'Session renewal is unavailable. Refresh this record before retrying.');
   }
 
@@ -142,8 +146,10 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   } catch {
     /* empty */
   }
+  if (!session.sameGeneration(captured)) throw new ApiError('unauthorized', 'Your session changed. Refresh this page.', 401);
   if (!res.ok) {
     const msg = friendlyError(data?.message, res.status, path, data?.code);
+    if (res.status === 401 && path === '/auth/verify-otp') throw new ApiError('http', msg, 401);
     if (res.status === 401) throw new ApiError('unauthorized', 'Your session needs to be renewed. Sign in and refresh this record before retrying.', 401);
     if (res.status === 403) throw new ApiError('permission', `Your merchant account does not have permission for this action. ${msg}`, 403);
     throw new ApiError('http', msg, res.status);
@@ -173,10 +179,12 @@ function invalidateAfterMutation(path: string) {
 }
 
 async function authenticatedFileRequest(path: string, init: RequestInit): Promise<Response> {
-  const token = localStorage.getItem(LS.access);
+  const captured = session.read();
+  const token = captured.access;
   const headers = new Headers(init.headers);
   if (token) headers.set('authorization', `Bearer ${token}`);
   const response = await fetchWithTimeout(apiEndpoint(path), { ...init, headers });
+  if (!session.sameGeneration(captured)) throw new ApiError('unauthorized', 'Your session changed. Refresh this page.', 401);
   if (!response.ok) {
     let data: any = null;
     try { data = await response.json(); } catch { /* non-JSON response */ }
@@ -189,38 +197,19 @@ async function authenticatedFileRequest(path: string, init: RequestInit): Promis
 }
 
 async function upload(path: string, form: FormData) {
+  const captured = session.read();
   const response = await authenticatedFileRequest(path, { method: 'POST', body: form });
-  return response.json();
+  const result = await response.json();
+  if (captured.access && !session.sameOwner(captured)) throw new ApiError('unauthorized', 'Your session changed. Refresh this page.', 401);
+  return result;
 }
 
 async function download(path: string) {
+  const captured = session.read();
   const response = await authenticatedFileRequest(path, { method: 'GET' });
-  return response.blob();
-}
-
-let refreshPromise: Promise<'ok' | 'invalid' | 'unavailable'> | null = null;
-function refreshOnce(): Promise<'ok' | 'invalid' | 'unavailable'> {
-  if (!refreshPromise) refreshPromise = tryRefresh().finally(() => { refreshPromise = null; });
-  return refreshPromise;
-}
-
-async function tryRefresh(): Promise<'ok' | 'invalid' | 'unavailable'> {
-  try {
-    const refreshToken = localStorage.getItem(LS.refresh);
-    if (!refreshToken) return 'invalid';
-    const res = await fetchWithTimeout(apiEndpoint('/auth/refresh-token'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (res.status === 401) return 'invalid';
-    if (!res.ok) return 'unavailable';
-    storeAuth(await res.json());
-    return 'ok';
-  } catch (error) {
-    if (error instanceof ApiError && error.kind === 'contract') return 'invalid';
-    return 'unavailable';
-  }
+  const result = await response.blob();
+  if (captured.access && !session.sameOwner(captured)) throw new ApiError('unauthorized', 'Your session changed. Refresh this page.', 401);
+  return result;
 }
 
 export const api = {
@@ -234,7 +223,8 @@ export const api = {
 };
 
 export function pkr(paisa: number | null | undefined): string {
-  return `Rs ${Math.round((paisa ?? 0) / 100).toLocaleString()}`;
+  const amount = paisa ?? 0;
+  return `Rs ${(amount / 100).toLocaleString('en-PK', { minimumFractionDigits: amount % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 /** Human label for an order status (mirrors the customer app). */

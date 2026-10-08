@@ -1,4 +1,4 @@
-import { toast } from '../components/Toast';
+import { useToast } from '../components/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { Image, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -37,6 +37,7 @@ const ui = StyleSheet.create({
 });
 
 export default function DashboardScreen() {
+  const toast = useToast();
   const [stats, setStats] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);

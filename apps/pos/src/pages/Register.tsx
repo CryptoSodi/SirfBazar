@@ -34,6 +34,7 @@ export default function Register() {
   const { toast, node } = useToast();
   const first = useRef(true);
   const chargeTrigger = useRef<HTMLButtonElement>(null);
+  const recoveryPanel = useRef<HTMLDivElement>(null);
   const owner = getUser()?.id as string | undefined;
 
   useEffect(() => {
@@ -102,7 +103,7 @@ export default function Register() {
   const changePaisa = tenderedPaisa - subtotalPaisa;
 
   const openCharge = () => {
-    if (!lines.length) return;
+    if (!lines.length || busy || recovery || recoveryError) return;
     setTendered('');
     setCharging(true);
   };
@@ -112,7 +113,12 @@ export default function Register() {
       setTenderError('Enter cash in rupees with up to two decimal places, at least the total due.');
       return;
     }
-    if (!owner || !merchantId || recovery || recoveryError) { setRecoveryError('Check the saved sale and account before charging.'); return; }
+    if (busy) return;
+    if (!owner || !merchantId || recovery || recoveryError) {
+      setRecoveryError('Check the saved sale and account before charging.');
+      setCharging(false);
+      return;
+    }
     setBusy(true);
     let saved: SaleRecovery | null = null;
     let persisted = false;
@@ -132,6 +138,8 @@ export default function Register() {
       setTendered('');
       load(); // refresh stock after the sale
     } catch (e: any) {
+      // Close the native dialog so the durable recovery actions are reachable.
+      setCharging(false);
       if (!persisted) setRecoveryError(e.message || 'Unable to save this sale before charging.');
       else if (isDefinitiveSaleRejection(e?.status)) {
         clearSaleRecovery(saved!); setRecovery(null);
@@ -142,6 +150,10 @@ export default function Register() {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (!charging && recoveryError) recoveryPanel.current?.focus();
+  }, [charging, recoveryError]);
 
   const reconcileSale = async (retry = false) => {
     if (!recovery || recovery.owner !== owner || recovery.merchantId !== merchantId) return;
@@ -171,7 +183,7 @@ export default function Register() {
 
   return (
     <div className="flex h-[calc(100vh-57px)] min-h-0">
-      {(recovery || recoveryError) && <div className="fixed inset-x-4 top-16 z-40 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm shadow-lg" role="status"><strong>{recovery ? 'Check saved sale before charging again' : 'Register needs attention'}</strong>{recovery && <p className="mt-1">Reference: <code>{recovery.payload.requestId}</code></p>}{recoveryError && <p className="mt-1 text-red-800">{recoveryError}</p>}{recovery && <div className="mt-3 flex gap-2"><button className={btnCls} disabled={busy} onClick={() => void reconcileSale()}>Check saved sale</button><button className={btnGhost} disabled={busy} onClick={() => void reconcileSale(true)}>Retry saved request</button></div>}{definitiveFailure && <button className={`${btnGhost} mt-3`} onClick={() => { setRecoveryError(''); setDefinitiveFailure(false); setCharging(false); }}>Review bill again</button>}</div>}
+      {(recovery || recoveryError) && <div ref={recoveryPanel} tabIndex={-1} className="fixed inset-x-4 top-16 z-40 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm shadow-lg" role="status"><strong>{recovery ? 'Check saved sale before charging again' : 'Register needs attention'}</strong>{recovery && <p className="mt-1">Reference: <code>{recovery.payload.requestId}</code></p>}{recoveryError && <p className="mt-1 text-red-800">{recoveryError}</p>}{recovery && <div className="mt-3 flex gap-2"><button className={btnCls} disabled={busy} onClick={() => void reconcileSale()}>Check saved sale</button><button className={btnGhost} disabled={busy} onClick={() => void reconcileSale(true)}>Retry saved request</button></div>}{definitiveFailure && <button className={`${btnGhost} mt-3`} onClick={() => { setRecoveryError(''); setDefinitiveFailure(false); setCharging(false); }}>Review bill again</button>}</div>}
       {/* Product catalogue */}
       <section className="flex min-w-0 flex-1 flex-col p-4">
         <input
@@ -257,7 +269,7 @@ export default function Register() {
             <span className="text-sm text-slate-500">{itemCount} item{itemCount === 1 ? '' : 's'}</span>
             <span className="text-2xl font-black">{pkr(subtotalPaisa)}</span>
           </div>
-          <button ref={chargeTrigger} className={`${btnCls} w-full py-3 text-base`} onClick={openCharge} disabled={!lines.length}>
+          <button ref={chargeTrigger} className={`${btnCls} w-full py-3 text-base`} onClick={openCharge} disabled={!lines.length || busy || !!recovery || !!recoveryError}>
             Charge {pkr(subtotalPaisa)}
           </button>
         </div>

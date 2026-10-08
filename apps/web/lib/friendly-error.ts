@@ -7,6 +7,11 @@ export function friendlyError(value: unknown, status?: number, path = '', code?:
   const raw = typeof value === 'string' ? value : value instanceof Error ? value.message : '';
   if (code === 'QUOTE_CHANGED' || code === 'QUOTE_REQUIRED') return 'Your basket or total has changed. Review your order again before placing it.';
   if (status === 429) return 'Too many attempts. Please wait a moment before trying again.';
+  if (status === 401 && path === '/auth/verify-otp') {
+    if (/no pending code/i.test(raw)) return 'No code is pending for this number. Request a new code.';
+    if (/too many failed attempts/i.test(raw)) return 'Too many incorrect codes. Request a new code.';
+    return 'That verification code is incorrect or has expired. Request a new code and try again.';
+  }
   if (status === 401) return 'Your session has expired. Sign in again to continue.';
   if (status === 403) return 'This account cannot perform that action. Contact your shop owner or support.';
   if (status && status >= 500) return 'The service is temporarily unavailable. Check the saved status before trying the action again.';

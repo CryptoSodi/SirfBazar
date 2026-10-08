@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -8,12 +8,62 @@ import { parsePage, paged, PageQuery } from '../common/utils/pagination';
 
 @Injectable()
 export class SupportService {
+  private readonly logger = new Logger(SupportService.name);
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AccessService,
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeService,
   ) {}
+
+  private async participantAudience(ticket: {
+    customerId?: string | null; merchantId?: string | null; riderId?: string | null;
+    createdByUserId: string; issueCategory: string;
+  }) {
+    const associations = [ticket.customerId, ticket.merchantId, ticket.riderId].filter(Boolean).length;
+    // RiderService creates these mixed-association tickets with a server-owned
+    // category. The order's customer/merchant are context, not the recipient.
+    if (ticket.issueCategory === 'RIDER_ISSUE' && ticket.riderId) {
+      const rider = await this.prisma.rider.findFirst({
+        where: { id: ticket.riderId, userId: ticket.createdByUserId }, select: { id: true },
+      });
+      return rider ? { audience: 'RIDER' as const, scopeId: rider.id } : null;
+    }
+    // Other mixed-association legacy tickets have no trustworthy creator-role
+    // provenance. Do not guess based on customer/merchant/rider column order.
+    if (associations > 1) return null;
+    if (ticket.customerId) {
+      const customer = await this.prisma.customer.findFirst({
+        where: { id: ticket.customerId, userId: ticket.createdByUserId }, select: { id: true },
+      });
+      return customer ? { audience: 'CUSTOMER' as const, scopeId: ticket.createdByUserId } : null;
+    }
+    if (ticket.merchantId) {
+      const [owner, staff] = await Promise.all([
+        this.prisma.merchant.findFirst({ where: { id: ticket.merchantId, userId: ticket.createdByUserId }, select: { id: true } }),
+        this.prisma.merchantStaff.findFirst({ where: { merchantId: ticket.merchantId, userId: ticket.createdByUserId, status: 'ACTIVE' }, select: { id: true } }),
+      ]);
+      return owner || staff ? { audience: 'MERCHANT' as const, scopeId: ticket.merchantId } : null;
+    }
+    if (ticket.riderId) {
+      const rider = await this.prisma.rider.findFirst({
+        where: { id: ticket.riderId, userId: ticket.createdByUserId }, select: { id: true },
+      });
+      return rider ? { audience: 'RIDER' as const, scopeId: rider.id } : null;
+    }
+    // Association-free tickets can only address their creator's account.
+    return { audience: 'ACCOUNT' as const, scopeId: ticket.createdByUserId };
+  }
+
+  private async safeParticipantAudience(ticket: Parameters<SupportService['participantAudience']>[0]) {
+    try { return await this.participantAudience(ticket); }
+    catch {
+      // The ticket write has already succeeded. Do not turn a notification
+      // lookup outage into a failed reply/status response or widen its audience.
+      this.logger.warn('Support notification audience could not be resolved');
+      return null;
+    }
+  }
 
   // ── User-facing ────────────────────────────────────────────────────────────
 
@@ -96,16 +146,21 @@ export class SupportService {
           data: { status: TicketStatus.IN_REVIEW },
         });
       }
-      await this.notifications.notify({
+      const audience = await this.safeParticipantAudience(ticket);
+      if (audience) await this.notifications.notify({
         userId: ticket.createdByUserId,
+        ...audience,
         title: 'Support replied',
         body: message.slice(0, 140),
         type: NotificationType.SUPPORT_REPLY,
         referenceId: ticket.id,
       });
     } else if (ticket.assignedToAdminId) {
+      const admin = await this.prisma.user.findUnique({ where: { id: ticket.assignedToAdminId }, select: { role: true } });
+      if (!admin || !ADMIN_ROLES.includes(admin.role as UserRole)) return row;
       await this.notifications.notify({
         userId: ticket.assignedToAdminId,
+        audience: 'ADMIN', scopeId: admin.role,
         title: `Ticket update: ${ticket.title}`,
         body: message.slice(0, 140),
         type: NotificationType.SUPPORT_REPLY,
@@ -154,8 +209,10 @@ export class SupportService {
       },
     });
     if (input.status && input.status !== ticket.status) {
-      await this.notifications.notify({
+      const audience = await this.safeParticipantAudience(ticket);
+      if (audience) await this.notifications.notify({
         userId: ticket.createdByUserId,
+        ...audience,
         title: 'Support ticket update',
         body: `Your ticket "${ticket.title}" is now ${input.status.replace(/_/g, ' ').toLowerCase()}.`,
         type: NotificationType.SUPPORT_REPLY,

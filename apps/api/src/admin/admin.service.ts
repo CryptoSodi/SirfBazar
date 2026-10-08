@@ -290,6 +290,7 @@ export class AdminService {
     });
     await this.notifications.notify({
       userId: rider.userId,
+      audience: 'ACCOUNT', scopeId: rider.userId,
       title: suspended ? 'Account suspended' : 'Account reinstated',
       body: suspended
         ? 'Your rider account has been suspended by SirfBazar. Contact support for details.'

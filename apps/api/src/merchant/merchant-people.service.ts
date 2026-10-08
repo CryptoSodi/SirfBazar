@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, StaffPermission, UserRole } from '../common/constants';
 import { CreateRiderDto, CreateStaffDto, UpdateRiderDto, UpdateStaffDto } from './merchant.dto';
+import { serializable } from '../common/transaction';
 
 /** Merchant-managed riders and staff (spec 12.9 / 12.10). */
 @Injectable()
@@ -100,26 +101,22 @@ export class MerchantPeopleService {
 
   async setRiderActive(userId: string, riderId: string, active: boolean) {
     const rider = await this.getRider(userId, riderId);
-    if (!active && rider.currentOrderId) {
-      throw new BadRequestException('Rider has an active delivery — wait for it to finish');
-    }
-    await this.prisma.rider.update({
-      where: { id: rider.id },
-      data: { isActive: active, ...(active ? {} : { isOnline: false }) },
+    await serializable(this.prisma, async (tx) => {
+      const claimed = await tx.rider.updateMany({
+        where: { id: rider.id, merchantId: rider.merchantId, approvalStatus: 'APPROVED', ...(!active ? { currentOrderId: null } : {}) },
+        data: { isActive: active, ...(active ? {} : { isOnline: false }) },
+      });
+      if (claimed.count !== 1) throw new BadRequestException('Rider approval or delivery changed. Refresh before continuing.');
+      await tx.auditLog.create({ data: { userId, role: 'MERCHANT', action: active ? 'RIDER_ACTIVATED' : 'RIDER_DEACTIVATED', entityType: 'Rider', entityId: rider.id } });
     });
     await this.notifications.notify({
       userId: rider.userId,
+      audience: 'ACCOUNT', scopeId: rider.userId,
       title: active ? 'You are active again' : 'Account deactivated',
       body: active
         ? 'Your shop has re-activated your rider account.'
         : 'Your shop has deactivated your rider account. Contact the shop owner for details.',
       type: NotificationType.SYSTEM,
-    });
-    await this.audit.log({
-      userId,
-      action: active ? 'RIDER_ACTIVATED' : 'RIDER_DEACTIVATED',
-      entityType: 'Rider',
-      entityId: rider.id,
     });
     return { ok: true, isActive: active };
   }
@@ -127,17 +124,19 @@ export class MerchantPeopleService {
   /** Approve a rider who applied to this shop. */
   async approveRider(userId: string, riderId: string) {
     const rider = await this.getRider(userId, riderId);
-    const updated = await this.prisma.rider.update({
-      where: { id: rider.id },
-      data: { approvalStatus: 'APPROVED', isActive: true },
+    const updated = await serializable(this.prisma, async (tx) => {
+      const claimed = await tx.rider.updateMany({ where: { id: rider.id, merchantId: rider.merchantId, approvalStatus: 'PENDING', currentOrderId: null }, data: { approvalStatus: 'APPROVED', isActive: true } });
+      if (claimed.count !== 1) throw new BadRequestException('Rider request changed. Refresh before continuing.');
+      await tx.auditLog.create({ data: { userId, role: 'MERCHANT', action: 'RIDER_APPROVED', entityType: 'Rider', entityId: rider.id } });
+      return tx.rider.findUniqueOrThrow({ where: { id: rider.id } });
     });
     await this.notifications.notify({
       userId: rider.userId,
+      audience: 'ACCOUNT', scopeId: rider.userId,
       title: 'Rider request approved 🎉',
       body: 'Your shop approved you — you can start accepting deliveries.',
       type: NotificationType.SYSTEM,
     });
-    await this.audit.log({ userId, action: 'RIDER_APPROVED', entityType: 'Rider', entityId: rider.id });
     return updated;
   }
 
@@ -151,14 +150,20 @@ export class MerchantPeopleService {
         'Only a pending rider request can be rejected — deactivate an approved rider instead.',
       );
     }
+    await serializable(this.prisma, async (tx) => {
+      const assignedOrder = await tx.order.findFirst({ where: { riderId: rider.id }, select: { id: true } });
+      if (assignedOrder) throw new BadRequestException('Rider has order history and cannot be removed');
+      const removed = await tx.rider.deleteMany({ where: { id: rider.id, merchantId: rider.merchantId, approvalStatus: 'PENDING', currentOrderId: null } });
+      if (removed.count !== 1) throw new BadRequestException('Rider request changed. Refresh before continuing.');
+      await tx.auditLog.create({ data: { userId, role: 'MERCHANT', action: 'RIDER_REJECTED', entityType: 'Rider', entityId: rider.id } });
+    });
     await this.notifications.notify({
       userId: rider.userId,
+      audience: 'ACCOUNT', scopeId: rider.userId,
       title: 'Rider request declined',
       body: 'Your request to join the shop was declined. You can apply to another shop.',
       type: NotificationType.SYSTEM,
     });
-    await this.audit.log({ userId, action: 'RIDER_REJECTED', entityType: 'Rider', entityId: rider.id });
-    await this.prisma.rider.delete({ where: { id: rider.id } });
     return { ok: true };
   }
 

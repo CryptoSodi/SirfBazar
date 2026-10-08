@@ -1,4 +1,4 @@
-import { toast, ToastHost, ToastMessage } from '../components/Toast';
+import { useToast, ToastHost, ToastMessage } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function RidersScreen() {
+  const toast = useToast();
   const [riders, setRiders] = useState<any[]>([]);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');

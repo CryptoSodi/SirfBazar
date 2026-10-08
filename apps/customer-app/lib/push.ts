@@ -1,25 +1,30 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { api, getAuthVersion, getUser } from './api';
+import { api, API_URL, getAuthVersion, getUser } from './api';
 
 /**
  * Expo push registration. Requires a development/production build —
  * Expo Go cannot receive remote pushes, so everything is silently best-effort.
  */
 
-let registeredToken: { token: string; owner: string } | null = null;
+let registeredToken: { token: string; owner: string; generation: number } | null = null;
 let unregistering = false;
 
 // Show incoming alerts while the app is open (banner + notification centre).
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const allowed = await canReceivePush(notification.request.content.data);
+    return { shouldShowBanner: allowed, shouldShowList: allowed, shouldPlaySound: allowed, shouldSetBadge: false };
+  },
 });
+
+export async function canReceivePush(data: any): Promise<boolean> {
+  const generation = getAuthVersion();
+  const user = await getUser();
+  if (generation !== getAuthVersion() || !user?.id) return false;
+  return data?.scopeId === user.id && ['CUSTOMER', 'ACCOUNT'].includes(data?.audience);
+}
 
 async function deviceToken(): Promise<string | null> {
   const projectId: string | undefined = (Constants.expoConfig as any)?.extra?.eas?.projectId;
@@ -33,11 +38,10 @@ export async function registerForPush(): Promise<boolean> {
     if (Platform.OS === 'web') return false;
     // Never re-register mid-logout: a refresh triggered by the remove call would
     // otherwise resubscribe the outgoing user and pin the token to them.
-    if (unregistering) return false;
     const generation = getAuthVersion();
     const owner = (await getUser())?.id;
     if (!owner || generation !== getAuthVersion()) return false;
-    if (registeredToken?.owner === owner) return true;
+    if (registeredToken?.owner === owner && registeredToken?.generation === generation) return true;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Order alerts',
@@ -53,14 +57,14 @@ export async function registerForPush(): Promise<boolean> {
     if (status !== 'granted') return false;
     const token = await deviceToken();
     if (!token) return false;
-    if (generation !== getAuthVersion() || (await getUser())?.id !== owner || unregistering) return false;
+    if (generation !== getAuthVersion() || (await getUser())?.id !== owner) return false;
     const result = await api.post('/notifications/push-token', {
       token,
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
     });
     if (!result.ok) return false;
     if (generation !== getAuthVersion() || (await getUser())?.id !== owner) return false;
-    registeredToken = { token, owner };
+    registeredToken = { token, owner, generation };
     return true;
   } catch {
     // No push in Expo Go / permission denied / offline — never break the app.
@@ -69,17 +73,21 @@ export async function registerForPush(): Promise<boolean> {
 }
 
 /** Stop alerts to this device (call while still authenticated, before clearing tokens). */
-export async function unregisterPush(): Promise<void> {
+export async function unregisterPush(access?: string | null, generation?: number): Promise<void> {
   if (Platform.OS === 'web') return;
   // Re-entrancy guard: if our remove call itself 401s, request() calls clearAuth()
   // which calls back into unregisterPush — without this, that loops forever.
   if (unregistering) return;
   unregistering = true;
   try {
-    const token = registeredToken?.token ?? (await deviceToken());
-    registeredToken = null;
+    const outgoing = generation == null || registeredToken?.generation === generation ? registeredToken : null;
+    const token = outgoing?.token ?? (await deviceToken());
+    if (outgoing && registeredToken === outgoing) registeredToken = null;
     if (!token) return;
-    await api.post('/notifications/push-token/remove', { token });
+    if (access) await fetch(`${API_URL}/notifications/push-token/remove`, {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${access}` },
+      body: JSON.stringify({ token }),
+    });
   } catch {
     // Best-effort — the server prunes dead tokens on delivery failures anyway.
   } finally {

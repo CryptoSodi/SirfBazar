@@ -5,9 +5,11 @@ import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { ApiError, merchantApi } from './lib/api'
-import { getSession, saveSession } from './lib/session'
+import { captureSession, sessionGenerationIsCurrent } from '../lib/api'
+import { getSession, saveSession, type MerchantSession } from './lib/session'
 import { AuthFooter, AuthHeader } from './AuthChrome'
 import GooglePinMap from './GooglePinMap'
+import ShopMapPicker from '../components/ShopMapPicker'
 import GoogleSignIn from './GoogleSignIn'
 import './signup-flow.css'
 
@@ -38,7 +40,7 @@ type ShopValues = z.infer<typeof shopSchema>
 type Notice = 'help' | 'map'
 const notices: Record<Notice, { title: string; body: string }> = {
   help: { title: 'Merchant help', body: 'Complete both steps to create a merchant account and shop. If you already have an account, sign in and return to onboarding to finish an interrupted shop setup.' },
-  map: { title: 'Set your shop entrance pin', body: 'When Google Maps is configured, click the map or drag its marker. You can also enter coordinates below or use your device location while standing at the entrance.' },
+  map: { title: 'Choose the shop entrance', body: 'Choose the shop entrance on the map, use device location, or enter coordinates. Check the pin before saving; device position alone may not be the entrance.' },
 }
 const googleMapsConfigured = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim()) &&
   (import.meta.env.DEV || Boolean(import.meta.env.VITE_GOOGLE_MAPS_MAP_ID?.trim()))
@@ -74,6 +76,9 @@ export default function SignupFlowPage() {
   const [locationPending, setLocationPending] = useState(false)
   const [locationMessage, setLocationMessage] = useState('')
   const [locationError, setLocationError] = useState('')
+  const [mapOpen, setMapOpen] = useState(false)
+  const [mapFailed, setMapFailed] = useState(false)
+  const [mapAttempt, setMapAttempt] = useState(0)
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [verificationDeliveryMessage, setVerificationDeliveryMessage] = useState('')
   const [code, setCode] = useState('')
@@ -82,6 +87,8 @@ export default function SignupFlowPage() {
   const [requestError, setRequestError] = useState('')
   const [photoError, setPhotoError] = useState('')
   const dialog = useRef<HTMLDialogElement>(null)
+  const noticeTrigger = useRef<HTMLElement | null>(null)
+  const mapTrigger = useRef<HTMLButtonElement>(null)
   const photoInput = useRef<HTMLInputElement>(null)
   const latitudeInput = useRef<HTMLInputElement>(null)
   const longitudeInput = useRef<HTMLInputElement>(null)
@@ -95,7 +102,7 @@ export default function SignupFlowPage() {
     document.body.scrollTop = 0
   }, [step])
 
-  function showNotice(value: Notice) { setNotice(value); dialog.current?.showModal() }
+  function showNotice(value: Notice) { noticeTrigger.current = document.activeElement as HTMLElement; setNotice(value); dialog.current?.showModal() }
   function changeChannel(value: 'mobile' | 'email') { ownerForm.setValue('channel', value); ownerForm.setValue('contact', ''); ownerForm.clearErrors('contact') }
   function selectPhoto(file?: File) {
     if (!file) return
@@ -106,6 +113,7 @@ export default function SignupFlowPage() {
   }
 
   function useDeviceLocation() {
+    const origin = captureSession()
     setLocationError('')
     setLocationMessage('')
     if (window.isSecureContext === false) {
@@ -119,6 +127,7 @@ export default function SignupFlowPage() {
     setLocationPending(true)
     setLocationMessage('Finding your device location…')
     const acceptPosition = (position: GeolocationPosition) => {
+      if (!sessionGenerationIsCurrent(origin)) return
       setLatitude(position.coords.latitude.toFixed(6))
       setLongitude(position.coords.longitude.toFixed(6))
       setLatitudeError('')
@@ -130,6 +139,7 @@ export default function SignupFlowPage() {
         : 'Device location selected. Check the pin and drag it to your shop entrance if needed.')
     }
     const fail = (error: GeolocationPositionError) => {
+      if (!sessionGenerationIsCurrent(origin)) return
       setLocationPending(false)
       setLocationMessage('')
       setLocationError(error.code === 1
@@ -137,6 +147,7 @@ export default function SignupFlowPage() {
         : 'Your browser could not determine a device location. Check Windows Location services and your network, then retry—or select the entrance on the map.')
     }
     const requestApproximate = () => {
+      if (!sessionGenerationIsCurrent(origin)) return
       setLocationMessage('Precise GPS is unavailable; trying your approximate device location…')
       try { navigator.geolocation.getCurrentPosition(acceptPosition, fail, { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 }) }
       catch { setLocationPending(false); setLocationMessage(''); setLocationError('Device location is unavailable. Select the entrance on the map or enter coordinates below.') }
@@ -158,14 +169,17 @@ export default function SignupFlowPage() {
       reader.readAsDataURL(photo)
     })
   }
-  async function createShop(token: string) {
+  async function createShop(session: MerchantSession) {
+    if (!session.origin) throw new Error('Your session changed. Refresh this page.')
+    const token = session.token
     if (googleToken) {
-      await merchantApi.linkGoogle(googleToken, token)
+      await merchantApi.linkGoogle(googleToken, token, session.origin)
+      if (!sessionGenerationIsCurrent(session.origin)) return
       setGoogleToken(null)
       setGoogleLinked(true)
     }
     const values = shopForm.getValues()
-    await merchantApi.createShop({
+    const created = await merchantApi.createShop({
       shopName: values.shopName,
       shopContactNumber: values.shopContact,
       businessType: values.businessType,
@@ -173,10 +187,11 @@ export default function SignupFlowPage() {
       latitude: Number(latitude),
       longitude: Number(longitude),
       imageDataUrl: await imageDataUrl(),
-    }, token)
-    navigate('/workspace')
+    }, token, session.origin)
+    if (captureSession().access === created.accessToken) navigate('/workspace')
   }
   async function submitShop() {
+    const origin = captureSession()
     const invalidLatitude = !latitude.trim() || !Number.isFinite(Number(latitude)) || Math.abs(Number(latitude)) > 90
     const invalidLongitude = !longitude.trim() || !Number.isFinite(Number(longitude)) || Math.abs(Number(longitude)) > 180
     setLatitudeError(invalidLatitude ? 'Select a location or enter a latitude from −90 to 90.' : '')
@@ -186,9 +201,10 @@ export default function SignupFlowPage() {
     setBusy(true)
     try {
       const session = getSession()
-      if (session) { await createShop(session.token); return }
+      if (session) { await createShop(session); return }
       const { firstName, lastName, channel, contact, cnic, password } = ownerForm.getValues()
       const attempt = await merchantApi.startRegistration({ firstName, lastName, channel, contact, cnic, password })
+      if (!sessionGenerationIsCurrent(origin)) return
       setAttemptId(attempt.attemptId)
       setVerificationDeliveryMessage(attempt.message === 'Local test verification ready.'
         ? 'Local test code: 123456. No message was sent.'
@@ -196,10 +212,11 @@ export default function SignupFlowPage() {
           ? 'A code was submitted to WhatsApp. Check the mobile number you entered.'
           : 'Enter the six-digit code sent to your registered contact.')
     } catch (error) {
-      setRequestError(error instanceof ApiError ? error.message : 'Could not start merchant registration. Please try again.')
-    } finally { setBusy(false) }
+      if (sessionGenerationIsCurrent(origin)) setRequestError(error instanceof ApiError ? error.message : 'Could not start merchant registration. Please try again.')
+    } finally { if (sessionGenerationIsCurrent(origin)) setBusy(false) }
   }
   async function verifyAndCreate() {
+    const origin = captureSession()
     if (!attemptId || !/^\d{6}$/.test(code)) { setCodeError('Enter the six-digit verification code.'); document.getElementById('registration-code')?.focus(); return }
     setCodeError('')
     setRequestError('')
@@ -207,15 +224,17 @@ export default function SignupFlowPage() {
     let verified = false
     try {
       const session = await merchantApi.verifyRegistration(attemptId, code)
+      if (!sessionGenerationIsCurrent(origin)) return
       verified = true
       saveSession(session)
       setAttemptId(null)
-      await createShop(session.token)
+      await createShop(session)
     } catch (error) {
+      if (!sessionGenerationIsCurrent(origin)) return
       const message = error instanceof ApiError ? error.message : 'Could not verify or create your shop. Please try again.'
       if (verified) setRequestError(message)
       else { setCodeError(message); document.getElementById('registration-code')?.focus() }
-    } finally { setBusy(false) }
+    } finally { if (sessionGenerationIsCurrent(origin)) setBusy(false) }
   }
 
   return <div className="auth-page signup-page">
@@ -277,11 +296,22 @@ export default function SignupFlowPage() {
             <textarea id="shop-address" rows={2} placeholder="Unit/Shop #, Market/Plaza, Street Number, Area/Sector, City" aria-invalid={Boolean(shopForm.formState.errors.address)} aria-describedby="shop-address-help" {...shopForm.register('address')} />
             {shopForm.formState.errors.address ? <small className="signup-field-error" id="shop-address-help">{shopForm.formState.errors.address.message}</small> : <small className="signup-help" id="shop-address-help">Include the shop number, market, street, area, city, and useful landmarks.</small>}
             <div className="signup-map-heading"><span>Entrance GPS Pin</span><span>{latitude && longitude ? `${latitude}, ${longitude}` : 'Location not selected'}</span></div>
-            <div className="signup-map">{googleMapsConfigured ? <GooglePinMap latitude={latitude} longitude={longitude} onSelect={point => { setLatitude(point.lat.toFixed(6)); setLongitude(point.lng.toFixed(6)); setLatitudeError(''); setLongitudeError(''); setRequestError(''); setLocationError(''); setLocationMessage('') }} /> : <div className="signup-map-empty"><MapPin size={28} aria-hidden="true" /><strong>Map preview unavailable</strong><p>Enter coordinates below or use your device location to set your shop entrance.</p></div>}<div className="signup-map-actions">{!googleMapsConfigured && <button type="button" onClick={() => showNotice('map')}><MapPin size={16} />Map setup help</button>}<button type="button" onClick={useDeviceLocation} disabled={locationPending}><Navigation size={16} />{locationPending ? 'Finding Location…' : 'Use Current Device Location'}</button></div></div>
+            <p className="signup-help">Choose the shop entrance on the map, use device location, or enter coordinates.</p>
+            <div className="signup-map">
+              {googleMapsConfigured && !mapFailed ? <GooglePinMap key={mapAttempt} latitude={latitude} longitude={longitude} onError={() => setMapFailed(true)} onSelect={point => { setLatitude(point.lat.toFixed(6)); setLongitude(point.lng.toFixed(6)); setLatitudeError(''); setLongitudeError(''); setRequestError(''); setLocationError(''); setLocationMessage('') }} /> :
+                <div className="signup-map-empty"><MapPin size={28} aria-hidden="true" /><strong>{mapFailed ? 'Map could not load' : 'Map preview unavailable'}</strong><p>{mapFailed ? 'Retry the map or use the fallback picker or coordinates.' : 'Open the fallback map picker, use device location, or enter coordinates below.'}</p></div>}
+              <div className="signup-map-actions">
+                <button ref={mapTrigger} type="button" onClick={() => setMapOpen(true)}><MapPin size={16} />Open map picker</button>
+                {mapFailed && googleMapsConfigured && <button type="button" onClick={() => { setMapFailed(false); setMapAttempt(value => value + 1) }}>Retry map</button>}
+                <button type="button" onClick={() => showNotice('map')}><CircleHelp size={16} />Map help</button>
+                <button type="button" onClick={useDeviceLocation} disabled={locationPending}><Navigation size={16} />{locationPending ? 'Finding location…' : 'Use device location'}</button>
+              </div>
+            </div>
+            {mapOpen && <ShopMapPicker initial={latitude.trim() && longitude.trim() && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)) ? { latitude: Number(latitude), longitude: Number(longitude) } : null} returnFocusTo={mapTrigger.current} onClose={() => setMapOpen(false)} onConfirm={point => { setLatitude(point.latitude.toFixed(6)); setLongitude(point.longitude.toFixed(6)); setLatitudeError(''); setLongitudeError(''); setLocationError(''); setLocationMessage('Shop entrance pin selected. Check the written address before saving.'); setMapOpen(false) }} />}
             {locationMessage && <small className="signup-location-status" role="status">{locationMessage}</small>}
             {locationError && <small className="signup-location-error" role="alert">{locationError}</small>}
             <div className="signup-two-col signup-coordinate-fields"><div className="signup-field"><label htmlFor="shop-latitude">Latitude</label><input ref={latitudeInput} id="shop-latitude" inputMode="decimal" placeholder="31.520370" value={latitude} onChange={event => { setLatitude(event.target.value); setLatitudeError(''); setLocationError(''); setLocationMessage('') }} aria-invalid={Boolean(latitudeError)} aria-describedby={latitudeError ? 'shop-latitude-error' : undefined} />{latitudeError && <small className="signup-field-error" id="shop-latitude-error">{latitudeError}</small>}</div><div className="signup-field"><label htmlFor="shop-longitude">Longitude</label><input ref={longitudeInput} id="shop-longitude" inputMode="decimal" placeholder="74.358749" value={longitude} onChange={event => { setLongitude(event.target.value); setLongitudeError(''); setLocationError(''); setLocationMessage('') }} aria-invalid={Boolean(longitudeError)} aria-describedby={longitudeError ? 'shop-longitude-error' : undefined} />{longitudeError && <small className="signup-field-error" id="shop-longitude-error">{longitudeError}</small>}</div></div>
-            <small className="signup-help"><Info size={15} />{googleMapsConfigured ? 'Click the Google map or drag the pin to the shop entrance. Device location and manual coordinates also work.' : 'Google Maps will appear after you configure its browser key. For now, use device location or enter exact coordinates manually.'}</small>
+            <small className="signup-help"><Info size={15} />Click the Google map or drag its pin when available. In the fallback picker, move the map and select its center. Manual coordinates also work.</small>
           </section>
 
           <section className="signup-block">
@@ -300,7 +330,7 @@ export default function SignupFlowPage() {
       </div>
     </div></main>
     <AuthFooter />
-    <dialog ref={dialog} className="information-dialog" onClick={event => { if (event.target === dialog.current) dialog.current.close() }}><div className="dialog-heading"><h2>{notices[notice].title}</h2><button type="button" className="icon-button" aria-label="Close information" onClick={() => dialog.current?.close()}><X size={20} /></button></div><p>{notices[notice].body}</p><button type="button" className="primary-action" onClick={() => dialog.current?.close()}>Close</button></dialog>
+    <dialog ref={dialog} className="information-dialog" aria-labelledby="signup-information-title" aria-describedby="signup-information-description" onClose={() => noticeTrigger.current?.focus()} onClick={event => { if (event.target === dialog.current) dialog.current.close() }}><div className="dialog-heading"><h2 id="signup-information-title">{notices[notice].title}</h2><button type="button" className="icon-button" aria-label="Close information" onClick={() => dialog.current?.close()}><X size={20} /></button></div><p id="signup-information-description">{notices[notice].body}</p><button type="button" className="primary-action" onClick={() => dialog.current?.close()}>Close</button></dialog>
   </div>
 }
 import { ToastMessage } from '../components/Toast';

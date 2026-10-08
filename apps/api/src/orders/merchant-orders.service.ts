@@ -91,6 +91,7 @@ export class MerchantOrdersService {
     }, { acceptedAt: new Date() }, [OrderStatus.SENT_TO_MERCHANT]);
     await this.afterCommit(async () => this.notifications.notify({
       userId: order.customer.user.id,
+      audience: 'CUSTOMER', scopeId: order.customer.user.id,
       title: 'Order accepted',
       body: `${await this.shopName(order.merchantId!)} accepted order ${order.orderNumber} and will start preparing it.`,
       type: NotificationType.ORDER_ACCEPTED,
@@ -111,6 +112,7 @@ export class MerchantOrdersService {
     this.statusService.broadcastStatus(changed);
     await this.notifications.notify({
       userId: order.customer.user.id,
+      audience: 'CUSTOMER', scopeId: order.customer.user.id,
       title: 'Order rejected',
       body: `Order ${order.orderNumber} was rejected by the shop${reason ? `: ${reason}` : ''}. Any payment will be refunded.`,
       type: NotificationType.ORDER_REJECTED,
@@ -163,6 +165,7 @@ export class MerchantOrdersService {
 
     await this.afterCommit(() => this.notifications.notify({
       userId: rider.userId,
+      audience: 'RIDER', scopeId: rider.id,
       title: 'New delivery assigned',
       body: `Pick up order ${order.orderNumber} from the shop.`,
       type: NotificationType.RIDER_ASSIGNED,
@@ -174,6 +177,7 @@ export class MerchantOrdersService {
     });
     await this.afterCommit(() => this.notifications.notify({
       userId: order.customer.user.id,
+      audience: 'CUSTOMER', scopeId: order.customer.user.id,
       title: 'Rider assigned',
       body: `${rider.fullName} will deliver order ${order.orderNumber}.`,
       type: NotificationType.RIDER_ASSIGNED,
@@ -214,7 +218,7 @@ export class MerchantOrdersService {
       await this.statusService.appendTimeline(order.id, replacementName ? 'REPLACEMENT_SUGGESTED' : 'ITEM_UNAVAILABLE', { userId, role: 'MERCHANT', notes: replacementName ? `${item.productNameSnapshot} -> ${replacementName}` : item.productNameSnapshot }, tx);
       return { order, item, replacementName };
     });
-    await this.notifications.notify({ userId: result.order.customer.userId, title: result.replacementName ? 'Replacement suggested' : 'Item unavailable', body: result.replacementName ? `The shop suggests ${result.replacementName} instead of ${result.item.productNameSnapshot} on order ${result.order.orderNumber}. Open the order to accept or reject.` : `${result.item.productNameSnapshot} is unavailable for order ${result.order.orderNumber}; it was removed from your bill.`, type: NotificationType.REPLACEMENT_REQUESTED, referenceId: orderId }).catch(() => undefined);
+    await this.notifications.notify({ userId: result.order.customer.userId, audience: 'CUSTOMER', scopeId: result.order.customer.userId, title: result.replacementName ? 'Replacement suggested' : 'Item unavailable', body: result.replacementName ? `The shop suggests ${result.replacementName} instead of ${result.item.productNameSnapshot} on order ${result.order.orderNumber}. Open the order to accept or reject.` : `${result.item.productNameSnapshot} is unavailable for order ${result.order.orderNumber}; it was removed from your bill.`, type: NotificationType.REPLACEMENT_REQUESTED, referenceId: orderId }).catch(() => undefined);
     return { ok: true, itemStatus: result.replacementName ? 'REPLACEMENT_SUGGESTED' : 'UNAVAILABLE' };
   }
 
