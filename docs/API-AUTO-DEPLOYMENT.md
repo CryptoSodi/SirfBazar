@@ -75,4 +75,4 @@ rtk proxy node --test deploy/api/healthcheck.test.cjs
 rtk proxy node --check scripts/build-api-release.cjs
 ```
 
-Linux CI additionally checks installer syntax, API typecheck/build and the real Linux production package. Helper tests use temporary files and mocked HTTP only; they do not contact production. Server installation, forced-key login, database backup/recovery and real promotion remain unverified until activation is approved.
+Linux CI additionally checks installer syntax, API typecheck/build and the real Linux production package. Its HTTP smoke journey starts the extracted package against a freshly seeded, disposable CI database, exercising the packaged production dependencies and generated client. Helper tests use temporary files and mocked HTTP only; they do not contact production. Server installation, forced-key login, database backup/recovery and real promotion remain unverified until activation is approved.
