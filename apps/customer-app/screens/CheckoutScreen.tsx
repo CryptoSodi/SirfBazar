@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { NavigationAction, RouteProp, useFocusEffect, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -12,7 +13,7 @@ import { subscribeCustomerEvent } from '../lib/customer-events';
 import { useTheme } from '../lib/theme';
 import { refreshBadges } from '../lib/badges';
 import { ActionDock, Choice, Field, Icon, Notice, OrderSummary, ProductArtwork, StatePanel, goTab, usePageInset } from '../components/CustomerUI';
-import { addressFingerprint, addressPayload, CheckoutDraft, checkoutRecoveryProblem, draftForAccount, draftFromAddress, emptyCheckoutDraft, hasUsableCheckoutQuote, isDefinitiveCheckoutRejection, quoteFingerprint, readCheckoutDraft, validateCheckoutDraft, writeCheckoutDraft } from '../lib/checkout-draft';
+import { addressFingerprint, addressPayload, CheckoutDraft, draftForAccount, draftFromAddress, emptyCheckoutDraft, hasUsableCheckoutQuote, isDefinitiveCheckoutRejection, quoteFingerprint, readCheckoutDraft, validateCheckoutDraft, writeCheckoutDraft } from '../lib/checkout-draft';
 type Stage = 'delivery' | 'merge' | 'review' | 'changes' | 'expired';
 const uncertaintyKey = (accountId: string) => `sb.uncertainOrder.${accountId}`;
 const addressAttemptKey = (accountId: string) => `sb.checkoutAddressAttempt.${accountId}`;
@@ -44,6 +45,7 @@ export default function CheckoutScreen() {
     const [canRecover, setCanRecover] = useState(false);
     const [recovery, setRecovery] = useState<{ owner: string; payload: Record<string, any> } | null>(null);
     const [reviewedQuote, setReviewedQuote] = useState('');
+    const [approvedQuote, setApprovedQuote] = useState<any>(null);
     const [previousQuote, setPreviousQuote] = useState<any>(null);
     const [showSaved, setShowSaved] = useState(false);
     const [showContactPhone, setShowContactPhone] = useState(false);
@@ -68,6 +70,7 @@ export default function CheckoutScreen() {
         void remember({ ...draftRef.current, [key]: value });
         setErrors((old) => ({ ...old, [key]: undefined }));
         setReviewedQuote('');
+        setApprovedQuote(null);
     };
     const refresh = useCallback(async () => {
         const version = ++refreshVersion.current;
@@ -267,7 +270,7 @@ export default function CheckoutScreen() {
         await remember({ ...draftRef.current, ownedAddress: { accountId: owner, addressId: saved.id, fingerprint } });
         return saved.id;
     };
-    const prepareReview = async () => {
+    const prepareReview = async (acknowledgedChanges = false) => {
         const invalid = validateCheckoutDraft(draftRef.current);
         if (Object.keys(invalid).length) { setErrors(invalid); move('delivery'); return; }
         const owner = (await getUser())?.id;
@@ -287,11 +290,17 @@ export default function CheckoutScreen() {
         if (quote?.couponError) throw new Error('Your promo code is no longer eligible. Remove it or apply an eligible code in your basket before continuing.');
         if (!hasUsableCheckoutQuote(quote)) throw new Error('The latest basket charges are incomplete. Check your basket and retry before placing an order.');
         const fingerprint = quoteFingerprint(quote, draftRef.current.point);
-        if (cartIssues(quote).unavailable || (cartIssues(quote).priceChanged && reviewedQuote !== fingerprint)) {
+        if (cartIssues(quote).unavailable || (!acknowledgedChanges && cartIssues(quote).priceChanged && reviewedQuote !== fingerprint)) {
             setPreviousQuote(cart);
             move('changes');
             return;
         }
+        const approved = await api.post('/orders/quote', { cartId: quote.id, deliveryAddressId: draftRef.current.ownedAddress?.addressId,
+            paymentMethod: 'COD', couponCode: quote.couponCode || undefined });
+        await assertAccount(owner);
+        if (approved?.version !== 1 || !approved.approvedQuote || !Number.isSafeInteger(approved.quote?.totalAmountPaisa))
+            throw new Error('An approved total is unavailable. Review the basket again.');
+        setApprovedQuote(approved);
         setReviewedQuote(fingerprint);
         move('review');
     };
@@ -330,6 +339,8 @@ export default function CheckoutScreen() {
             await AsyncStorage.setItem(key, JSON.stringify({ at: Date.now(), payload,
                 quoteFingerprint: quoteFingerprint(quote, draftRef.current.point),
                 addressFingerprint: addressFingerprint(addressPayload(draftRef.current)) }));
+            if (JSON.parse((await AsyncStorage.getItem(key)) || '{}')?.payload?.requestId !== payload.requestId)
+                throw new Error('Checkout could not be verified in device storage. No order was sent.');
             sent = true;
             const order = await api.post('/orders', payload);
             if (!order?.id)
@@ -350,6 +361,12 @@ export default function CheckoutScreen() {
                 if (cause.status === 401)
                     move('expired');
                 setOrderError(`${message(cause)} Review your details before continuing.`);
+            }
+            else if (cause instanceof ApiError && cause.code === 'QUOTE_CHANGED') {
+                await AsyncStorage.removeItem(key).catch(() => undefined);
+                setUncertain(false); setRecovery(null); setApprovedQuote(cause.details?.approvedQuote ? cause.details : null);
+                setPreviousQuote(quote); move('changes');
+                setOrderError('The approved amount changed. Review the updated items and total before placing an order.');
             }
             else {
                 setUncertain(true);
@@ -390,6 +407,8 @@ export default function CheckoutScreen() {
             } catch (cause) {
                 if (!(cause instanceof ApiError && cause.status === 404)) throw cause;
             }
+            await submitCheckout(stored.payload, owner, cart);
+            return;
         }
         if (await hasPendingBasketMerge()) {
             setMergePending(true);
@@ -411,10 +430,6 @@ export default function CheckoutScreen() {
         const quote = await fetchCart(draftRef.current.point!);
         await assertAccount(owner);
         setCart(quote);
-        if (recovery) {
-            const problem = checkoutRecoveryProblem(stored, quote, savedAddress);
-            if (problem) throw new Error(problem);
-        }
         if (quote?.couponError) throw new Error('Your promo code is no longer eligible. Remove it or apply an eligible code in your basket before continuing.');
         if (!hasUsableCheckoutQuote(quote)) throw new Error('The latest basket charges are incomplete. Check your basket and retry before placing an order.');
         if (cartIssues(quote).unavailable || reviewedQuote !== quoteFingerprint(quote, draftRef.current.point)) {
@@ -424,8 +439,12 @@ export default function CheckoutScreen() {
         }
         if (!quote.itemCount || !quote.id)
             throw new Error('Your basket is empty. Add items before checking out.');
-        await submitCheckout(recovery ? stored.payload : { requestId: randomUUID(), cartId: quote.id, deliveryAddressId: bound.addressId,
-            paymentMethod: 'COD', customerNote: draftRef.current.customerNote.trim() || undefined }, owner, quote);
+        if (!approvedQuote?.approvedQuote || approvedQuote.quote?.deliveryAddress?.id !== bound.addressId) {
+            move('delivery'); throw new Error('Review the approved delivery details and total before placing an order.');
+        }
+        await submitCheckout({ requestId: randomUUID(), cartId: quote.id, approvedQuote: approvedQuote.approvedQuote,
+            deliveryAddressId: bound.addressId, paymentMethod: 'COD', couponCode: quote.couponCode || undefined,
+            customerNote: draftRef.current.customerNote.trim() || undefined }, owner, quote);
     });
     const checkOrderStatus = () => void run(async () => {
         const owner = (await getUser())?.id;
@@ -468,25 +487,8 @@ export default function CheckoutScreen() {
             setCanRecover(false);
             return;
         }
-        const savedAddresses = await api.get('/customer/addresses');
-        await assertAccount(owner);
-        const address = savedAddresses.find((entry: any) => entry.id === stored.payload.deliveryAddressId);
-        if (!address) throw new Error('The original delivery address is not available. Contact support before retrying this saved checkout.');
-        const quote = await fetchCart({ latitude: address.latitude, longitude: address.longitude });
-        await assertAccount(owner);
-        setCart(quote);
-        const problem = checkoutRecoveryProblem(stored, quote, address);
-        if (problem) throw new Error(problem);
-        const retained = draftFromAddress(address, owner, { ...draftRef.current, customerNote: stored.payload.customerNote ?? '' });
-        await remember(retained);
-        setRecovery({ owner, payload: stored.payload });
         setCanRecover(false);
-        const fingerprint = quoteFingerprint(quote, retained.point);
-        if (cartIssues(quote).unavailable || stored.quoteFingerprint !== fingerprint) {
-            setPreviousQuote(null); move('changes');
-        } else {
-            setReviewedQuote(fingerprint); move('review');
-        }
+        await submitCheckout(stored.payload, owner, cart);
     });
     const confirmAuth = async () => {
         setShowLogin(false);
@@ -506,7 +508,7 @@ export default function CheckoutScreen() {
     const button = (label: string, onPress: () => void, secondary = false, disabled = false) => <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy || disabled }} disabled={busy || disabled} onPress={onPress} style={[secondary ? s.btnGhost : s.btn, { justifyContent: 'center', opacity: busy || disabled ? 0.55 : 1 }]}><Text style={secondary ? s.btnGhostText : s.btnText}>{busy ? 'Checking…' : label}</Text></TouchableOpacity>;
     const link = (label: string, onPress: () => void) => <TouchableOpacity accessibilityRole="button" onPress={onPress} disabled={busy} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '600' }}>{label}</Text></TouchableOpacity>;
     const iconArt = (name: 'check' | 'info') => <View style={{ alignSelf: 'center', width: 90, height: 90, backgroundColor: colors.emeraldBg, borderRadius: 28, marginTop: 28, marginBottom: 24, alignItems: 'center', justifyContent: 'center' }}><Icon name={name} size={40} color={colors.primary}/></View>;
-    const errorNotices = <>{orderError ? <Notice danger>{orderError}</Notice> : null}{storageError ? <Notice danger>{storageError}</Notice> : null}{loadError && cart ? <Notice danger>{loadError} Your previous basket is shown; retry before continuing.</Notice> : null}
+    const errorNotices = <>{orderError ? <ToastMessage>{orderError}</ToastMessage> : null}{storageError ? <ToastMessage>{storageError}</ToastMessage> : null}{loadError && cart ? <ToastMessage>{loadError} Your previous basket is shown; retry before continuing.</ToastMessage> : null}
       {recovery ? <Notice tone="info">This review keeps the original checkout reference and delivery details. Nothing is retried until you choose Place order.</Notice> : null}
       {cart?.couponError ? <View style={{ gap: 8 }}><Notice danger>{cart.couponError} Remove this promo code or apply an eligible code before placing an order.</Notice>{link('Review promo code in basket', () => goTab(navigation, 'CartTab'))}</View> : null}</>;
     let content: React.ReactNode;
@@ -536,8 +538,7 @@ export default function CheckoutScreen() {
         dock = button(unavailable ? 'Review basket changes' : 'Review updated total', () => { if (unavailable)
             goTab(navigation, 'CartTab');
         else {
-            setReviewedQuote(quoteFingerprint(cart, draftRef.current.point));
-            move('review');
+            void run(() => prepareReview(true));
         } });
     }
     else {
@@ -555,10 +556,10 @@ export default function CheckoutScreen() {
         </>}
       </View>
       <View style={{ marginTop: 20, gap: 8 }}><Text style={[s.body, { fontSize: 16, fontWeight: '700', marginBottom: 4 }]}>Payment</Text><Choice title="Cash on delivery" subtitle="Pay when your order arrives." icon="cash" selected onPress={() => { }}/><View style={{ minHeight: 62, borderRadius: 14, padding: 14, gap: 10, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }} accessibilityLabel="Online payment is not available"><Icon name="card" color={colors.primary}/><View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 13, fontWeight: '700' }}>Online payment</Text><Text style={[s.muted, { marginTop: 3 }]}>Choose cash on delivery for now.</Text></View><Text style={{ color: colors.muted, backgroundColor: colors.canvas, borderRadius: 7, padding: 5, fontSize: 10 }}>Not available</Text></View></View>
-      {review ? <><View style={[s.card, { marginTop: 20, gap: 12 }]}><View style={s.spread}><Text style={[s.body, { fontSize: 16, fontWeight: '700' }]}>Items & charges</Text>{link('Edit basket', () => goTab(navigation, 'CartTab'))}</View>{cart.groups?.length > 1 && cart.groups.map((group: any) => <View key={group.merchantId ?? group.merchant?.id} style={{ gap: 3 }}><Text style={[s.body, { fontWeight: '700' }]}>{group.merchant?.shopName ?? group.shopName ?? 'Local shop'}</Text><Text style={s.muted}>{group.items?.map((item: any) => `${item.quantity} × ${item.product?.name ?? item.name ?? 'item'}`).join(' · ')}</Text><Text style={s.muted}>Shop delivery {pkr(group.deliveryFeePaisa)}</Text></View>)}<OrderSummary cart={cart} title="" bare /></View><Text style={[s.faint, { lineHeight: 16, marginTop: 16 }]}>Placing the order sends it to the shop. Acceptance is confirmed separately.</Text></> : <><View style={{ backgroundColor: colors.canvas, borderRadius: 13, padding: 13, marginTop: 20 }}><View style={s.spread}><Text style={s.muted}>{cart.itemCount} items · {cart.groups?.length ?? 0} shop(s)</Text><Text style={[s.body, { fontWeight: '700', fontVariant: ['tabular-nums'] }]}>{pkr(cart.totalPaisa)}</Text></View><Text style={[s.faint, { marginTop: 8, lineHeight: 16 }]}>Final fees are rechecked for this delivery address after sign-in.</Text></View>{link(showContactPhone || !!draft.contactPhone ? 'Edit delivery contact number' : 'Add a delivery contact number · optional', () => setShowContactPhone((shown) => !shown))}{(showContactPhone || !!errors.contactPhone) && <Field label="Delivery contact number · optional" value={draft.contactPhone} onChangeText={(value) => update('contactPhone', value)} placeholder="+92 mobile number" keyboardType="phone-pad" autoComplete="tel" error={errors.contactPhone} editable={!busy}/>}</>}
+      {review ? <><View style={[s.card, { marginTop: 20, gap: 12 }]}><View style={s.spread}><Text style={[s.body, { fontSize: 16, fontWeight: '700' }]}>Items & charges</Text>{link('Edit basket', () => goTab(navigation, 'CartTab'))}</View>{cart.groups?.length > 1 && cart.groups.map((group: any) => <View key={group.merchantId ?? group.merchant?.id} style={{ gap: 3 }}><Text style={[s.body, { fontWeight: '700' }]}>{group.merchant?.shopName ?? group.shopName ?? 'Local shop'}</Text><Text style={s.muted}>{group.items?.map((item: any) => `${item.quantity} × ${item.product?.name ?? item.name ?? 'item'}`).join(' · ')}</Text><Text style={s.muted}>Shop delivery {pkr(group.deliveryFeePaisa)}</Text></View>)}<OrderSummary cart={cart} title="" bare />{approvedQuote?.quote && <Notice tone="info">Approved total {pkr(approvedQuote.quote.totalAmountPaisa)} for {approvedQuote.quote.deliveryAddress?.fullAddress}, {approvedQuote.quote.deliveryAddress?.city}. Cash on delivery.</Notice>}</View><Text style={[s.faint, { lineHeight: 16, marginTop: 16 }]}>Placing the order sends it to the shop. Acceptance is confirmed separately.</Text></> : <><View style={{ backgroundColor: colors.canvas, borderRadius: 13, padding: 13, marginTop: 20 }}><View style={s.spread}><Text style={s.muted}>{cart.itemCount} items · {cart.groups?.length ?? 0} shop(s)</Text><Text style={[s.body, { fontWeight: '700', fontVariant: ['tabular-nums'] }]}>{pkr(cart.totalPaisa)}</Text></View><Text style={[s.faint, { marginTop: 8, lineHeight: 16 }]}>Final fees are rechecked for this delivery address after sign-in.</Text></View>{link(showContactPhone || !!draft.contactPhone ? 'Edit delivery contact number' : 'Add a delivery contact number · optional', () => setShowContactPhone((shown) => !shown))}{(showContactPhone || !!errors.contactPhone) && <Field label="Delivery contact number · optional" value={draft.contactPhone} onChangeText={(value) => update('contactPhone', value)} placeholder="+92 mobile number" keyboardType="phone-pad" autoComplete="tel" error={errors.contactPhone} editable={!busy}/>}</>}
       <View style={{ marginTop: 16, gap: 12 }}>{errorNotices}{!!loadError && link('Retry checkout', () => { void refresh(); })}</View>
     </>;
-        dock = button(review ? `Place order · ${pkr(cart.totalPaisa)}` : accountId ? 'Review order' : 'Continue to sign in', review ? placeOrder : continueDelivery, false, !ready || !!loadError || (review && !hasUsableCheckoutQuote(cart)));
+        dock = button(review ? `Place order · ${pkr(approvedQuote?.quote?.totalAmountPaisa ?? cart.totalPaisa)}` : accountId ? 'Review order' : 'Continue to sign in', review ? placeOrder : continueDelivery, false, !ready || !!loadError || (review && (!approvedQuote || !hasUsableCheckoutQuote(cart))));
     }
     return <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={58}><ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}>{content}</ScrollView>{dock && <ActionDock>{dock}</ActionDock>}<LoginSheet visible={showLogin} reason="checkout" onClose={() => { setShowLogin(false); void refresh(); }} onSuccess={() => { void confirmAuth(); }} onMergePending={() => { setShowLogin(false); setMergePending(true); void refresh(); }}/></KeyboardAvoidingView>;
 }

@@ -1,3 +1,6 @@
+import { toast, ToastHost } from '../components/Toast';
+import { AppIcon } from '../components/AppIcon';
+import { IconLabel } from '../components/IconLabel';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,7 +45,7 @@ export default function CatalogScreen() {
         setTotalPages(res.totalPages ?? 1);
         setPage(nextPage + 1);
       } catch (e: any) {
-        alert(e.message);
+        toast(e.message, false);
       } finally {
         setLoading(false);
       }
@@ -105,7 +108,7 @@ export default function CatalogScreen() {
               <Image source={{ uri: p.imageUrl }} style={{ width: 52, height: 52, borderRadius: 10 }} />
             ) : (
               <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: colors.emeraldBg, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 22 }}>🛍️</Text>
+                <AppIcon name="bag" size={22} color={colors.primary} />
               </View>
             )}
             <View style={{ flex: 1 }}>
@@ -115,7 +118,7 @@ export default function CatalogScreen() {
               </Text>
             </View>
             {p.alreadyListed ? (
-              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>✓ Added</Text>
+              <IconLabel icon="check" style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>Added</IconLabel>
             ) : (
               <TouchableOpacity
                 style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
@@ -155,7 +158,7 @@ function AddModal({ product, onClose, onAdded }: any) {
   const save = async () => {
     const pricePaisa = Math.round((Number(priceRs) || 0) * 100);
     const stockQuantity = Math.max(0, Math.floor(Number(stock) || 0));
-    if (pricePaisa < 100) return alert('Enter a valid price');
+    if (pricePaisa < 100) return toast('Enter a valid price', false);
     setBusy(true);
     try {
       await api.post('/merchant/products', {
@@ -165,7 +168,7 @@ function AddModal({ product, onClose, onAdded }: any) {
       });
       onAdded();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -202,6 +205,6 @@ function AddModal({ product, onClose, onAdded }: any) {
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    <ToastHost active={true} /></Modal>
   );
 }

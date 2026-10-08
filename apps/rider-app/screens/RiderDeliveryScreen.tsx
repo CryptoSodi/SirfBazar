@@ -1,11 +1,13 @@
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { ToastMessage } from '../components/Toast';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, Pressable, Text, TextInput, View } from 'react-native';
+import * as Location from 'expo-location';
 import type { RootStackParamList } from '../App';
 import { Badge, Body, Button, Card, CashCard, CheckRow, Divider, Dock, H1, H2, Icon, IconBox, Label, LinkButton, Note, Page, Progress, Sheet } from '../components/RiderUI';
-import { api, ApiError, isLoggedIn, pkr } from '../lib/api';
+import { api, ApiError, getAuthVersion, isLoggedIn, pkr } from '../lib/api';
 import { useRiderTheme } from '../lib/appearance';
 import { customerName, customerPhone, destination, paymentInstruction, withoutDeliveryCode } from '../lib/rider-orders';
 import type { RiderOrder } from '../lib/rider-orders';
@@ -38,6 +40,14 @@ export default function RiderDeliveryScreen() {
   const [code, setCode] = useState('');
   const [pickupSheet, setPickupSheet] = useState(false);
   const [uncertainAction, setUncertainAction] = useState<'arrived-shop' | 'picked-up' | 'arrived-customer' | 'delivered'>('delivered');
+  const [focused, setFocused] = useState(false);
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  const [locationError, setLocationError] = useState('');
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
+    return () => listener.remove();
+  }, []);
 
   const refresh = useCallback(async (keepStale = true): Promise<RiderOrder | null> => {
     try {
@@ -54,6 +64,29 @@ export default function RiderDeliveryScreen() {
     } finally { setLoading(false); }
   }, [id, order]);
   useEffect(() => { setOrder(null); setLoading(true); void refresh(false); }, [id]);
+
+  // This is the foreground behavior of the former DeliveryScreen, scoped to the
+  // mounted, focused route and its assigned active order. No background task runs.
+  useEffect(() => {
+    const active = ['RIDER_ASSIGNED', 'RIDER_ARRIVED_AT_SHOP', 'PICKED_UP', 'ON_THE_WAY', 'RIDER_ARRIVED_AT_CUSTOMER'];
+    if (!focused || !appActive || !order || !active.includes(order.status) || step === 'expired' || step === 'unknown') return;
+    const generation = getAuthVersion();
+    let stopped = false;
+    let subscription: Location.LocationSubscription | null = null;
+    void (async () => {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (stopped || generation !== getAuthVersion()) return;
+      if (permission.status !== 'granted') { setLocationError('Location permission is off. Enable it to share your position during this delivery.'); return; }
+      setLocationError('');
+      subscription = await Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 15000, distanceInterval: 20 }, (position) => {
+        if (stopped || generation !== getAuthVersion() || AppState.currentState !== 'active') return;
+        void api.post('/rider/location', { orderId: id, latitude: position.coords.latitude, longitude: position.coords.longitude,
+          speed: position.coords.speed ?? undefined, heading: position.coords.heading ?? undefined }).catch(() => undefined);
+      });
+      if (stopped) subscription.remove();
+    })().catch(() => { if (!stopped) setLocationError('Location is unavailable. Check device settings and reconnect.'); });
+    return () => { stopped = true; subscription?.remove(); };
+  }, [focused, appActive, order?.id, order?.status, step, id]);
 
   const payment = order ? paymentInstruction(order) : 'check';
   const amount = pkr(order?.totalAmountPaisa);
@@ -112,7 +145,7 @@ export default function RiderDeliveryScreen() {
   if (loading) return <Page title="Delivery details" back={back}><H1>Checking delivery…</H1><View style={{ height: 280, borderRadius: 20, backgroundColor: palette.surface2, marginTop: 20 }} /></Page>;
   if (step === 'expired') return <Page title="Session ended" back={back} dock={<Dock label="Sign in" onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })} />}><CenteredState icon="lock" heading={<>Sign in again{'\n'}to continue.</>} description="Your session has ended. We’ve hidden private delivery details until you sign in." /><Note icon="shield" style={{ marginTop: 22 }}>After signing in, refresh the order before taking your next delivery action.</Note></Page>;
   if (step === 'error' || !order) return <Page title="Delivery details" back={back} dock={<Dock label="Try again" onPress={() => { setLoading(true); void refresh(false); }} icon="refresh" />}><CenteredState icon="wifi" heading={<>Couldn’t load{'\n'}this delivery.</>} description={message || 'Check your connection and try again.'} tone="red" /></Page>;
-  if (step === 'unknown') return <Page title="Check delivery status" back={back} dock={<Dock label={busy ? 'Checking…' : 'Check saved status'} onPress={() => void reconcile()} icon="refresh" disabled={busy} />}><CenteredState icon="refresh" heading={<>Let’s check{'\n'}before retrying.</>} description={uncertainAction === 'delivered' ? 'The connection dropped after your request. The order may already be saved as delivered.' : 'The connection dropped after your update. The shop may already have saved the new delivery status.'} tone="amber" badge="Confirmation pending" /><Card style={{ marginTop: 22 }}><H2 style={{ fontSize: 16 }}>{uncertainAction === 'delivered' ? 'Do not collect payment again.' : 'Do not send the same update again yet.'}</H2><Body muted small style={{ marginTop: 8 }}>Check the saved delivery state or call your shop before retrying.</Body></Card>{!!message && <Note tone="amber" style={{ marginTop: 16 }}>{message}</Note>}<LinkButton onPress={callShop} style={{ marginTop: 22 }}>Call your shop</LinkButton></Page>;
+  if (step === 'unknown') return <Page title="Check delivery status" back={back} dock={<Dock label={busy ? 'Checking…' : 'Check saved status'} onPress={() => void reconcile()} icon="refresh" disabled={busy} />}><CenteredState icon="refresh" heading={<>Let’s check{'\n'}before retrying.</>} description={uncertainAction === 'delivered' ? 'The connection dropped after your request. The order may already be saved as delivered.' : 'The connection dropped after your update. The shop may already have saved the new delivery status.'} tone="amber" badge="Confirmation pending" /><Card style={{ marginTop: 22 }}><H2 style={{ fontSize: 16 }}>{uncertainAction === 'delivered' ? 'Do not collect payment again.' : 'Do not send the same update again yet.'}</H2><Body muted small style={{ marginTop: 8 }}>Check the saved delivery state or call your shop before retrying.</Body></Card>{!!message && <ToastMessage>{message}</ToastMessage>}<LinkButton onPress={callShop} style={{ marginTop: 22 }}>Call your shop</LinkButton></Page>;
   if (step === 'offline') return <Page title="Delivery · offline" back={back} dock={<Dock label="Reconnect & check status" onPress={() => { setLoading(true); void refresh(); }} icon="refresh" />}><Note icon="wifi" tone="amber">Connection lost. Showing the last saved delivery view. Any newer status is unconfirmed.</Note><View style={{ marginTop: 22, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Label>ORDER {order.orderNumber}</Label><Badge tone="amber">Last known: {stepFor(order.status) === 'on-way' ? 'on the way' : 'saved order'}</Badge></View><H1 style={{ marginTop: 12 }}>Your address{'\n'}is still here.</H1><Card style={{ marginTop: 22 }}><Label>SAVED DROP-OFF</Label><H2 style={{ fontSize: 16, marginTop: 8 }}>{person} · {address}</H2><Body muted style={{ marginTop: 8 }}>{[order.deliveryAddress?.area, order.deliveryAddress?.city].filter(Boolean).join(', ')}</Body>{!!order.deliveryAddress?.instructions && <Body muted small style={{ marginTop: 12 }}>“{order.deliveryAddress.instructions}”</Body>}<View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}><Button variant="secondary" icon="phone" onPress={callCustomer} style={{ flex: 1 }}>Call</Button><Button variant="quiet" icon="route" onPress={navigateCustomer} style={{ flex: 1 }}>Navigate</Button></View></Card>{payment === 'collect' && <CashCard amount={amount} />}<Note style={{ marginTop: 22 }}>Do not retry a delivery confirmation until you know its saved status. Reconnect and refresh first.</Note></Page>;
   if (step === 'complete') return <Page title="Delivery receipt" back={back} dock={<Dock label="Back to deliveries" onPress={() => navigation.navigate('Home')} />}><View style={{ alignItems: 'center', paddingTop: 45 }}><View style={{ width: 100, height: 100, borderRadius: 50, backgroundColor: palette.mint, justifyContent: 'center', alignItems: 'center' }}><View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: palette.action, justifyContent: 'center', alignItems: 'center' }}><Icon name="check" size={42} color="#FFFFFF" /></View></View><View style={{ marginTop: 28 }}><Badge>Delivery completed</Badge></View><H1 center style={{ marginTop: 24 }}>All handed over.</H1><Body muted style={{ marginTop: 8 }}>{order.orderNumber} · {person}</Body></View><Card style={{ marginTop: 27, padding: 21 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Label>DELIVERY SUMMARY</Label><Icon name="file" /></View><Divider />{[['Prepared by', shop], ['Payment', order.paymentStatus === 'CASH_COLLECTED' ? 'Cash collected' : order.paymentStatus === 'PAID' ? 'Payment confirmed' : 'Check payment'], ['Order amount', amount], ['Status', 'Delivered']].map(([key, value]) => <View key={key} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 9, gap: 12 }}><Body muted>{key}</Body><Body style={{ fontWeight: '700', textAlign: 'right', flexShrink: 1 }}>{value}</Body></View>)}</Card>{order.paymentStatus === 'CASH_COLLECTED' && <Note icon="shield" tone="green" style={{ marginTop: 22 }}>Cash belongs to your shop. Follow its handover process; this screen is not a cash receipt from the merchant.</Note>}</Page>;
 
@@ -125,7 +158,8 @@ export default function RiderDeliveryScreen() {
   return <Page title={title} back={back} help={goHelp} dock={dock} keyboard={step === 'code'}>
     <Progress count={step === 'assigned' || step === 'pickup' ? 1 : step === 'on-way' ? 2 : 3} />
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}><Label>ORDER {order.orderNumber}</Label><Badge tone={step === 'assigned' || step === 'on-way' ? 'blue' : step === 'code' && payment === 'collect' ? 'amber' : 'green'}>{step === 'assigned' ? 'Assigned to you' : step === 'pickup' ? 'At the shop' : step === 'on-way' ? 'On the way' : step === 'code' && payment === 'collect' ? 'Cash on delivery' : 'At the customer'}</Badge></View>
-    {!!message && <Note tone="red" style={{ marginTop: 14 }}>{message}</Note>}
+    {!!message && <ToastMessage>{message}</ToastMessage>}
+    {!!locationError && <Note tone="amber" style={{ marginTop: 14 }}>{locationError}</Note>}
     {step === 'assigned' && <Assigned order={order} shop={shop} person={person} address={address} navigateShop={navigateShop} callShop={callShop} />}
     {step === 'pickup' && <Pickup order={order} shop={shop} picked={picked} setPicked={setPicked} />}
     {step === 'on-way' && <OnWay order={order} person={person} address={address} payment={payment} amount={amount} navigateCustomer={navigateCustomer} callCustomer={callCustomer} />}

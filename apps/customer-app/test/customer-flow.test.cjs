@@ -14,6 +14,13 @@ function load(file, dependencies = {}, extras = {}) {
   return module.exports;
 }
 const flow = load('customer-flow');
+test('nested category names resolve without losing the parent selection', () => {
+  const { findCategoryName } = load('category-tree');
+  const tree = [{ id: 'produce', name: 'Fruits & Vegetables', children: [{ id: 'fruit', name: 'Fresh Fruits' }, { id: 'veg', name: 'Fresh Vegetables' }] }];
+  assert.equal(findCategoryName(tree, 'produce'), 'Fruits & Vegetables');
+  assert.equal(findCategoryName(tree, 'veg'), 'Fresh Vegetables');
+  assert.equal(findCategoryName(tree, 'missing'), undefined);
+});
 test('notification taps route only supported references', () => {
   assert.equal(flow.notificationDestination({ type: 'PROMOTION', referenceId: 'not-an-order' }), null);
   assert.equal(flow.notificationDestination({ type: 'ORDER_ACCEPTED', referenceId: 'order' }).orderId, 'order');
@@ -45,6 +52,7 @@ function apiHarness(fetcher) {
   const storage = { getItem: async (key) => values.get(key) ?? null, setItem: async (key, value) => values.set(key, value),
     removeItem: async (key) => values.delete(key), multiRemove: async (keys) => keys.forEach((key) => values.delete(key)) };
   const api = load('api', {
+    './friendly-error': load('friendly-error'),
     '@react-native-async-storage/async-storage': { default: storage },
     './credentials': { readCredential: storage.getItem, writeCredential: storage.setItem, removeCredential: storage.removeItem },
     './customer-events': { publishCustomerEvent: () => {} },

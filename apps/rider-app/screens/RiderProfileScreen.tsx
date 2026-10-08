@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
@@ -7,6 +8,7 @@ import { Badge, Body, Button, Card, Divider, H2, Icon, IconBox, Label, Note, Pag
 import type { TabName } from '../components/RiderUI';
 import { api, ApiError, clearAuth, getUser } from '../lib/api';
 import { useRiderTheme } from '../lib/appearance';
+import { GoogleAccountLink } from '../components/GoogleAccountLink';
 
 export default function RiderProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -34,13 +36,14 @@ export default function RiderProfileScreen() {
   };
   return <Page activeTab="Profile" onTab={onTab}>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 }}><View style={{ width: 60, height: 60, borderRadius: 20, backgroundColor: palette.mint, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: palette.accent, fontSize: 22, fontWeight: '700' }}>{initials}</Text></View><View style={{ flex: 1 }}><Text style={{ color: palette.ink, fontSize: 23, fontWeight: '700' }}>{profile?.fullName ?? 'Rider profile'}</Text><Body muted small>{masked}</Body></View><Badge>{profile?.isActive ? 'Active' : profile?.approvalStatus === 'PENDING' ? 'Pending' : 'Inactive'}</Badge></View>
-    {!!message && <Note tone="red" style={{ marginTop: 16 }}>{message}</Note>}
+    {!!message && <ToastMessage>{message}</ToastMessage>}
     <Card style={{ marginTop: 22 }}><Label>YOUR SHOP</Label><View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14 }}><IconBox name="shop" /><View style={{ flex: 1 }}><H2 style={{ fontSize: 16 }}>{profile?.merchant?.shopName ?? 'Shop unavailable'}</H2><Body muted small>{profile?.merchant?.address ?? ''}</Body></View></View><Divider /><View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}><Body muted>Vehicle</Body><Body style={{ fontWeight: '700' }}>{profile?.vehicleType?.replace(/_/g, ' ').toLowerCase() ?? 'Not provided'}</Body></View><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Body muted>Account approval</Body><Badge>{profile?.approvalStatus ?? 'Unknown'}</Badge></View></Card>
     <H2 style={{ fontSize: 16, marginTop: 24, marginBottom: 12 }}>Preferences</H2>
     <ProfileCell icon="sun" title="Appearance" description="Light, Dark or follow your device" onPress={() => navigation.navigate('Appearance')} />
     <ProfileCell icon="pin" title="Location & alerts" description="Device permissions and tracking" onPress={() => navigation.navigate('Permissions')} />
     <ProfileCell icon="help" title="Help & support" description="Contact your shop or support" onPress={() => navigation.navigate('Help')} />
     <Note icon="lock" style={{ marginTop: 12 }}>Your shop manages rider details. Contact the owner for changes.</Note>
+    <GoogleAccountLink />
     <Button variant="secondary" onPress={() => setSignOutSheet(true)} style={{ marginTop: 22 }}>Sign out</Button>
     <Sheet visible={signOutSheet} title="Sign out?" onClose={() => setSignOutSheet(false)}><Body muted>You’ll need to sign in again to view private deliveries.</Body><Button onPress={() => void signOut()} style={{ marginTop: 16 }}>Sign out</Button><Button variant="secondary" onPress={() => setSignOutSheet(false)} style={{ marginTop: 10 }}>Stay signed in</Button></Sheet>
   </Page>;

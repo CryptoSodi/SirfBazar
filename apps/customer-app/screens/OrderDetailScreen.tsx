@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useEffect, useRef, useState } from 'react';
 import { Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -74,7 +75,7 @@ export default function OrderDetailScreen() {
   return <View style={s.screen}>
     <ScrollView contentContainerStyle={{ padding: inset, paddingTop: 12, paddingBottom: 24 }}>
       {!!error && <View style={{ marginBottom: 16 }}><Notice danger>Updates are temporarily unavailable. Your last confirmed order is shown. Try refreshing; updates will also retry automatically.</Notice><TouchableOpacity accessibilityRole="button" onPress={load} style={[s.btnGhost, { marginTop: 12 }]}><Text style={s.btnGhostText}>Refresh order</Text></TouchableOpacity></View>}
-      {!!actionError && <View style={{ marginBottom: 16 }}><Notice danger>{actionError}</Notice></View>}
+      {!!actionError && <View style={{ marginBottom: 16 }}><ToastMessage>{actionError}</ToastMessage></View>}
       {mode === 'details' ? <>
         <Text accessibilityRole="header" style={s.h1}>Order {order.orderNumber}</Text>
         <View style={{ marginTop: 12 }}><OrderStatusBadge status={order.status} /></View>

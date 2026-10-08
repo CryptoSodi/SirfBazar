@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useRef, useState } from 'react';
@@ -44,7 +45,7 @@ export default function AddressesScreen() {
     {needLogin ? <StatePanel title="Keep your places together" message="Sign in to save home, work and other delivery addresses." action="Sign in" onPress={() => setShowLogin(true)} /> :
       <ScrollView contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}>
         <Text accessibilityRole="header" style={s.h1}>Your places</Text><Text style={[s.muted, { marginTop: 8 }]}>Keep the written address and map pin accurate.</Text>
-        {!!error && <View style={{ gap: 12, marginTop: 20 }}><Notice danger>{error}</Notice><TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={load}><Text style={s.btnGhostText}>Reload addresses</Text></TouchableOpacity></View>}
+        {!!error && <View style={{ gap: 12, marginTop: 20 }}><ToastMessage>{error}</ToastMessage><TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={load}><Text style={s.btnGhostText}>Reload addresses</Text></TouchableOpacity></View>}
         {!addresses && !error && <StatePanel loading title="Loading addresses…" />}
         {addresses?.length === 0 && <StatePanel title="No saved places yet" message="Add a delivery address and its map pin below." />}
         {addresses?.map((item) => <View key={item.id} style={[s.card, { marginTop: 20 }]}>

@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
@@ -90,10 +91,10 @@ export default function MapPickerScreen() {
         <TextInput accessibilityLabel="Longitude" keyboardType="decimal-pad" value={longitude} onChangeText={setLongitude} editable={!busy} style={s.input}/>
       </View>
 
-      {error ? <Notice danger>{error}</Notice> : null}
+      {error ? <ToastMessage>{error}</ToastMessage> : null}
 
       <TouchableOpacity accessibilityRole="button" onPress={preview} style={{ minHeight: 44, justifyContent: 'center' }}>
-        <Text style={[s.body, { color: colors.primary, fontWeight: '600' }]}>Preview location on map ↗</Text>
+        <Text style={[s.body, { color: colors.primary, fontWeight: '600' }]}>Preview location on map</Text>
       </TouchableOpacity>
       <View style={s.card}><Text style={[s.body, { fontSize: 16, fontWeight: '700' }]}>Delivery address</Text><Text style={[s.muted, { marginTop: 8 }]}>{[route.params?.fullAddress || 'Add your house, street and area', route.params?.city].filter(Boolean).join(', ')}</Text><TouchableOpacity accessibilityRole="button" onPress={() => navigation.goBack()} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '600' }}>Edit written address</Text></TouchableOpacity></View>
       <Text style={s.muted}>Make sure the pin matches your written address. You can edit either before continuing.</Text>

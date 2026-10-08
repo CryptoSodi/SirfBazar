@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -100,11 +101,11 @@ export default function CartScreen() {
       message={recovery === 'order' ? 'An earlier checkout still needs a saved-status check. An empty basket does not confirm whether that order was placed.' : 'Your guest basket merge is not confirmed. Check the retained guest items before continuing; an empty account basket does not mean they were lost.'}
       action={recovery === 'order' ? 'Check order status' : 'Check saved basket'} onPress={() => navigation.navigate('Checkout')}
       secondaryAction="Back to shopping" onSecondary={() => goTab(navigation, 'HomeTab')} />
-    {!!error && <Notice tone="warning">{error} Your recovery reference is retained.</Notice>}
+    {!!error && <ToastMessage>{error} Your recovery reference is retained.</ToastMessage>}
   </ScrollView></View>;
   if (!cart) return <View style={s.screen}><ScrollView contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}><StatePanel loading={!error} icon="wifi" title={error ? 'Couldn’t load\nyour basket.' : 'Loading basket…'} message={error || undefined} action={error ? 'Try again' : undefined} onPress={() => void load()} secondaryAction={error ? 'Back to shopping' : undefined} onSecondary={() => goTab(navigation, 'HomeTab')} /></ScrollView></View>;
   if (cart.itemCount === 0 && cart.groups.length === 0) return <View style={s.screen}><ScrollView contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}>
-    {!!error && <View style={{ marginBottom: 12 }}><Notice danger>{error}</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={() => void load()}><Text style={s.btnGhostText}>Refresh basket</Text></TouchableOpacity></View>}
+    {!!error && <View style={{ marginBottom: 12 }}><ToastMessage>{error}</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={() => void load()}><Text style={s.btnGhostText}>Refresh basket</Text></TouchableOpacity></View>}
     <StatePanel icon="basket" title="Your basket is empty" message="Browse products and add what you need. No account required." action="Start shopping" onPress={() => goTab(navigation, 'HomeTab')} secondaryAction="Back to shopping" onSecondary={() => goTab(navigation, 'HomeTab')} />
   </ScrollView></View>;
   const groups = cart.groups;
@@ -122,7 +123,7 @@ export default function CartScreen() {
       <Text accessibilityRole="header" style={s.h1}>Your basket</Text>
       <Text style={[s.muted, { marginTop: 8 }]}>{cart.itemCount} {cart.itemCount === 1 ? 'item' : 'items'} · {groups.length} {groups.length === 1 ? 'shop' : 'shops · separate deliveries'}</Text>
       {groups.length > 1 && <View style={{ marginTop: 16 }}><Notice tone="blue" icon="shop">Each shop prepares and delivers its own items. Review the delivery charges for {groups.length === 2 ? 'both shops' : 'each shop'}.</Notice></View>}
-      {!!error && <View style={{ marginTop: 16, gap: 12 }}><Notice danger>{error}</Notice><TouchableOpacity accessibilityRole="button" style={s.btnGhost} disabled={busy || refreshing} onPress={() => void load()}><Text style={s.btnGhostText}>{refreshing ? 'Refreshing basket…' : 'Refresh basket'}</Text></TouchableOpacity></View>}
+      {!!error && <View style={{ marginTop: 16, gap: 12 }}><ToastMessage>{error}</ToastMessage><TouchableOpacity accessibilityRole="button" style={s.btnGhost} disabled={busy || refreshing} onPress={() => void load()}><Text style={s.btnGhostText}>{refreshing ? 'Refreshing basket…' : 'Refresh basket'}</Text></TouchableOpacity></View>}
       {missingItems && <View style={{ marginTop: 16 }}><Notice danger>Some basket items could not be displayed. Refresh your basket before continuing.</Notice></View>}
       {hasPriceChange && <View style={{ marginTop: 16 }}><Notice tone="warning">A shop updated its prices. Review the current prices below before continuing.</Notice></View>}
       {groups.map((group: any, groupIndex: number) => <View key={group.merchant?.id || groupIndex} style={[s.card, { marginTop: 12 }]}>
@@ -155,7 +156,7 @@ export default function CartScreen() {
         {couponOpen && <View style={{ padding: 14, paddingTop: 0, gap: 12 }}><TextInput ref={couponInput} accessibilityLabel="Promo code" style={s.input} placeholder="Promo code" placeholderTextColor={colors.faint} autoCapitalize="characters" value={coupon} onChangeText={(value) => setCoupon(value.toUpperCase())} editable={!busy} /><TouchableOpacity accessibilityRole="button" style={s.btnGhost} disabled={busy || refreshing} onPress={() => void applyCoupon()}><Text style={s.btnGhostText}>Apply code</Text></TouchableOpacity>{!!cart.couponCode && canRemoveCoupon && <TouchableOpacity accessibilityRole="button" style={s.btnGhost} disabled={busy || refreshing} onPress={() => void mutate(() => api.del('/cart/remove-coupon'), 'Check whether the code is still applied before retrying.')}><Text style={s.btnGhostText}>Remove promo code</Text></TouchableOpacity>}</View>}
       </View>
       {!!cart.couponError && <View style={{ marginTop: 12 }}><Notice danger>{cart.couponError} {canRemoveCoupon ? 'Apply another eligible code or remove this code before placing an order.' : 'Apply another eligible code. After signing in, you can also remove it from your basket.'}</Notice></View>}
-      {!!mutationError && <View style={{ marginTop: 12 }}><Notice danger>{mutationError}</Notice></View>}
+      {!!mutationError && <View style={{ marginTop: 12 }}><ToastMessage>{mutationError}</ToastMessage></View>}
       <View style={{ marginTop: 16 }}><OrderSummary cart={cart} title="" /></View>
       {deliveryDiscount && <Text style={[s.muted, { marginTop: 12 }]}>Delivery offers are included in the total. Individual shop fees above are before these offers.</Text>}
       <Text style={[s.muted, { marginTop: 16, textAlign: 'center' }]}>No account needed to build your basket.</Text>

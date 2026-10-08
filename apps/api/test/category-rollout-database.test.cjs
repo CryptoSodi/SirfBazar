@@ -1,0 +1,63 @@
+const { test, after } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const { PrismaClient } = require('@prisma/client');
+const database = new URL(process.env.DATABASE_URL || 'postgresql://invalid/invalid');
+if (!['127.0.0.1', 'localhost'].includes(database.hostname) || !/category_test/.test(database.pathname) || ['5432', '5433', ''].includes(database.port)) throw Error('Requires a local disposable category_test database on a non-live port');
+const db = new PrismaClient();
+const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sirfbazar-category-test-'));
+const apiDirectory = path.resolve(__dirname, '..');
+function cli(...args) {
+  return spawnSync(process.execPath, ['scripts/category-rollout.cjs', ...args], { cwd: apiDirectory, env: process.env, encoding: 'utf8', timeout: 120000 });
+}
+after(() => db.$disconnect());
+test('real PostgreSQL rollout is guarded, atomic, idempotent and preserves merchant/product data', async () => {
+  assert.equal(await db.product.count(), 0, 'Use a fresh disposable database, never existing data');
+  const category = await db.category.create({ data: { name: 'Fruits & Vegetables', slug: 'fruits-vegetables', isRestricted: true } });
+  const product = await db.product.create({ data: { name: 'Apple Kala Kulu', slug: 'category-test-apple', categoryId: category.id, approvalStatus: 'PENDING', isRestricted: true, requiresPrescription: true, barcode: '0012345' } });
+  const owner = await db.user.create({ data: { role: 'MERCHANT_OWNER', phoneNumber: '+920000000001' } });
+  const merchant = await db.merchant.create({ data: { userId: owner.id, shopName: 'Test only', shopType: 'GROCERY', phoneNumber: '+920000000001', address: 'Test address', city: 'Lahore', latitude: 31.5, longitude: 74.3 } });
+  const listing = await db.merchantProduct.create({ data: { merchantId: merchant.id, productId: product.id, pricePaisa: 12950, discountPricePaisa: 12000, stockQuantity: 7, merchantSku: '00123' } });
+  const planFile = path.join(directory, 'plan.json');
+  let result = cli('plan', planFile); assert.equal(result.status, 0, result.stderr);
+  const plan = JSON.parse(fs.readFileSync(planFile));
+  assert.equal(plan.moves.length, 1);
+  assert.equal(await db.category.count(), 1, 'plan must not write');
+  result = cli('apply', planFile); assert.notEqual(result.status, 0, 'backup acknowledgement required');
+  assert.equal(await db.category.count(), 1);
+  // A source change must invalidate the plan before any category writes.
+  await db.product.update({ where: { id: product.id }, data: { name: 'Apple Renamed' } });
+  result = cli('apply', planFile, '--backup-verified', 'disposable-fixture');
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /changed/); assert.equal(await db.category.count(), 1);
+  await db.product.update({ where: { id: product.id }, data: { name: product.name } });
+  // Force the final audit write to fail. Earlier inserts and assignments MUST roll back.
+  await db.$executeRawUnsafe(`CREATE FUNCTION category_test_reject_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test audit failure'; END $$`);
+  await db.$executeRawUnsafe('CREATE TRIGGER category_test_audit BEFORE INSERT ON "AuditLog" FOR EACH ROW EXECUTE FUNCTION category_test_reject_audit()');
+  result = cli('apply', planFile, '--backup-verified', 'disposable-fixture');
+  assert.notEqual(result.status, 0); assert.equal(await db.category.count(), 1);
+  assert.equal((await db.product.findUniqueOrThrow({ where: { id: product.id } })).categoryId, category.id);
+  await db.$executeRawUnsafe('DROP TRIGGER category_test_audit ON "AuditLog"');
+  result = cli('apply', planFile, '--backup-verified', 'disposable-fixture');
+  assert.equal(result.status, 0, result.stderr);
+  const next = await db.product.findUniqueOrThrow({ where: { id: product.id } });
+  assert.notEqual(next.categoryId, product.categoryId);
+  assert.deepEqual({ ...next, categoryId: product.categoryId, updatedAt: product.updatedAt }, product);
+  assert.deepEqual(await db.merchantProduct.findUniqueOrThrow({ where: { id: listing.id } }), listing);
+  assert.equal((await db.category.findUniqueOrThrow({ where: { id: next.categoryId } })).isRestricted, true);
+  const secondFile = path.join(directory, 'second.json');
+  result = cli('plan', secondFile); assert.equal(result.status, 0, result.stderr);
+  const second = JSON.parse(fs.readFileSync(secondFile));
+  assert.equal(second.moves.length, 0); assert.equal(second.create.length, 0);
+  assert.equal(await db.auditLog.count({ where: { action: 'CATEGORY_SUBSECTIONS_ROLLOUT' } }), 1);
+  result = cli('rollback', planFile, '--backup-verified', 'disposable-fixture');
+  assert.equal(result.status, 0, result.stderr);
+  const restored = await db.product.findUniqueOrThrow({ where: { id: product.id } });
+  assert.equal(restored.categoryId, category.id);
+  assert.deepEqual(await db.merchantProduct.findUniqueOrThrow({ where: { id: listing.id } }), listing);
+  assert.equal(await db.category.count({ where: { parentCategoryId: category.id, isActive: true } }), 0);
+  assert.equal(await db.category.count({ where: { parentCategoryId: category.id } }), 2, 'rollback preserves IDs');
+  result = cli('rollback', planFile, '--backup-verified', 'disposable-fixture'); assert.notEqual(result.status, 0, 'repeated rollback is refused');
+});

@@ -1,3 +1,6 @@
+import { ToastMessage } from '../components/Toast';
+import { AppIcon } from '../components/AppIcon';
+import { IconLabel } from '../components/IconLabel';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
@@ -103,8 +106,8 @@ export default function OnboardScreen() {
             return (
               <TouchableOpacity key={sh.id} onPress={() => setMerchantId(sh.id)} style={[s.card, active && { borderColor: colors.primary, backgroundColor: colors.emeraldBg }]}>
                 <View style={s.spread}>
-                  <Text style={[s.body, { fontWeight: '700' }]}>🏪 {sh.shopName}</Text>
-                  <Text style={{ color: active ? colors.primary : colors.faint, fontWeight: '900', fontSize: 16 }}>{active ? '●' : '○'}</Text>
+                  <IconLabel icon="shop" style={[s.body, { fontWeight: '700' }]}>{sh.shopName}</IconLabel>
+                  <AppIcon name={active ? "checkCircle" : "offline"} color={active ? colors.primary : colors.faint} size={20} />
                 </View>
                 <Text style={s.faint}>{[sh.area, sh.city].filter(Boolean).join(', ')}</Text>
               </TouchableOpacity>
@@ -112,7 +115,7 @@ export default function OnboardScreen() {
           })}
         </View>
 
-        {!!error && <Text style={{ color: colors.danger, marginTop: 12, fontSize: 13 }}>{error}</Text>}
+        {!!error && <ToastMessage>{error}</ToastMessage>}
         <TouchableOpacity style={[s.btn, { marginTop: 16 }]} onPress={submit} disabled={busy}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Send request to shop</Text>}
         </TouchableOpacity>

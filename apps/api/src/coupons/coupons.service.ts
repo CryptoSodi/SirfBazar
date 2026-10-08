@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
+import { resolveCategoryBranch } from '../common/utils/category-tree';
 
 export interface CouponQuote {
   couponId: string;
@@ -26,8 +28,8 @@ export class CouponsService {
    * Validates a coupon against the cart context and returns the discount.
    * Throws BadRequestException with a human-readable reason when not applicable.
    */
-  async validate(ctx: CouponContext): Promise<CouponQuote> {
-    const coupon = await this.prisma.coupon.findUnique({
+  async validate(ctx: CouponContext, db: PrismaService | Prisma.TransactionClient = this.prisma): Promise<CouponQuote> {
+    const coupon = await db.coupon.findUnique({
       where: { code: ctx.code.trim().toUpperCase() },
     });
     if (!coupon || !coupon.isActive) throw new BadRequestException('Invalid coupon code');
@@ -45,12 +47,11 @@ export class CouponsService {
     if (coupon.applicableMerchantId && !ctx.merchantIds.includes(coupon.applicableMerchantId)) {
       throw new BadRequestException('Coupon is not valid for this shop');
     }
-    if (
-      coupon.applicableCategoryId &&
-      ctx.categoryIds &&
-      !ctx.categoryIds.includes(coupon.applicableCategoryId)
-    ) {
-      throw new BadRequestException('Coupon is not valid for these products');
+    if (coupon.applicableCategoryId) {
+      const eligible = new Set(await resolveCategoryBranch(db, coupon.applicableCategoryId));
+      if (!ctx.categoryIds?.some(id => eligible.has(id))) {
+        throw new BadRequestException('Coupon is not valid for these products');
+      }
     }
     if (coupon.applicableCity && ctx.city && coupon.applicableCity !== ctx.city) {
       throw new BadRequestException('Coupon is not valid in your city');
@@ -64,21 +65,21 @@ export class CouponsService {
     }
 
     if (coupon.usageLimitTotal != null) {
-      const totalUses = await this.prisma.couponUsage.count({ where: { couponId: coupon.id } });
+      const totalUses = await db.couponUsage.count({ where: { couponId: coupon.id } });
       if (totalUses >= coupon.usageLimitTotal) {
         throw new BadRequestException('Coupon usage limit reached');
       }
     }
 
     if (ctx.customerId) {
-      const customerUses = await this.prisma.couponUsage.count({
+      const customerUses = await db.couponUsage.count({
         where: { couponId: coupon.id, customerId: ctx.customerId },
       });
       if (customerUses >= coupon.usageLimitPerCustomer) {
         throw new BadRequestException('You have already used this coupon');
       }
       if (coupon.newUsersOnly) {
-        const orders = await this.prisma.order.count({
+        const orders = await db.order.count({
           where: { customerId: ctx.customerId, parentOrderId: null },
         });
         if (orders > 0) throw new BadRequestException('Coupon is for new customers only');

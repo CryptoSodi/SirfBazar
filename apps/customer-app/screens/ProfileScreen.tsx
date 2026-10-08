@@ -1,7 +1,9 @@
+import { ToastMessage } from '../components/Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useRef, useState } from 'react';
 import { Image, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { LoginSheet } from '../components/LoginSheet';
+import { GoogleAccountLink } from '../components/GoogleAccountLink';
 import { api, clearAuth, isLoggedIn } from '../lib/api';
 import { useTheme } from '../lib/theme';
 import { refreshBadges } from '../lib/badges';
@@ -84,9 +86,10 @@ export default function ProfileScreen() {
             <TouchableOpacity accessibilityRole="button" style={[s.btn, { marginTop: 16, justifyContent: 'center' }]} onPress={() => { pendingDestination.current = null; setShowLogin(true); }}><Text style={s.btnText}>Sign in or create account</Text></TouchableOpacity>
           </>}
         </View>
-        {!!error && <View style={{ gap: 8, marginTop: 16 }}><Notice danger>{error}</Notice><TouchableOpacity accessibilityRole="button" onPress={load} style={s.btnGhost}><Text style={s.btnGhostText}>Retry profile</Text></TouchableOpacity></View>}
+        {!!error && <View style={{ gap: 8, marginTop: 16 }}><ToastMessage>{error}</ToastMessage><TouchableOpacity accessibilityRole="button" onPress={load} style={s.btnGhost}><Text style={s.btnGhostText}>Retry profile</Text></TouchableOpacity></View>}
         <View style={[s.card, { padding: 0, overflow: 'hidden', marginTop: 20 }]}>{rows.map((item, index) => row(item, index, rows.length))}</View>
         {loggedIn && <View style={[s.card, { padding: 0, overflow: 'hidden', marginTop: 20 }]}>{memberRows.map((item, index) => row(item, index, memberRows.length))}</View>}
+        {loggedIn && <GoogleAccountLink />}
         {confirmSignOut && <View style={[s.card, { gap: 12, marginTop: 16 }]}>
           <Text style={s.h2}>Sign out of your account?</Text><Text style={s.muted}>You can keep browsing. Your saved orders and addresses remain in your account.</Text>
           <TouchableOpacity accessibilityRole="button" disabled={signingOut} style={s.btnGhost} onPress={() => setConfirmSignOut(false)}><Text style={s.btnGhostText}>Stay signed in</Text></TouchableOpacity>

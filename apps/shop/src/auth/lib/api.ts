@@ -19,6 +19,7 @@ async function json(path: string, body: unknown, token?: string) {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
     })
   } catch (error) {
     if (error instanceof CoreApiError) throw new ApiError(error.message)
@@ -29,7 +30,8 @@ async function json(path: string, body: unknown, token?: string) {
 }
 
 function session(data: any): MerchantSession {
-  return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, role: data.user?.merchant?.id ? 1 : 0 }
+  const merchant = data.user?.merchant?.id || data.user?.staffOf?.some((staff: { status: string }) => staff.status === 'ACTIVE')
+  return { token: data.accessToken, refreshToken: data.refreshToken, user: data.user, role: merchant ? 1 : 0 }
 }
 
 function dataUrlFile(value: string) {
@@ -62,6 +64,14 @@ function addressParts(address: string) {
 }
 
 export const merchantApi = {
+  linkGoogle(idToken: string, token: string) {
+    return json('/auth/google-link', { idToken }, token)
+  },
+  async googleLogin(idToken: string) {
+    const result = session(await json('/auth/google-login', { idToken, context: 'merchant' }))
+    if (result.role !== 1) throw new ApiError('This account does not have merchant access.', 403)
+    return result
+  },
   async login(identifier: string, password: string) {
     return session(await json('/auth/merchant-login', { identifier, password }))
   },

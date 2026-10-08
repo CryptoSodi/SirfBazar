@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
@@ -49,6 +50,7 @@ export default function LoginScreen() {
     setError('');
     try {
       const idToken = await googleSignInIdToken();
+      if (!idToken) return;
       try {
         const auth = await api.post('/auth/google-login', { idToken, context: 'rider' });
         await storeAuth(auth);
@@ -104,7 +106,7 @@ export default function LoginScreen() {
                 disabled={busy}
                 style={{ borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
               >
-                <Text style={{ color: '#0f172a', fontWeight: '700' }}>🔵 Continue with Google</Text>
+                <Text style={{ color: '#0f172a', fontWeight: '700' }}>Continue with Google</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -126,7 +128,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </>
           )}
-          {!!error && <Text style={{ color: colors.danger, marginTop: 10, fontSize: 13 }}>{error}</Text>}
+          {!!error && <ToastMessage>{error}</ToastMessage>}
           <Text style={[s.faint, { textAlign: 'center', marginTop: 10 }]}>
             Demo rider: +923020000001 · code 123456
           </Text>

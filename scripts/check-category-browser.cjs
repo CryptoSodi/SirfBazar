@@ -1,5 +1,5 @@
 // Intercepted local fixture only; never sends real merchant mutations.
-async (page) => {
+module.exports = async (page, baseUrl) => {
   const user = { id: 'category-owner', status: 'ACTIVE', merchant: { id: 'category-shop' } };
   const profile = { id: 'category-shop', shopName: 'Category Review Shop', isOwner: true, permissions: ['INVENTORY', 'POS'], approvalStatus: 'APPROVED' };
   const categories = [{ id: 'produce', name: 'Fruits & Vegetables', children: [{ id: 'fruit', name: 'Fresh Fruits' }, { id: 'veg', name: 'Fresh Vegetables' }] }, { id: 'meat', name: 'Meat & Seafood', children: [{ id: 'chicken', name: 'Chicken' }, { id: 'seafood', name: 'Seafood' }] }];
@@ -32,7 +32,7 @@ async (page) => {
     localStorage.setItem('sirfbazar.merchant.theme', 'light');
   }, { user });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto('http://127.0.0.1:5188/products');
+  await page.goto(`${baseUrl}/products`);
   const parent = page.getByRole('button', { name: 'Fruits & Vegetables', exact: true });
   await parent.focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Collapse Fruits & Vegetables', exact: true }).waitFor();

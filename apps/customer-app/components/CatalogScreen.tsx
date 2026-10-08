@@ -1,3 +1,4 @@
+import { ToastMessage, ToastHost } from './Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
@@ -5,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getConfirmedLocation, pkr } from '../lib/api';
 import { subscribeCustomerEvent } from '../lib/customer-events';
 import { useTheme } from '../lib/theme';
+import { findCategoryName } from '../lib/category-tree';
 import { CategoryChips, Field, Icon, IconButton, Notice, PageHeading, ProductCard, SearchField, SectionTitle, StatePanel, goTab, usePageInset } from './CustomerUI';
 
 type Filters = { sort: 'relevance' | 'price_asc' | 'price_desc' | 'rating'; brand: string; min: string; max: string };
@@ -21,10 +23,10 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
   const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [reload, setReload] = useState(0);
   const [filters, setFilters] = useState<Filters>(emptyFilters); const [draft, setDraft] = useState<Filters>(emptyFilters); const [draftCategory, setDraftCategory] = useState(initialCategory); const [filterError, setFilterError] = useState('');
   const [sheet, setSheet] = useState<'filters' | 'shop' | null>(null); const sequence = useRef(0);
-  const retry = () => setReload((value) => value + 1);
-  const choose = (id: string) => { setSelected(id); setPage(1); };
+  const retry = () => { sequence.current++; setReload((value) => value + 1); };
+  const choose = (id: string) => { sequence.current++; setSelected(id); setPage(1); };
   useEffect(() => { setSelected(initialCategory); setQ(initialQuery); setPage(1); setFilters(emptyFilters); setShop(null); }, [initialCategory, initialQuery, merchantId, globalCatalog]);
-  useFocusEffect(useCallback(() => subscribeCustomerEvent('location', () => { setPage(1); setReload((value) => value + 1); }), []));
+  useFocusEffect(useCallback(() => subscribeCustomerEvent('location', () => { sequence.current++; setPage(1); setReload((value) => value + 1); }), []));
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -65,7 +67,7 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
     const min = pricePaisa(draft.min), max = pricePaisa(draft.max);
     if (!validPrice(draft.min) || !validPrice(draft.max)) { setFilterError('Enter a non-negative price in rupees, with up to two decimal places.'); return; }
     if (min !== undefined && max !== undefined && min > max) { setFilterError('Maximum price must be at least the minimum price.'); return; }
-    setSelected(draftCategory); setFilters({ ...draft }); setPage(1); setSheet(null); setFilterError('');
+    sequence.current++; setSelected(draftCategory); setFilters({ ...draft }); setPage(1); setSheet(null); setFilterError('');
   };
   const filterCount = Number(filters.sort !== 'relevance') + Number(!!filters.brand.trim()) + Number(!!filters.min.trim()) + Number(!!filters.max.trim());
   const emptyMessage = q.trim() ? `No listings match “${q.trim()}”. Try fewer words or another category.` : 'Try another category or adjust your filters.';
@@ -77,11 +79,11 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
           <View style={[s.card, { backgroundColor: colors.emeraldBg }]}><View style={{ width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.emeraldBg }}><Icon name="shop" size={25} color={colors.primary} /></View><Text accessibilityRole="header" style={[s.h1, { fontSize: 25, lineHeight: 30, marginTop: 12 }]}>{shop.shopName}</Text><Text style={[s.muted, { marginTop: 8 }]}>{[shop.area, shop.city].filter(Boolean).join(', ')}</Text><View style={[s.row, { marginTop: 12, gap: 7, flexWrap: 'wrap' }]}><Text style={[s.chip, { borderRadius: 7, color: shop.isOnline && shop.isOpen ? colors.primary : colors.muted, backgroundColor: colors.card, fontWeight: '700' }]}>{shop.isOnline && shop.isOpen ? 'Open' : 'Closed'}</Text><Text style={[s.chip, { borderRadius: 7, color: colors.muted, backgroundColor: colors.card }]}>Fee in basket</Text></View></View>
           <View style={[s.spread, { gap: 12, marginTop: 12, marginBottom: 16 }]}><Text style={[s.muted, { flex: 1 }]}>Prepared by this shop.{ '\n' }Delivered by their own rider.</Text><TouchableOpacity accessibilityRole="button" onPress={() => setSheet('shop')} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>Shop details</Text></TouchableOpacity></View>
         </>}
-        {!globalCatalog && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><View style={{ flex: 1 }}><SearchField value={q} onChangeText={(value) => { setQ(value); setPage(1); }} placeholder={merchantId ? 'Search this shop' : 'What do you need?'} /></View>{!merchantId && <IconButton name="filter" label={filterCount ? `Filters, ${filterCount} applied` : 'Filters'} onPress={() => { setDraft({ ...filters }); setDraftCategory(selected); setFilterError(''); setSheet('filters'); }} />}</View>}
+        {!globalCatalog && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><View style={{ flex: 1 }}><SearchField value={q} onChangeText={(value) => { sequence.current++; setQ(value); setPage(1); }} placeholder={merchantId ? 'Search this shop' : 'What do you need?'} /></View>{!merchantId && <IconButton name="filter" label={filterCount ? `Filters, ${filterCount} applied` : 'Filters'} onPress={() => { setDraft({ ...filters }); setDraftCategory(selected); setFilterError(''); setSheet('filters'); }} />}</View>}
         {!merchantId && !globalCatalog && <CategoryChips items={categories} selected={selected} onSelect={choose} />}
-        {!globalCatalog && <><SectionTitle title={merchantId ? 'Shop products' : q.trim() ? `Results for “${q.trim()}”` : categories.find((category) => category.id === selected)?.name ?? 'Find your essentials'} />{!merchantId && typeof total === 'number' && !loading && <Text style={[s.muted, { marginBottom: 4 }]}>{total} {total === 1 ? 'listing' : 'listings'} · prices by shop{filterCount ? ` · ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'} applied` : ''}</Text>}</>}
-        {!!metaError && <View style={{ marginBottom: 12 }}><Notice danger>{metaError} Product results may still be available.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 10 }]} onPress={retry}><Text style={s.btnGhostText}>Retry details</Text></TouchableOpacity></View>}
-        {!!error && items.length > 0 && <Notice danger>{error} Loaded products are still shown. Retry below for the next page.</Notice>}
+        {!globalCatalog && <><SectionTitle title={merchantId ? 'Shop products' : q.trim() ? `Results for “${q.trim()}”` : findCategoryName(categories, selected) ?? 'Find your essentials'} />{!merchantId && typeof total === 'number' && !loading && <Text style={[s.muted, { marginBottom: 4 }]}>{total} {total === 1 ? 'listing' : 'listings'} · prices by shop{filterCount ? ` · ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'} applied` : ''}</Text>}</>}
+        {!!metaError && <View style={{ marginBottom: 12 }}><ToastMessage>{metaError} Product results may still be available.</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 10 }]} onPress={retry}><Text style={s.btnGhostText}>Retry details</Text></TouchableOpacity></View>}
+        {!!error && items.length > 0 && <ToastMessage>{error} Loaded products are still shown. Retry below for the next page.</ToastMessage>}
       </View>}
       ListEmptyComponent={<StatePanel loading={loading} icon={error ? 'wifi' : 'search'} title={error ? 'Couldn’t load products.' : 'Let’s try\nanother search.'} message={error ? `${error} Your basket has not been cleared.` : emptyMessage} action={error ? 'Try again' : 'Search again'} onPress={error ? retry : () => { setQ(''); setSelected(''); setFilters(emptyFilters); setPage(1); retry(); }} secondaryAction={error ? undefined : 'Browse categories'} onSecondary={() => goTab(navigation, 'HomeTab', { screen: 'Browse' })} />}
       renderItem={({ item }) => <View style={{ width: (width - inset * 2 - 12) / 2 }}><ProductCard item={merchantId ? { ...item, merchant: shop ?? item.merchant } : item} onPress={() => navigation.navigate('Product', { productId: item.productId ?? item.id, ...(globalCatalog ? {} : { merchantProductId: item.merchantProductId }) })} /></View>}
@@ -99,7 +101,7 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
               <Text style={[s.body, { fontWeight: '600' }]}>Sort by</Text><View accessibilityRole="radiogroup" accessibilityLabel="Sort products" style={{ gap: 8, marginTop: 8 }}>{sortOptions.map(([value, label]) => <TouchableOpacity key={value} accessibilityRole="radio" accessibilityState={{ checked: draft.sort === value }} onPress={() => setDraft({ ...draft, sort: value })} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 44, borderColor: draft.sort === value ? colors.primary : colors.border, backgroundColor: draft.sort === value ? colors.emeraldBg : colors.card }}><Icon name={draft.sort === value ? 'check' : 'filter'} color={draft.sort === value ? colors.primary : colors.muted} size={18} /><Text style={s.body}>{label}</Text></TouchableOpacity>)}</View>
               <Field label="Brand · optional" value={draft.brand} onChangeText={(brand) => setDraft({ ...draft, brand })} placeholder="Brand name" />
               <View style={{ flexDirection: 'row', gap: 12 }}><View style={{ flex: 1 }}><Field label="Minimum price · Rs" value={draft.min} onChangeText={(min) => setDraft({ ...draft, min })} placeholder="0" keyboardType="decimal-pad" /></View><View style={{ flex: 1 }}><Field label="Maximum price · Rs" value={draft.max} onChangeText={(max) => setDraft({ ...draft, max })} placeholder="Any" keyboardType="decimal-pad" /></View></View>
-              {!!filterError && <View style={{ marginTop: 12 }}><Notice danger>{filterError}</Notice></View>}
+              {!!filterError && <View style={{ marginTop: 12 }}><ToastMessage>{filterError}</ToastMessage></View>}
               <TouchableOpacity accessibilityRole="button" onPress={applyFilters} style={[s.btn, { marginTop: 20, justifyContent: 'center' }]}><Text style={s.btnText}>Apply filters</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" onPress={() => { setDraft({ ...emptyFilters }); setDraftCategory(''); setFilterError(''); }} style={{ minHeight: 44, marginTop: 8, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>Clear filters</Text></TouchableOpacity>
             </> : <>
               {!!shop?.description && <Text style={[s.body, { marginTop: 16 }]}>{shop.description}</Text>}
@@ -114,6 +116,6 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
           </ScrollView><SafeAreaView edges={['bottom']} />
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    <ToastHost active={sheet !== null} /></Modal>
   </View>;
 }

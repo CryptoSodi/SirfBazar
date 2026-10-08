@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { ActionDock, goTab, Icon, type IconName, Notice, StatePanel, usePageInset } from '../components/CustomerUI';
@@ -39,7 +40,7 @@ export default function OrderSentScreen() {
         <Text style={[s.muted, { marginTop: 12 }]}>{orderAddress(order)}</Text>
       </View>
       <View style={{ marginTop: 16 }}><Notice tone="blue">Sent does not mean accepted. Track the confirmed status in your order.</Notice></View>
-      {!!error && <View style={{ marginTop: 16 }}><Notice danger>{error} Your saved order has not been placed again. Refresh to check the latest status.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh order</Text></TouchableOpacity></View>}
+      {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error} Your saved order has not been placed again. Refresh to check the latest status.</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh order</Text></TouchableOpacity></View>}
     </ScrollView>
     <ActionDock><TouchableOpacity accessibilityRole="button" onPress={() => navigation.replace('OrderDetail', { orderId: order.id, mode: 'tracking' })} style={[s.btn, { justifyContent: 'center' }]}><Text style={s.btnText}>Track your order</Text></TouchableOpacity></ActionDock>
   </View>;
@@ -52,6 +53,6 @@ export function PaymentPendingScreen() {
   const pending = !order || order.status === 'PAYMENT_PENDING' || order.paymentStatus === 'PENDING';
   return <ScrollView style={s.screen} contentContainerStyle={{ padding: inset, paddingTop: 12 }}>
     <StatePanel icon="card" title={pending ? 'Payment is\nnot confirmed.' : 'Your payment status\nhas updated.'} message={pending ? 'Don’t retry payment or place another order until the saved status is checked.' : paymentDescription(order)} action="View order status" onPress={() => navigation.navigate('OrderDetail', { orderId: route.params.orderId, mode: 'details' })} secondaryAction="Back to shopping" onSecondary={() => goTab(navigation, 'HomeTab')} />
-    {!!error && <><Notice danger>{error} Refresh to check the saved status.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh status</Text></TouchableOpacity></>}
+    {!!error && <><ToastMessage>{error} Refresh to check the saved status.</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh status</Text></TouchableOpacity></>}
   </ScrollView>;
 }

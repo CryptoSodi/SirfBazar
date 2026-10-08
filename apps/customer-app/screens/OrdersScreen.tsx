@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
@@ -44,7 +45,7 @@ export default function OrdersScreen() {
       ListHeaderComponent={<>
         <Text accessibilityRole="header" style={s.h1}>Your orders</Text><Text style={[s.muted, { marginTop: 8 }]}>Track what’s coming. Review what arrived.</Text>
         <View style={{ flexDirection: 'row', gap: 7, marginTop: 16 }}>{(['active', 'past'] as const).map((value) => <TouchableOpacity key={value} accessibilityRole="button" accessibilityState={{ selected: filter === value }} onPress={() => setFilter(value)} style={{ minHeight: 44, paddingHorizontal: 13, borderRadius: 11, borderWidth: 1, borderColor: filter === value ? colors.action : colors.border, backgroundColor: filter === value ? colors.action : colors.card, justifyContent: 'center' }}><Text style={{ fontSize: 12, color: filter === value ? '#fff' : colors.muted }}>{value === 'active' ? 'Active' : 'Past orders'}</Text></TouchableOpacity>)}</View>
-        {!!error && orders && <View style={{ marginTop: 16 }}><Notice danger>{error} Your last confirmed orders are still shown.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh orders</Text></TouchableOpacity></View>}
+        {!!error && orders && <View style={{ marginTop: 16 }}><ToastMessage>{error} Your last confirmed orders are still shown.</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh orders</Text></TouchableOpacity></View>}
       </>}
       ListEmptyComponent={<StatePanel icon="bag" loading={!orders && !error} title={!!error && !orders ? 'Couldn’t load orders' : orders ? filter === 'past' ? 'No past orders yet.' : 'No active orders.' : 'Loading your orders…'} message={!!error && !orders ? `${error} Try loading your orders again.` : orders ? filter === 'past' ? 'Completed and cancelled orders will appear here.' : 'Find your everyday essentials from nearby shops.' : undefined} action={!!error && !orders ? 'Try again' : orders && filter === 'active' ? 'Start shopping' : undefined} onPress={!!error && !orders ? load : () => goTab(navigation, 'HomeTab')} />}
       ListFooterComponent={orders && orders.length >= 50 ? <Text style={[s.faint, { marginTop: 20, lineHeight: 17 }]}>Showing your 50 most recent orders.</Text> : null}

@@ -1,3 +1,6 @@
+import { toast } from '../components/Toast';
+import { AppIcon } from '../components/AppIcon';
+import { IconLabel } from '../components/IconLabel';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,7 +19,7 @@ export default function DeliveryScreen() {
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => {
-    api.get(`/rider/orders/${route.params.orderId}`).then(setOrder).catch((e) => alert(e.message));
+    api.get(`/rider/orders/${route.params.orderId}`).then(setOrder).catch((e) => toast(e.message, false));
   }, [route.params.orderId]);
 
   useEffect(load, [load]);
@@ -56,7 +59,7 @@ export default function DeliveryScreen() {
       await api.post(`/rider/orders/${route.params.orderId}/${action}`, body ?? {});
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -82,7 +85,7 @@ export default function DeliveryScreen() {
       </Text>
       {order.paymentMethod === 'COD' && !done && (
         <View style={[s.card, { marginTop: 10, backgroundColor: '#fffbeb', borderColor: '#fcd34d' }]}>
-          <Text style={{ color: colors.amber, fontWeight: '800' }}>💵 Collect {pkr(order.totalAmountPaisa)} in cash on delivery</Text>
+          <IconLabel icon="cash" style={{ color: colors.amber, fontWeight: '800' }}>Collect {pkr(order.totalAmountPaisa)} in cash on delivery</IconLabel>
         </View>
       )}
 
@@ -95,7 +98,7 @@ export default function DeliveryScreen() {
           style={[s.btnGhost, { marginTop: 8 }]}
           onPress={() => navigate(order.merchant?.latitude, order.merchant?.longitude)}
         >
-          <Text style={s.btnGhostText}>🗺️ Navigate to shop</Text>
+          <IconLabel icon="route" style={s.btnGhostText}>Navigate to shop</IconLabel>
         </TouchableOpacity>
       </View>
 
@@ -105,20 +108,20 @@ export default function DeliveryScreen() {
         <Text style={[s.body, { marginTop: 4, fontWeight: '700' }]}>{order.customer?.user?.fullName ?? 'Customer'}</Text>
         <Text style={s.muted}>{order.deliveryAddress?.fullAddress}</Text>
         {order.deliveryAddress?.instructions && (
-          <Text style={[s.muted, { fontStyle: 'italic' }]}>📝 {order.deliveryAddress.instructions}</Text>
+          <IconLabel icon="file" style={[s.muted, { fontStyle: 'italic' }]}>{order.deliveryAddress.instructions}</IconLabel>
         )}
         <View style={[s.row, { gap: 8, marginTop: 8 }]}>
           <TouchableOpacity
             style={[s.btnGhost, { flex: 1 }]}
             onPress={() => navigate(order.deliveryAddress?.latitude, order.deliveryAddress?.longitude)}
           >
-            <Text style={s.btnGhostText}>🗺️ Navigate</Text>
+            <IconLabel icon="route" style={s.btnGhostText}>Navigate</IconLabel>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.btnGhost, { flex: 1 }]}
             onPress={() => order.customer?.user?.phoneNumber && Linking.openURL(`tel:${order.customer.user.phoneNumber}`)}
           >
-            <Text style={s.btnGhostText}>📞 Call customer</Text>
+            <IconLabel icon="phone" style={s.btnGhostText}>Call customer</IconLabel>
           </TouchableOpacity>
         </View>
       </View>
@@ -137,17 +140,17 @@ export default function DeliveryScreen() {
       <View style={{ marginTop: 14, gap: 8 }}>
         {order.status === 'RIDER_ASSIGNED' && (
           <TouchableOpacity style={s.btn} onPress={() => act('arrived-shop')} disabled={busy}>
-            <Text style={s.btnText}>🏪 I have arrived at the shop</Text>
+            <IconLabel icon="shop" style={s.btnText}>I have arrived at the shop</IconLabel>
           </TouchableOpacity>
         )}
         {['RIDER_ASSIGNED', 'RIDER_ARRIVED_AT_SHOP'].includes(order.status) && (
           <TouchableOpacity style={s.btn} onPress={() => act('picked-up')} disabled={busy}>
-            <Text style={s.btnText}>📦 Order picked up — start delivery</Text>
+            <IconLabel icon="box" style={s.btnText}>Order picked up — start delivery</IconLabel>
           </TouchableOpacity>
         )}
         {order.status === 'ON_THE_WAY' && (
           <TouchableOpacity style={s.btn} onPress={() => act('arrived-customer')} disabled={busy}>
-            <Text style={s.btnText}>🏠 I have arrived at the customer</Text>
+            <IconLabel icon="home" style={s.btnText}>I have arrived at the customer</IconLabel>
           </TouchableOpacity>
         )}
         {['ON_THE_WAY', 'RIDER_ARRIVED_AT_CUSTOMER'].includes(order.status) && (
@@ -166,7 +169,7 @@ export default function DeliveryScreen() {
               onPress={() => act('delivered', { otp })}
               disabled={busy || otp.length < 4}
             >
-              <Text style={s.btnText}>✅ Mark delivered</Text>
+              <IconLabel icon="checkCircle" style={s.btnText}>Mark delivered</IconLabel>
             </TouchableOpacity>
           </View>
         )}
@@ -175,15 +178,15 @@ export default function DeliveryScreen() {
             style={s.btnDanger}
             onPress={async () => {
               await act('report-issue', { description: 'Issue during delivery — needs support attention' });
-              alert('Issue reported to the shop and support.');
+              toast('Issue reported to the shop and support.', true);
             }}
           >
-            <Text style={s.btnDangerText}>⚠️ Report an issue</Text>
+            <IconLabel icon="warning" style={s.btnDangerText}>Report an issue</IconLabel>
           </TouchableOpacity>
         )}
         {order.status === 'DELIVERED' && (
           <View style={[s.card, { alignItems: 'center', backgroundColor: colors.emeraldBg, borderColor: colors.primary }]}>
-            <Text style={{ fontSize: 32 }}>🎉</Text>
+            <AppIcon name="celebrate" size={32} color={colors.primary} />
             <Text style={[s.h2, { color: colors.primary }]}>Delivery completed!</Text>
           </View>
         )}

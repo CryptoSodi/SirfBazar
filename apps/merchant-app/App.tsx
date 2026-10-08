@@ -3,8 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Text } from 'react-native';
-import { isLoggedIn } from './lib/api';
+import { AppIcon } from './components/AppIcon';
+import { getEntryRoute } from './lib/api';
 import { colors } from './lib/theme';
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
@@ -28,11 +28,11 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const TABS = [
-  ['Dashboard', DashboardScreen, '📊'],
-  ['Orders', OrdersScreen, '📦'],
-  ['Products', ProductsScreen, '🏷️'],
-  ['Riders', RidersScreen, '🛵'],
-  ['More', MoreScreen, '⚙️'],
+  ['Dashboard', DashboardScreen, 'overview'],
+  ['Orders', OrdersScreen, 'box'],
+  ['Products', ProductsScreen, 'tag'],
+  ['Riders', RidersScreen, 'bike'],
+  ['More', MoreScreen, 'settings'],
 ] as const;
 
 function Tabs() {
@@ -50,8 +50,8 @@ function Tabs() {
           name={name}
           component={Screen}
           options={{
-            tabBarIcon: ({ focused }) => (
-              <Text style={{ fontSize: 18, opacity: focused ? 1 : 0.55 }}>{icon}</Text>
+            tabBarIcon: ({ color, size }) => (
+              <AppIcon name={icon} color={color} size={size} />
             ),
           }}
         />
@@ -67,15 +67,14 @@ const theme = {
 
 export default function App() {
   const [ready, setReady] = useState(false);
-  const [authed, setAuthed] = useState(false);
+  const [entryRoute, setEntryRoute] = useState<'Login' | 'Tabs' | 'Onboard'>('Login');
 
   useEffect(() => {
-    isLoggedIn().then((ok) => {
-      setAuthed(ok);
-      setReady(true);
+    getEntryRoute().then((route) => {
+      setEntryRoute(route);
       // Re-register for order alerts on every app start (push tokens can rotate).
-      if (ok) void import('./lib/push').then((m) => m.registerForPush()).catch(() => undefined);
-    });
+      if (route === 'Tabs') void import('./lib/push').then((m) => m.registerForPush()).catch(() => undefined);
+    }).catch(() => setEntryRoute('Login')).finally(() => setReady(true));
   }, []);
 
   if (!ready) return null;
@@ -84,7 +83,7 @@ export default function App() {
     <NavigationContainer theme={theme}>
       <StatusBar style="dark" />
       <Stack.Navigator
-        initialRouteName={authed ? 'Tabs' : 'Login'}
+        initialRouteName={entryRoute}
         screenOptions={{ headerTintColor: colors.primary, headerTitleStyle: { fontWeight: '700' } }}
       >
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
@@ -93,6 +92,8 @@ export default function App() {
         <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
         <Stack.Screen name="Catalog" component={CatalogScreen} options={{ title: 'Add from catalog' }} />
       </Stack.Navigator>
+      <ToastHost />
     </NavigationContainer>
   );
 }
+import { ToastHost } from './components/Toast';

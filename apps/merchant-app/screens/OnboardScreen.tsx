@@ -1,12 +1,15 @@
+import { ToastMessage } from '../components/Toast';
+import { AppIcon } from '../components/AppIcon';
+import { IconLabel } from '../components/IconLabel';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, clearAuth, finishOnboarding, uploadImage } from '../lib/api';
+import { api, clearAuth, finishOnboarding, getUser, uploadImage } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 const SHOP_TYPES = [
@@ -20,7 +23,7 @@ export default function OnboardScreen() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [shopName, setShopName] = useState('');
   const [shopType, setShopType] = useState('GROCERY');
-  const [phone, setPhone] = useState('+9230');
+  const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('Lahore');
   const [area, setArea] = useState('');
@@ -32,6 +35,14 @@ export default function OnboardScreen() {
   const [locating, setLocating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void getUser().then((user) => {
+      if (active && user?.phoneNumber) setPhone((value) => value || user.phoneNumber);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const pickPhoto = async (fromCamera: boolean) => {
     setError('');
@@ -118,16 +129,16 @@ export default function OnboardScreen() {
           <Image source={{ uri: photo }} style={{ width: '100%', height: 160, borderRadius: 14, marginBottom: 8 }} />
         ) : (
           <View style={{ height: 160, borderRadius: 14, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-            <Text style={{ fontSize: 34 }}>🏪</Text>
+            <AppIcon name="shop" size={34} color={colors.primary} />
             <Text style={s.faint}>Add a photo of your shop</Text>
           </View>
         )}
         <View style={[s.row, { gap: 8 }]}>
           <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={() => pickPhoto(true)}>
-            <Text style={s.btnGhostText}>📷 Camera</Text>
+            <IconLabel icon="camera" style={s.btnGhostText}>Camera</IconLabel>
           </TouchableOpacity>
           <TouchableOpacity style={[s.btnGhost, { flex: 1 }]} onPress={() => pickPhoto(false)}>
-            <Text style={s.btnGhostText}>🖼️ Gallery</Text>
+            <IconLabel icon="image" style={s.btnGhostText}>Gallery</IconLabel>
           </TouchableOpacity>
         </View>
 
@@ -171,7 +182,7 @@ export default function OnboardScreen() {
         <TouchableOpacity style={[s.btnGhost, { marginTop: 14, borderColor: colors.primary }]} onPress={useCurrentLocation} disabled={locating}>
           {locating ? <ActivityIndicator color={colors.primary} /> : (
             <Text style={[s.btnGhostText, { color: colors.primary }]}>
-              {coords ? `📍 Pinned: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}` : '📍 Use my current location'}
+              {coords ? `Pinned: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}` : 'Use my current location'}
             </Text>
           )}
         </TouchableOpacity>
@@ -189,7 +200,7 @@ export default function OnboardScreen() {
           </Field>
         </View>
 
-        {!!error && <Text style={{ color: colors.danger, marginTop: 12, fontSize: 13 }}>{error}</Text>}
+        {!!error && <ToastMessage>{error}</ToastMessage>}
 
         <TouchableOpacity style={[s.btn, { marginTop: 16 }]} onPress={submit} disabled={busy}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Create my shop</Text>}

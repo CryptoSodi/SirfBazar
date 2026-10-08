@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
@@ -107,7 +108,7 @@ export default function MapPickerScreen() {
       <Text style={[s.muted, { marginTop: 12 }]}>{locating ? 'Finding your location…' : resolving ? 'Finding the pin’s address…' : marker ? 'Drag the pin or tap the map for the exact spot.' : 'No delivery pin selected. Tap the map or use your current location.'}</Text>
       <View style={[s.card, { marginTop: 16 }]}><Text style={[s.body, { fontSize: 16, fontWeight: '700' }]}>Delivery address</Text><Text style={[s.muted, { marginTop: 8 }]}>{[params.fullAddress || resolved?.fullAddress || 'Add your house, street and area', params.city || resolved?.city].filter(Boolean).join(', ')}</Text><TouchableOpacity accessibilityRole="button" onPress={() => navigation.goBack()} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '600' }}>Edit written address</Text></TouchableOpacity></View>
       <Text style={[s.muted, { marginTop: 16 }]}>Make sure the pin matches your written address. You can edit either before continuing.</Text>
-      {!!error && <View style={{ marginTop: 16 }}><Notice danger>{error}</Notice></View>}
+      {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error}</ToastMessage></View>}
     </ScrollView>
     <ActionDock><TouchableOpacity accessibilityRole="button" disabled={!marker || locating || resolving || saving} accessibilityState={{ disabled: !marker || locating || resolving || saving }} style={[s.btn, { justifyContent: 'center', opacity: !marker || locating || resolving || saving ? 0.5 : 1 }]} onPress={confirm}><Text style={s.btnText}>{saving ? 'Saving location…' : params.browsing ? 'Confirm location' : 'Confirm pin & return'}</Text></TouchableOpacity></ActionDock>
   </View>;

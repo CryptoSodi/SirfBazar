@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { serializable } from '../common/transaction';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const CHUNK = 100; // Expo push API max messages per request
@@ -22,15 +23,27 @@ export class ExpoPushService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Register (or re-assign to this user) a device token. */
-  async saveToken(userId: string, token: string, platform?: string) {
+  async saveToken(userId: string, sessionId: string | undefined, token: string, platform?: string) {
     if (!/^(ExponentPushToken|ExpoPushToken)\[.+\]$/.test(token)) {
       return { ok: false, reason: 'Not an Expo push token' };
     }
-    await this.prisma.pushToken.upsert({
-      where: { token },
-      // A shared device that logs into a different account moves with it.
-      update: { userId, platform: platform ?? undefined },
-      create: { userId, token, platform: platform ?? 'android' },
+    if (!sessionId) throw new UnauthorizedException('Refresh your session before registering push notifications');
+    await serializable(this.prisma, async (tx) => {
+      const session = await tx.refreshToken.findFirst({
+        where: { id: sessionId, userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      });
+      if (!session) throw new UnauthorizedException('Session is no longer active');
+      const existing = await tx.pushToken.findUnique({ where: { token } });
+      // updatedAt records the most recent registering session's creation time.
+      // An older session cannot move a shared device token back after a switch.
+      if (existing && existing.updatedAt > session.createdAt) {
+        throw new ConflictException('A newer session owns this device token');
+      }
+      await tx.pushToken.upsert({
+        where: { token },
+        update: { userId, platform: platform ?? undefined, updatedAt: session.createdAt },
+        create: { userId, token, platform: platform ?? 'android', updatedAt: session.createdAt },
+      });
     });
     return { ok: true };
   }

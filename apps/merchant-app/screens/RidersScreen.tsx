@@ -1,3 +1,5 @@
+import { toast, ToastHost, ToastMessage } from '../components/Toast';
+import { IconLabel } from '../components/IconLabel';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { FlatList, Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -40,7 +42,7 @@ export default function RidersScreen() {
       await api.post(`/merchant/riders/${rider.id}/${rider.isActive ? 'deactivate' : 'activate'}`);
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -49,7 +51,7 @@ export default function RidersScreen() {
       await api.post(`/merchant/riders/${rider.id}/${action}`);
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -73,15 +75,15 @@ export default function RidersScreen() {
         renderItem={({ item: r }) => (
           <View style={[s.card, s.spread]}>
             <View style={{ flex: 1 }}>
-              <Text style={[s.body, { fontWeight: '700' }]}>🛵 {r.fullName}</Text>
+              <IconLabel icon="bike" style={[s.body, { fontWeight: '700' }]}>{r.fullName}</IconLabel>
               <Text style={s.faint}>
                 {r.phoneNumber} · {r.vehicleType?.toLowerCase()} {r.vehicleNumber && `· ${r.vehicleNumber}`}
               </Text>
               <Text style={[s.faint, { color: r.isOnline ? colors.primary : colors.faint }]}>
-                {r.isOnline ? '🟢 online' : '⚪ offline'} · {r.currentStatus?.toLowerCase()}
+                {r.isOnline ? 'Online' : 'Offline'} · {r.currentStatus?.toLowerCase()}
               </Text>
               {r.approvalStatus === 'PENDING' && (
-                <Text style={{ color: colors.amber, fontWeight: '700', fontSize: 11, marginTop: 2 }}>⏳ Requested to join your shop</Text>
+                <IconLabel icon="clock" style={{ color: colors.amber, fontWeight: '700', fontSize: 11, marginTop: 2 }}>Requested to join your shop</IconLabel>
               )}
             </View>
             {r.approvalStatus === 'PENDING' ? (
@@ -119,7 +121,7 @@ export default function RidersScreen() {
               value={phone}
               onChangeText={setPhone}
             />
-            {!!error && <Text style={{ color: colors.danger, marginTop: 8, fontSize: 13 }}>{error}</Text>}
+            {!!error && <ToastMessage>{error}</ToastMessage>}
             <TouchableOpacity style={[s.btn, { marginTop: 12 }]} onPress={addRider} disabled={busy || !name.trim()}>
               <Text style={s.btnText}>{busy ? 'Adding…' : 'Add rider'}</Text>
             </TouchableOpacity>
@@ -128,7 +130,7 @@ export default function RidersScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      <ToastHost active={adding} /></Modal>
     </SafeAreaView>
   );
 }

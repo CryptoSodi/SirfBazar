@@ -1,0 +1,5 @@
+.google-sign-in { width: 100%; min-width: 0; min-height: 44px; }
+.google-sign-in-control { width: fit-content; max-width: 100%; margin-inline: auto; }
+.google-sign-in-control[hidden] { display: none; }
+.google-sign-in-status { min-height: 44px; display: flex; align-items: center; justify-content: center; margin: 0; }
+.google-sign-in p { overflow-wrap: anywhere; }

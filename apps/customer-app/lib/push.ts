@@ -1,14 +1,14 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
-import { api } from './api';
+import { api, getAuthVersion, getUser } from './api';
 
 /**
  * Expo push registration. Requires a development/production build —
  * Expo Go cannot receive remote pushes, so everything is silently best-effort.
  */
 
-let registeredToken: string | null = null;
+let registeredToken: { token: string; owner: string } | null = null;
 let unregistering = false;
 
 // Show incoming alerts while the app is open (banner + notification centre).
@@ -34,7 +34,10 @@ export async function registerForPush(): Promise<boolean> {
     // Never re-register mid-logout: a refresh triggered by the remove call would
     // otherwise resubscribe the outgoing user and pin the token to them.
     if (unregistering) return false;
-    if (registeredToken) return true;
+    const generation = getAuthVersion();
+    const owner = (await getUser())?.id;
+    if (!owner || generation !== getAuthVersion()) return false;
+    if (registeredToken?.owner === owner) return true;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Order alerts',
@@ -50,12 +53,14 @@ export async function registerForPush(): Promise<boolean> {
     if (status !== 'granted') return false;
     const token = await deviceToken();
     if (!token) return false;
+    if (generation !== getAuthVersion() || (await getUser())?.id !== owner || unregistering) return false;
     const result = await api.post('/notifications/push-token', {
       token,
       platform: Platform.OS === 'ios' ? 'ios' : 'android',
     });
     if (!result.ok) return false;
-    registeredToken = token;
+    if (generation !== getAuthVersion() || (await getUser())?.id !== owner) return false;
+    registeredToken = { token, owner };
     return true;
   } catch {
     // No push in Expo Go / permission denied / offline — never break the app.
@@ -71,7 +76,7 @@ export async function unregisterPush(): Promise<void> {
   if (unregistering) return;
   unregistering = true;
   try {
-    const token = registeredToken ?? (await deviceToken());
+    const token = registeredToken?.token ?? (await deviceToken());
     registeredToken = null;
     if (!token) return;
     await api.post('/notifications/push-token/remove', { token });

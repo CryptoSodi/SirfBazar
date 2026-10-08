@@ -153,6 +153,11 @@ export class MerchantController {
     return this.products.bulkUpload(user.userId, dto);
   }
 
+  @Post('products/bulk-preview')
+  bulkPreview(@CurrentUser() user: AuthUser, @Body() dto: BulkUploadDto) {
+    return this.products.bulkPreview(user.userId, dto);
+  }
+
   @Put('products/:id')
   updateProduct(
     @CurrentUser() user: AuthUser,

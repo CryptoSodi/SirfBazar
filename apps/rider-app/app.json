@@ -17,7 +17,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "pk.sirfbazar.rider",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Location permission is optional. This build does not send live GPS updates."
+        "NSLocationWhenInUseUsageDescription": "Share your location during an assigned active delivery while this screen is open."
       }
     },
     "android": {
@@ -33,7 +33,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Location permission is optional. This build does not send live GPS updates."
+          "locationWhenInUsePermission": "Share your location during an assigned active delivery while this screen is open."
         }
       ],
       "@react-native-google-signin/google-signin",

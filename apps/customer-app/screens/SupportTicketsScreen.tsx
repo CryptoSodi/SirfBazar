@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useCallback, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -5,6 +6,7 @@ import { api, isLoggedIn } from '../lib/api';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { useTheme } from '../lib/theme';
 import { LoginSheet } from '../components/LoginSheet';
+import { AppIcon } from '../components/AppIcon';
 import { Notice, StatePanel, usePageInset } from '../components/CustomerUI';
 
 export default function SupportTicketsScreen() {
@@ -51,7 +53,7 @@ export default function SupportTicketsScreen() {
           <TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={load}>
             <Text style={s.btnGhostText}>Refresh requests</Text>
           </TouchableOpacity>
-          {!!error && <Notice danger>{error}</Notice>}
+          {!!error && <ToastMessage>{error}</ToastMessage>}
           {!tickets?.length && (
             <StatePanel
               loading={!tickets && !error}
@@ -71,7 +73,7 @@ export default function SupportTicketsScreen() {
                 {ticket.status.replace(/_/g, ' ')} · {new Date(ticket.updatedAt).toLocaleString()}
               </Text>
               <Text style={s.body}>{ticket.description}</Text>
-              <Text style={s.btnGhostText}>Open conversation →</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={s.btnGhostText}>Open conversation</Text><AppIcon name="arrow" size={18} color={colors.primary} /></View>
             </TouchableOpacity>
           ))}
         </ScrollView>

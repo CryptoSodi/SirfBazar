@@ -9,8 +9,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import {
   GOOGLE_AUTH_SERVICE,
-  GoogleTokenInfoService,
-  MockGoogleAuthService,
+  createGoogleAuthService,
 } from './google/google-auth.service';
 
 @Module({
@@ -32,10 +31,7 @@ import {
     },
     {
       provide: GOOGLE_AUTH_SERVICE,
-      useClass:
-        (process.env.GOOGLE_AUTH_PROVIDER || 'mock') === 'google'
-          ? GoogleTokenInfoService
-          : MockGoogleAuthService,
+      useFactory: createGoogleAuthService,
     },
   ],
   exports: [AuthService],

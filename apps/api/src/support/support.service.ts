@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccessService } from '../common/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ADMIN_ROLES, NotificationType, TicketStatus, UserRole } from '../common/constants';
@@ -9,6 +10,7 @@ import { parsePage, paged, PageQuery } from '../common/utils/pagination';
 export class SupportService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly access: AccessService,
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeService,
   ) {}
@@ -27,20 +29,17 @@ export class SupportService {
     if (role === UserRole.CUSTOMER) {
       customerId = (await this.prisma.customer.findUnique({ where: { userId } }))?.id ?? null;
     } else if (role === UserRole.MERCHANT_OWNER || role === UserRole.MERCHANT_STAFF) {
-      merchantId =
-        (await this.prisma.merchant.findUnique({ where: { userId } }))?.id ??
-        (await this.prisma.merchantStaff.findFirst({ where: { userId } }))?.merchantId ??
-        null;
+      merchantId = (await this.access.merchantContext(userId)).merchantId;
     } else if (role === UserRole.RIDER) {
-      riderId = (await this.prisma.rider.findUnique({ where: { userId } }))?.id ?? null;
+      riderId = (await this.access.riderByUser(userId)).id;
     }
 
     if (input.orderId) {
       const order = await this.prisma.order.findUnique({ where: { id: input.orderId } });
       if (!order) throw new NotFoundException('Order not found');
-      if (role === UserRole.CUSTOMER && (!customerId || order.customerId !== customerId)) {
-        throw new ForbiddenException('Not your order');
-      }
+      if (role === UserRole.CUSTOMER && (!customerId || order.customerId !== customerId)) throw new ForbiddenException('Not your order');
+      if ((role === UserRole.MERCHANT_OWNER || role === UserRole.MERCHANT_STAFF) && (!merchantId || order.merchantId !== merchantId)) throw new ForbiddenException('Not your shop order');
+      if (role === UserRole.RIDER && (!riderId || order.riderId !== riderId)) throw new ForbiddenException('Order is not assigned to you');
     }
 
     const ticket = await this.prisma.supportTicket.create({

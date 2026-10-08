@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useCallback, useRef, useState } from 'react';
 import { useRoute } from '@react-navigation/native';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -88,7 +89,7 @@ export default function SupportDetailScreen() {
         </View>
       ))}
       {!ticket.messages?.length && <Notice>No replies yet. You can add more details below.</Notice>}
-      {!!error && <Notice danger>{error}</Notice>}
+      {!!error && <ToastMessage>{error}</ToastMessage>}
       <TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={load}>
         <Text style={s.btnGhostText}>Refresh conversation</Text>
       </TouchableOpacity>

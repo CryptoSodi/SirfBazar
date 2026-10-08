@@ -7,7 +7,9 @@ export class RealtimeService {
   constructor(private readonly gateway: RealtimeGateway) {}
 
   private emit(room: string, event: string, data: unknown) {
-    this.gateway.server?.to(room).emit(event, data);
+    // Fire after the writer commits. Delivery and authorization failures are
+    // isolated from the order response; the gateway fails closed per socket.
+    void this.gateway.emitAuthorized(room, event, data).catch(() => undefined);
   }
 
   emitToUser(userId: string, event: string, data: unknown) {
