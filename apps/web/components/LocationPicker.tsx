@@ -2,16 +2,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, getStoredLocation } from '@/lib/api';
+import { getStoredLocation } from '@/lib/api';
 import { FALLBACK_LOCATION, useLocation } from '@/lib/location';
 import type { PickedPoint } from './MapPicker';
 import { LocationMap } from './LocationMap';
 import { useModalFocus } from './useModalFocus';
-import { ToastMessage } from './Toast';
+import { ToastMessage, useToast } from './Toast';
 import { AppIcon } from './AppIcon';
 
 export function LocationPicker({ onClose }: { onClose: () => void }) {
   const { choose } = useLocation();
+  const { toast } = useToast();
   const [initial] = useState(() => getStoredLocation() ?? FALLBACK_LOCATION);
   const [point, setPoint] = useState<PickedPoint>(initial);
   const [chosen, setChosen] = useState(initial.label !== FALLBACK_LOCATION.label);
@@ -51,39 +52,35 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
     } catch { fail('Unable to start location lookup. Select a point on the map.'); }
   };
 
-  const confirm = async () => {
+  const confirm = () => {
     if (!chosen || busy) return;
     invalidateRequest();
-    const current = requestId.current;
     const selected = { latitude: point.latitude, longitude: point.longitude };
-    setBusy(true); setError('');
-    let label = `Pinned location (${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)})`;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    // /location/detect describes a serving shop's area, not this pin's locality.
+    // Save the exact selection synchronously: map/viewport events and network
+    // delays must not silently cancel a confirmation or keep the old label.
     try {
-      const detected = await Promise.race([
-        api.post('/location/detect', selected),
-        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 2000); }),
-      ]);
-      if (detected?.serviceable && (detected.area || detected.city)) label = [detected.area, detected.city].filter(Boolean).join(', ');
-    } catch { /* Exact coordinates remain usable when the area-name lookup fails. */ }
-    finally { clearTimeout(timer); }
-    if (current !== requestId.current) return;
-    choose({ ...selected, label });
-    setBusy(false); onClose();
+      choose({ ...selected, label: `Pinned location (${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)})` });
+      toast('Location updated. Nearby shops will refresh for this pin.');
+      onClose();
+    } catch {
+      setError('Unable to save this location. Allow site storage in your browser and try again.');
+    }
   };
 
   if (typeof document === 'undefined') return null;
   return createPortal(<div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
     <div ref={dialogFocus.ref} role="dialog" aria-modal="true" aria-labelledby="location-picker-title" tabIndex={-1} onKeyDown={dialogFocus.onKeyDown} className="card sb-area-picker" onClick={(event) => event.stopPropagation()}>
       <div className="sb-area-picker-heading"><h2 id="location-picker-title" className="text-lg font-bold">Choose your location</h2><button type="button" className="btn-secondary" onClick={onClose}>Close</button></div>
+      <div className="sb-area-picker-body">
       <p className="sb-area-picker-copy">Choose where to browse nearby shops. You’ll confirm your delivery address at checkout.</p>
       <button type="button" className="btn-primary w-full" onClick={useGps} disabled={busy}>{busy ? 'Updating location…' : <><AppIcon name="location" size={18} /> Use my current location</>}</button>
       <h3 className="sb-area-picker-map-title">Pick my area</h3>
       <p className="sb-area-picker-copy">Select a point or move the map until the pin is in the right place. You can also focus the map and use arrow keys.</p>
       <LocationMap point={point} onChange={pin} onError={setError} />
-      <p className="sb-area-picker-coordinates" role="status">{chosen ? 'Selected' : 'Map centre'}: {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</p>
       {error && <ToastMessage>{error}</ToastMessage>}
-      <button type="button" className="btn-primary w-full" disabled={!chosen || busy} onClick={() => void confirm()}>Confirm this location</button>
+      </div>
+      <div className="sb-area-picker-footer"><p className="sb-area-picker-coordinates" role="status">{chosen ? 'Selected' : 'Map centre'}: {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</p><button type="button" className="btn-primary w-full" disabled={!chosen || busy} onClick={confirm}>Confirm this location</button></div>
     </div>
   </div>, document.body);
 }
