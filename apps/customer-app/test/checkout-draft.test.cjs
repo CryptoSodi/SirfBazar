@@ -22,8 +22,8 @@ const quote = () => ({ id: 'cart-a', itemCount: 1, subtotalPaisa: 29000, deliver
   groups: [{ merchant: { id: 'shop-a' }, deliveryFeePaisa: 6000, items: [{ id: 'item', merchantProductId: 'mp-milk', productId: 'milk', quantity: 1, unitPricePaisa: 29000, inStock: true, stockQuantity: 10 }] }] });
 
 test('408 timeout retains recovery markers like network errors, conflicts and server failures', () => {
-  for (const status of [0, undefined, null, 408, 409, 500, 502, 503]) assert.equal(flow.isDefinitiveCheckoutRejection(status), false);
-  for (const status of [400, 401, 403, 404, 422]) assert.equal(flow.isDefinitiveCheckoutRejection(status), true);
+  for (const status of [0, undefined, null, 401, 408, 409, 500, 502, 503]) assert.equal(flow.isDefinitiveCheckoutRejection(status), false);
+  for (const status of [400, 403, 404, 422]) assert.equal(flow.isDefinitiveCheckoutRejection(status), true);
 });
 test('ineligible coupons block financial commitment and change the quote fingerprint', () => {
   const valid = { ...quote(), couponCode: 'WELCOME' };

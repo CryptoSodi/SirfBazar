@@ -11,6 +11,8 @@ export class ApiError extends Error {
 }
 
 const KEYS = { access: 'sbm.accessToken', refresh: 'sbm.refreshToken', user: 'sbm.user' };
+let authVersion = 0;
+export const getAuthVersion = () => authVersion;
 
 export async function getUser(): Promise<any | null> {
   const raw = await AsyncStorage.getItem(KEYS.user);
@@ -31,15 +33,17 @@ async function persistAuth(data: { accessToken: string; refreshToken: string; us
 }
 
 export async function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
+  authVersion++;
   await persistAuth(data);
 }
 
 export async function clearAuth() {
+  const version = ++authVersion;
   // Stop alerts to this device while the token is still valid.
   await import('./push').then((m) => m.unregisterPush()).catch(() => undefined);
   const refreshToken = await AsyncStorage.getItem(KEYS.refresh);
   if (refreshToken) await request('POST', '/auth/logout', { refreshToken }, false).catch(() => undefined);
-  await AsyncStorage.multiRemove([KEYS.access, KEYS.refresh, KEYS.user]);
+  if (version === authVersion) await AsyncStorage.multiRemove([KEYS.access, KEYS.refresh, KEYS.user]);
 }
 
 async function request(method: string, path: string, body?: unknown, retry = true): Promise<any> {
@@ -54,6 +58,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   });
 
   if (res.status === 401 && access && retry) {
+    const generation = authVersion;
     const refreshToken = await AsyncStorage.getItem(KEYS.refresh);
     if (refreshToken) {
       try {
@@ -65,13 +70,16 @@ async function request(method: string, path: string, body?: unknown, retry = tru
         if (r.ok) {
           // persistAuth (not storeAuth): a background refresh must never trigger
           // push re-registration — that races the logout flow's token removal.
-          await persistAuth(await r.json());
+          const refreshed = await r.json();
+          if (generation !== authVersion) throw new ApiError('Session changed. Sign in again.', 401);
+          await persistAuth(refreshed);
           return request(method, path, body, false);
         }
       } catch {
         /* fall through */
       }
     }
+    if (generation !== authVersion) throw new ApiError('Session changed. Sign in again.', 401);
     await clearAuth();
   }
 
@@ -97,6 +105,7 @@ export const api = {
 
 /** After /rider/apply returns fresh tokens, persist them + the user profile. */
 export async function finishOnboarding(tokens: { accessToken: string; refreshToken: string }) {
+  authVersion++;
   await AsyncStorage.multiSet([
     [KEYS.access, tokens.accessToken],
     [KEYS.refresh, tokens.refreshToken],

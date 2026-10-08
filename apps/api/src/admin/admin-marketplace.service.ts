@@ -210,59 +210,7 @@ export class AdminMarketplaceService {
   }
 
   async cancelOrder(adminUserId: string, orderId: string, reason: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { children: true },
-    });
-    if (!order) throw new NotFoundException('Order not found');
-
-    const terminal = [OrderStatus.DELIVERED, ...CANCELLED_ORDER_STATUSES] as string[];
-    const targets = (order.isParent ? order.children : [order]).filter(
-      (o) => !terminal.includes(o.status),
-    );
-    if (targets.length === 0) throw new BadRequestException('Order is already completed or cancelled');
-
-    for (const child of targets) {
-      await this.orders.restoreStock(child.id);
-      await this.statusService.apply(
-        child.id,
-        OrderStatus.CANCELLED_BY_ADMIN,
-        { userId: adminUserId, role: 'ADMIN', notes: reason },
-        { cancellationReason: reason, cancelledAt: new Date() },
-      );
-    }
-    if (order.isParent) {
-      await this.prisma.order.update({
-        where: { id: order.id },
-        data: {
-          status: OrderStatus.CANCELLED_BY_ADMIN,
-          cancellationReason: reason,
-          cancelledAt: new Date(),
-        },
-      });
-    }
-    const customer = await this.prisma.customer.findUnique({
-      where: { id: order.customerId },
-      select: { userId: true },
-    });
-    if (customer) {
-      await this.notifications.notify({
-        userId: customer.userId,
-        title: 'Order cancelled',
-        body: `Order ${order.orderNumber} was cancelled by SirfBazar: ${reason}. Any payment will be refunded.`,
-        type: NotificationType.ORDER_CANCELLED,
-        referenceId: order.id,
-      });
-    }
-    await this.orders.refundIfPaid(order.parentOrderId ?? order.id, order.customerId, `Admin cancellation: ${reason}`);
-    await this.audit.log({
-      userId: adminUserId,
-      action: 'ORDER_CANCELLED_BY_ADMIN',
-      entityType: 'Order',
-      entityId: orderId,
-      newValue: { reason },
-    });
-    return { ok: true };
+    return this.orders.cancelByAdmin(adminUserId, orderId, reason);
   }
 
   async refundOrder(adminUserId: string, orderId: string, amountPaisa: number | undefined, reason: string) {
@@ -296,11 +244,18 @@ export class AdminMarketplaceService {
     const order = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!order) throw new NotFoundException('Order not found');
 
+    if ([OrderStatus.DELIVERED, ...CANCELLED_ORDER_STATUSES].includes(order.status as any)) {
+      throw new BadRequestException('Completed or cancelled orders cannot be reactivated');
+    }
+    if ([OrderStatus.DELIVERED, ...CANCELLED_ORDER_STATUSES].includes(status as any)) {
+      throw new BadRequestException('Use the dedicated delivery or cancellation action for terminal status changes');
+    }
+
     await this.statusService.apply(orderId, status as OrderStatus, {
       userId: adminUserId,
       role: 'ADMIN',
       notes: `Manual override: ${reason}`,
-    });
+    }, {}, [order.status]);
     await this.audit.log({
       userId: adminUserId,
       action: 'ORDER_STATUS_OVERRIDE',
@@ -611,17 +566,16 @@ export class AdminMarketplaceService {
   }
 
   async setRefundStatus(adminUserId: string, refundId: string, action: 'approve' | 'reject', notes?: string) {
+    if (action === 'approve') return this.refunds.approve(refundId, adminUserId, notes);
     const refund = await this.prisma.refund.findUnique({ where: { id: refundId } });
     if (!refund) throw new NotFoundException('Refund not found');
     const allowed = [RefundStatus.REQUESTED, RefundStatus.UNDER_REVIEW] as string[];
     if (!allowed.includes(refund.status)) {
       throw new BadRequestException(`Refund is ${refund.status}; cannot ${action}`);
     }
-    const status = action === 'approve' ? RefundStatus.APPROVED : RefundStatus.REJECTED;
-    const updated = await this.prisma.refund.update({
-      where: { id: refundId },
-      data: { status, adminNotes: notes ?? refund.adminNotes },
-    });
+    const status = RefundStatus.REJECTED;
+    const updated = await this.prisma.refund.updateMany({ where: { id: refundId, status: refund.status }, data: { status, adminNotes: notes ?? refund.adminNotes } });
+    if (updated.count !== 1) throw new BadRequestException('Refund changed during review');
     await this.audit.log({
       userId: adminUserId,
       action: `REFUND_${status}`,
@@ -629,17 +583,10 @@ export class AdminMarketplaceService {
       entityId: refundId,
       newValue: { notes },
     });
-    return updated;
+    return this.prisma.refund.findUniqueOrThrow({ where: { id: refundId } });
   }
 
   async processRefund(adminUserId: string, refundId: string) {
-    const result = await this.refunds.process(refundId);
-    await this.audit.log({
-      userId: adminUserId,
-      action: 'REFUND_PROCESSED',
-      entityType: 'Refund',
-      entityId: refundId,
-    });
-    return result;
+    return this.refunds.process(refundId, undefined, adminUserId);
   }
 }

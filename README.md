@@ -4,7 +4,33 @@
 
 Unlike dark-store models, SirfBazar **owns no inventory and no warehouses** — every order is fulfilled by a real local shop using the shop's own riders.
 
+## Android APK downloads
+
+Release-signed **testing builds**, version 1.0.0 (build 1), built on 8 October 2026.
+These connect to the live SirfBazar API; they are not a Google Play release.
+
+| App | Package | Download |
+|---|---|---|
+| Customer | `pk.sirfbazar.customer` | [Download customer APK](https://expo.dev/artifacts/eas/23-oJtE8MVYwfXaGyV2JzrTV8pEW5tKBxaeXeasrs2Q.apk) |
+| Merchant | `pk.sirfbazar.merchant` | [Download merchant APK](https://expo.dev/artifacts/eas/LNk5RrAQQLC_Udql-OASxzP3DVZRMbyUuWMnPIb34mo.apk) |
+| Rider | `pk.sirfbazar.rider` | [Download rider APK](https://expo.dev/artifacts/eas/KQTRfta8lHsQTf0_tpKvsyxJkkoLOYtOQjERCw7H9Xg.apk) |
+
+**Download links expire on 22 October 2026.** Package names, release signatures,
+and file hashes were verified; see the [APK verification report](docs/production-readiness/ANDROID_LOCAL_RELEASE_CANDIDATES.md)
+for checksums, build IDs, and retained local copies. Native-device login and
+checkout checks remain pending, and Google consent is still in Testing.
+
+These APKs use the new per-app SirfBazar release keys. They cannot update an
+older APK signed with a different key in place. Do not uninstall an existing app
+without first considering loss of its local data.
+
 ## Repository layout
+
+`master` is the consolidated release branch. The single backend remains in
+`apps/api`; `codex/server-api-deployment` is historical, not a second API to maintain.
+API deployment runs only after the full `release-checks` gate passes on a push
+to `master`. See [the deployment runbook](docs/API-AUTO-DEPLOYMENT.md) and
+[consolidation record](docs/MASTER-CONSOLIDATION.md).
 
 | App | Path | Stack | Port |
 |---|---|---|---|
@@ -83,8 +109,8 @@ Delivery completion OTP also accepts **123456** in dev.
 Hybrid topology — see [docs/deployment.md](docs/deployment.md) for the full guide:
 - `sirfbazar.com` + `www` — customer website on **Vercel** (root dir `apps/web`)
 - `admin.sirfbazar.com` — admin dashboard on **Vercel** (root dir `apps/admin`)
-- `api.sirfbazar.com` — backend API **self-hosted** (pm2 + Cloudflare Tunnel)
-- Database — **native PostgreSQL on the same machine**; DNS on **Cloudflare**
+- `api.sirfbazar.com` — backend API on **Oracle `129.153.16.84`**, `sirfbazar-api.service`, Caddy HTTPS proxy, direct Cloudflare DNS
+- Database — existing **native PostgreSQL on Oracle**; no tunnel or Windows API is required
 
 ## Production notes
 

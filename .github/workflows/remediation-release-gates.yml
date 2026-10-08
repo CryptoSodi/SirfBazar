@@ -1,0 +1,54 @@
+name: Remediation release gates
+
+on:
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: Gate to execute against nonproduction fixtures
+        required: true
+        type: choice
+        options: [native, staging]
+
+jobs:
+  staging:
+    if: inputs.gate == 'staging'
+    runs-on: ubuntu-latest
+    env:
+      REMEDIATION_STAGING_URL: ${{ vars.REMEDIATION_STAGING_URL }}
+      REMEDIATION_STAGING_FIXTURE_TOKEN: ${{ secrets.REMEDIATION_STAGING_FIXTURE_TOKEN }}
+      REMEDIATION_STAGING_MERCHANT_TOKEN: ${{ secrets.REMEDIATION_STAGING_MERCHANT_TOKEN }}
+      REMEDIATION_STAGING_RIDER_TOKEN: ${{ secrets.REMEDIATION_STAGING_RIDER_TOKEN }}
+      REMEDIATION_STAGING_ADMIN_TOKEN: ${{ secrets.REMEDIATION_STAGING_ADMIN_TOKEN }}
+      REMEDIATION_STAGING_CART_ID: ${{ vars.REMEDIATION_STAGING_CART_ID }}
+      REMEDIATION_STAGING_ADDRESS_ID: ${{ vars.REMEDIATION_STAGING_ADDRESS_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/verify-remediation.mjs --staging
+
+  native:
+    if: inputs.gate == 'native'
+    runs-on: [self-hosted, android-remediation]
+    env:
+      NATIVE_DEVICE_ID: ${{ vars.NATIVE_DEVICE_ID }}
+      NATIVE_TEST_API_URL: ${{ vars.NATIVE_TEST_API_URL }}
+      NATIVE_CUSTOMER_START_TEXT: ${{ vars.NATIVE_CUSTOMER_START_TEXT }}
+      NATIVE_CUSTOMER_TEST_APP_ID: pk.sirfbazar.customer.remediation
+      NATIVE_CUSTOMER_TAP_TEXT: ${{ vars.NATIVE_CUSTOMER_TAP_TEXT }}
+      NATIVE_CUSTOMER_DESTINATION_TEXT: ${{ vars.NATIVE_CUSTOMER_DESTINATION_TEXT }}
+      NATIVE_MERCHANT_START_TEXT: ${{ vars.NATIVE_MERCHANT_START_TEXT }}
+      NATIVE_MERCHANT_TEST_APP_ID: pk.sirfbazar.merchant.remediation
+      NATIVE_MERCHANT_TAP_TEXT: ${{ vars.NATIVE_MERCHANT_TAP_TEXT }}
+      NATIVE_MERCHANT_DESTINATION_TEXT: ${{ vars.NATIVE_MERCHANT_DESTINATION_TEXT }}
+      NATIVE_RIDER_START_TEXT: ${{ vars.NATIVE_RIDER_START_TEXT }}
+      NATIVE_RIDER_TEST_APP_ID: pk.sirfbazar.rider.remediation
+      NATIVE_RIDER_TAP_TEXT: ${{ vars.NATIVE_RIDER_TAP_TEXT }}
+      NATIVE_RIDER_DESTINATION_TEXT: ${{ vars.NATIVE_RIDER_DESTINATION_TEXT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/verify-remediation.mjs --native

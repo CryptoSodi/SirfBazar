@@ -1,5 +1,6 @@
 import {
   IsArray,
+  ArrayMaxSize,
   IsBoolean,
   IsIn,
   IsInt,
@@ -9,6 +10,9 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  IsUUID,
+  Max,
+  MaxLength,
   Matches,
   Min,
   ValidateNested,
@@ -183,16 +187,29 @@ export class UpdateMerchantProductDto {
   @IsOptional() @IsString() merchantSku?: string;
 }
 
+export class BulkExpectedDto {
+  @Type(() => Number) @IsInt() @Min(1) @Max(2147483647) pricePaisa: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(2147483647) stockQuantity: number;
+  @IsString() updatedAt: string;
+}
+
+export class BulkItemDto {
+  @IsString() @IsNotEmpty() @MaxLength(128) rowId: string;
+  @IsOptional() @IsString() productId?: string;
+  @IsOptional() @IsString() @MaxLength(240) name?: string;
+  @IsOptional() @IsString() categoryId?: string;
+  @IsOptional() @IsString() @MaxLength(40) unit?: string;
+  @IsOptional() @IsString() @MaxLength(160) merchantSku?: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(2147483647) pricePaisa: number;
+  @Type(() => Number) @IsInt() @Min(0) @Max(2147483647) stockQuantity: number;
+  @IsOptional() @ValidateNested() @Type(() => BulkExpectedDto) expected?: BulkExpectedDto;
+}
+
 export class BulkUploadDto {
-  @IsArray()
-  items: Array<{
-    productId?: string;
-    name?: string;
-    categoryId?: string;
-    unit?: string;
-    pricePaisa: number;
-    stockQuantity: number;
-  }>;
+  @IsUUID('4') requestId: string;
+  @IsOptional() @IsIn(['ADD_MISSING', 'UPDATE_EXISTING']) mode?: 'ADD_MISSING' | 'UPDATE_EXISTING';
+  @IsArray() @ArrayMaxSize(1000) @ValidateNested({ each: true }) @Type(() => BulkItemDto) items: BulkItemDto[];
+  @IsOptional() @IsString() @MaxLength(4 * 1024 * 1024) previewToken?: string;
 }
 
 export class CreateRiderDto {

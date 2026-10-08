@@ -14,6 +14,13 @@ function load(file, dependencies = {}, extras = {}) {
   return module.exports;
 }
 const flow = load('customer-flow');
+test('nested category names resolve without losing the parent selection', () => {
+  const { findCategoryName } = load('category-tree');
+  const tree = [{ id: 'produce', name: 'Fruits & Vegetables', children: [{ id: 'fruit', name: 'Fresh Fruits' }, { id: 'veg', name: 'Fresh Vegetables' }] }];
+  assert.equal(findCategoryName(tree, 'produce'), 'Fruits & Vegetables');
+  assert.equal(findCategoryName(tree, 'veg'), 'Fresh Vegetables');
+  assert.equal(findCategoryName(tree, 'missing'), undefined);
+});
 test('notification taps route only supported references', () => {
   assert.equal(flow.notificationDestination({ type: 'PROMOTION', referenceId: 'not-an-order' }), null);
   assert.equal(flow.notificationDestination({ type: 'ORDER_ACCEPTED', referenceId: 'order' }).orderId, 'order');

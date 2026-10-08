@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
 
@@ -30,11 +30,14 @@ export class VerifyOtpDto {
   context?: 'customer' | 'admin' | 'merchant' | 'rider';
 }
 
-export class GoogleLoginDto {
+export class GoogleLinkDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(10000)
   idToken: string;
+}
 
+export class GoogleLoginDto extends GoogleLinkDto {
   /** Which app the user is signing in from — gates role access. Default customer. */
   @IsOptional()
   @IsIn(['customer', 'admin', 'merchant', 'rider'])

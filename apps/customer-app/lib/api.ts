@@ -79,6 +79,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
+    public details?: any,
   ) {
     super(message);
   }
@@ -126,6 +128,8 @@ export async function clearAuth() {
   const version = ++authVersion;
   // Stop alerts to this device while the token is still valid.
   await import('./push').then((m) => m.unregisterPush()).catch(() => undefined);
+  const refreshToken = await readCredential(KEYS.refresh);
+  if (refreshToken) await request('POST', '/auth/logout', { refreshToken }, false).catch(() => undefined);
   await serializeAuth(async () => {
     if (version !== authVersion) return;
     await Promise.all([removeCredential(KEYS.access), removeCredential(KEYS.refresh)]);
@@ -135,6 +139,7 @@ export async function clearAuth() {
 }
 
 let authVersion = 0;
+export const getAuthVersion = () => authVersion;
 let refreshing: Promise<void> | null = null;
 export async function renewSession() {
   if (!refreshing) {
@@ -216,7 +221,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     const msg = Array.isArray(data?.message)
       ? data.message.join(', ')
       : data?.message || `Request failed (${res.status})`;
-    throw new ApiError(msg, res.status);
+    throw new ApiError(msg, res.status, data?.code, data);
   }
   return data;
 }

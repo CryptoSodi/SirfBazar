@@ -4,9 +4,12 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { OrderOtpInterceptor } from './common/order-otp.interceptor';
+import { registerJsonBodyParsers } from './merchant/bulk-body-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  registerJsonBodyParsers(app);
 
   // Self-hosted catalog/product images, served at /static/** (outside the /api prefix).
   app.useStaticAssets(join(process.cwd(), 'storage'), { prefix: '/static/' });
@@ -15,6 +18,7 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidUnknownValues: false }),
   );
+  app.useGlobalInterceptors(new OrderOtpInterceptor());
 
   const defaultCorsOrigins = [
     'https://sirfbazar.com',
@@ -44,7 +48,8 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swaggerConfig));
 
   const port = Number(process.env.PORT) || 3001;
-  await app.listen(port);
+  if (process.env.HOST) await app.listen(port, process.env.HOST);
+  else await app.listen(port);
   console.log(`SirfBazar API listening on http://localhost:${port} (docs at /docs)`);
 }
 

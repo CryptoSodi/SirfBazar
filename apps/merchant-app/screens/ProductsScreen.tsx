@@ -1,3 +1,4 @@
+import { IconLabel } from '../components/IconLabel';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
@@ -104,9 +105,9 @@ export default function ProductsScreen() {
                   )}
                 </Text>
                 <TouchableOpacity onPress={() => openEditor(mp)}>
-                  <Text style={{ color: low ? colors.danger : colors.muted, fontWeight: '700', fontSize: 12 }}>
-                    {low ? '⚠️ ' : ''}Stock: {mp.stockQuantity} · edit ✎
-                  </Text>
+                  <IconLabel icon={low ? "warning" : "edit"} style={{ color: low ? colors.danger : colors.muted, fontWeight: '700', fontSize: 12 }}>
+                    {low ? 'Low stock: ' : 'Stock: '}{mp.stockQuantity} · Edit
+                  </IconLabel>
                 </TouchableOpacity>
               </View>
             </View>

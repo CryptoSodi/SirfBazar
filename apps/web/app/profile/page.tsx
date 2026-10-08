@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { ApiError, api, isLoggedIn, logoutLocal } from '@/lib/api';
 import { LoginSheet } from '@/components/LoginSheet';
 import { AddressForm } from '@/components/AddressForm';
+import { GoogleAccountLink } from '@/components/GoogleAccountLink';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -91,6 +92,7 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-2xl space-y-5">
       {addressError && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">Unable to load saved addresses: {addressError} <button className="underline" onClick={load}>Retry</button></p>}
       <h1 className="text-xl font-bold">Your account</h1>
+      <GoogleAccountLink />
 
       <section className="card p-5">
         <div className="flex items-center gap-4">

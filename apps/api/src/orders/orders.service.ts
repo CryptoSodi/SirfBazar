@@ -19,6 +19,7 @@ import { PricingService } from '../common/pricing.service';
 import { OrderStatusService } from './order-status.service';
 import {
   MerchantApprovalStatus,
+  CANCELLED_ORDER_STATUSES,
   NotificationType,
   ONLINE_PAYMENT_METHODS,
   OrderStatus,
@@ -27,15 +28,28 @@ import {
 } from '../common/constants';
 import { haversineKm, estimateDeliveryMinutes } from '../common/utils/geo';
 import { generateNumericCode, generateOrderNumber } from '../common/utils/ids';
+import { Prisma } from '@prisma/client';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
+import { serializable } from '../common/transaction';
 
 export interface PlaceOrderInput {
-  requestId?: string;
-  cartId?: string;
+  requestId: string;
+  cartId: string;
+  approvedQuote?: string;
   deliveryAddressId: string;
   paymentMethod: string;
   customerNote?: string;
   couponCode?: string;
 }
+
+type QuoteInput = Pick<PlaceOrderInput, 'cartId' | 'deliveryAddressId' | 'paymentMethod' | 'couponCode'>;
+const MAX_PAISA = 2_147_483_647;
+const safePaisa = (amount: number) => {
+  if (!Number.isSafeInteger(amount) || amount < 0 || amount > MAX_PAISA) {
+    throw new BadRequestException('Order amount is outside the supported range');
+  }
+  return amount;
+};
 
 const CUSTOMER_CANCELLABLE: string[] = [
   OrderStatus.CREATED,
@@ -63,6 +77,105 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   // ── Order placement ────────────────────────────────────────────────────────
 
+  private quoteKey() {
+    const secret = process.env.JWT_SECRET;
+    if (!secret && process.env.NODE_ENV === 'production') throw new Error('JWT_SECRET is required for approved checkout');
+    return createHmac('sha256', secret || 'dev-secret-do-not-use-in-production')
+      .update('sirfbazar-approved-checkout-v1')
+      .digest();
+  }
+
+  private digest(value: unknown) {
+    return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  }
+
+  private signQuote(customerId: string, quote: unknown) {
+    const expiresAt = new Date(Date.now() + 5 * 60_000);
+    const payload = Buffer.from(JSON.stringify({ version: 1, customerId, digest: this.digest(quote), expiresAt: expiresAt.toISOString() })).toString('base64url');
+    const signature = createHmac('sha256', this.quoteKey()).update(payload).digest('base64url');
+    return { version: 1, approvedQuote: `${payload}.${signature}`, expiresAt: expiresAt.toISOString(), quote };
+  }
+
+  private parseQuote(token: string, customerId: string) {
+    try {
+      const [payload, signature, extra] = token.split('.');
+      if (!payload || !signature || extra) throw new Error('format');
+      const expected = createHmac('sha256', this.quoteKey()).update(payload).digest();
+      const actual = Buffer.from(signature, 'base64url');
+      if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error('signature');
+      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+      if (parsed.version !== 1 || parsed.customerId !== customerId || typeof parsed.digest !== 'string') throw new Error('owner');
+      return parsed as { digest: string; expiresAt: string };
+    } catch {
+      throw new ConflictException({ code: 'QUOTE_CHANGED', message: 'Review the current order total before placing your order.' });
+    }
+  }
+
+  private async buildQuote(db: PrismaService | Prisma.TransactionClient, customerId: string, input: QuoteInput) {
+    if (input.paymentMethod !== PaymentMethod.COD) throw new BadRequestException('Only cash on delivery is available');
+    const cart = await db.cart.findFirst({ where: { id: input.cartId, customerId, status: 'ACTIVE' }, include: { items: true } });
+    if (!cart || cart.items.length === 0) throw new ConflictException('This checkout basket is no longer active. Check your orders before retrying.');
+    const address = await db.customerAddress.findFirst({ where: { id: input.deliveryAddressId, customerId } });
+    if (!address) throw new BadRequestException('Delivery address not found');
+    if (address.latitude == null || address.longitude == null || !Number.isFinite(address.latitude) || !Number.isFinite(address.longitude) || Math.abs(address.latitude) > 90 || Math.abs(address.longitude) > 180) {
+      throw new BadRequestException('Choose a valid delivery location before checkout');
+    }
+    const listings = await db.merchantProduct.findMany({
+      where: { id: { in: cart.items.map((item) => item.merchantProductId) } },
+      include: { product: { include: { category: true } }, merchant: true },
+    });
+    const byId = new Map(listings.map((listing) => [listing.id, listing]));
+    const groups = new Map<string, { merchant: (typeof listings)[number]['merchant']; items: Array<{ merchantProductId: string; productId: string; merchantId: string; name: string; quantity: number; unitPricePaisa: number }> }>();
+    for (const item of cart.items) {
+      const listing = byId.get(item.merchantProductId);
+      if (!listing || listing.product.approvalStatus !== 'APPROVED' || listing.product.isRestricted || listing.product.requiresPrescription || listing.product.category.isRestricted || !listing.product.category.isActive) {
+        throw new BadRequestException('A product in your basket is unavailable for checkout');
+      }
+      const merchant = listing.merchant;
+      if (merchant.approvalStatus !== MerchantApprovalStatus.APPROVED || !merchant.isOpen || !merchant.isOnline) throw new BadRequestException(`${merchant.shopName} is not accepting orders right now`);
+      if (!Number.isInteger(item.quantity) || item.quantity < 1 || !listing.isAvailable || listing.stockQuantity < item.quantity) throw new BadRequestException(`${listing.product.name} has insufficient stock`);
+      if (!Number.isFinite(merchant.latitude) || !Number.isFinite(merchant.longitude) || !Number.isFinite(merchant.serviceRadiusKm) || merchant.serviceRadiusKm <= 0 || haversineKm(address.latitude, address.longitude, merchant.latitude, merchant.longitude) > merchant.serviceRadiusKm) {
+        throw new BadRequestException(`${merchant.shopName} does not deliver to this address`);
+      }
+      const unitPricePaisa = safePaisa(listing.discountPricePaisa ?? listing.pricePaisa);
+      if (unitPricePaisa < 1) throw new BadRequestException('A product has an invalid price');
+      safePaisa(unitPricePaisa * item.quantity);
+      const group = groups.get(merchant.id) ?? { merchant, items: [] };
+      group.items.push({ merchantProductId: listing.id, productId: listing.productId, merchantId: merchant.id, name: listing.product.name, quantity: item.quantity, unitPricePaisa });
+      groups.set(merchant.id, group);
+    }
+    const merchants = [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([merchantId, group]) => {
+      const subtotalPaisa = safePaisa(group.items.reduce((sum, item) => safePaisa(sum + item.unitPricePaisa * item.quantity), 0));
+      if (subtotalPaisa < group.merchant.minimumOrderValuePaisa) throw new BadRequestException(`${group.merchant.shopName} requires a larger order`);
+      const distanceKm = haversineKm(address.latitude!, address.longitude!, group.merchant.latitude, group.merchant.longitude);
+      return { merchantId, shopName: group.merchant.shopName, subtotalPaisa, deliveryFeePaisa: safePaisa(this.pricing.deliveryFeePaisa(distanceKm)) };
+    });
+    const subtotalPaisa = safePaisa(merchants.reduce((sum, merchant) => safePaisa(sum + merchant.subtotalPaisa), 0));
+    const couponCode = input.couponCode ?? cart.couponCode ?? null;
+    const coupon = couponCode ? await this.coupons.validate({ code: couponCode, customerId, subtotalPaisa, merchantIds: merchants.map((m) => m.merchantId), categoryIds: listings.map((l) => l.product.categoryId), city: address.city, paymentMethod: input.paymentMethod }, db) : null;
+    if (coupon?.freeDelivery) merchants.forEach((merchant) => { merchant.deliveryFeePaisa = 0; });
+    const deliveryFeePaisa = safePaisa(merchants.reduce((sum, merchant) => safePaisa(sum + merchant.deliveryFeePaisa), 0));
+    const serviceFeePaisa = safePaisa(this.pricing.serviceFeePaisa());
+    const smallOrderFeePaisa = safePaisa(this.pricing.smallOrderFeePaisa(subtotalPaisa));
+    const discountPaisa = safePaisa(coupon?.discountPaisa ?? 0);
+    const totalAmountPaisa = safePaisa(Math.max(0, subtotalPaisa + deliveryFeePaisa + serviceFeePaisa + smallOrderFeePaisa - discountPaisa));
+    return { cartId: cart.id, paymentMethod: input.paymentMethod, deliveryAddress: { id: address.id, fullAddress: address.fullAddress, city: address.city, latitude: address.latitude, longitude: address.longitude }, items: [...groups.values()].flatMap((group) => group.items).sort((a, b) => a.merchantProductId.localeCompare(b.merchantProductId)), merchants, subtotalPaisa, deliveryFeePaisa, serviceFeePaisa, smallOrderFeePaisa, discountPaisa, couponCode, totalAmountPaisa };
+  }
+
+  async quoteOrder(customerUserId: string, input: QuoteInput) {
+    const customerId = await this.access.customerId(customerUserId);
+    return this.signQuote(customerId, await this.buildQuote(this.prisma, customerId, input));
+  }
+
+  private async changedQuote(customerId: string, input: QuoteInput) {
+    try {
+      return new ConflictException({ code: 'QUOTE_CHANGED', message: 'Order details changed. Review and approve the current total.', ...this.signQuote(customerId, await this.buildQuote(this.prisma, customerId, input)) });
+    } catch (error) {
+      if (error instanceof ConflictException && (error.getResponse() as any)?.code === 'QUOTE_CHANGED') return error;
+      return new ConflictException({ code: 'QUOTE_CHANGED', message: 'Order details changed. Refresh your basket and review checkout.' });
+    }
+  }
+
   async placeOrder(customerUserId: string, input: PlaceOrderInput) {
     const customer = await this.prisma.customer.findUnique({
       where: { userId: customerUserId },
@@ -72,6 +185,21 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
     const replay = await this.existingCheckout(customerUserId, customer.id, input);
     if (replay) return replay;
+
+    if (!input.approvedQuote) {
+      throw new ConflictException({ code: 'QUOTE_REQUIRED', message: 'Review and approve the current order total before placing your order.' });
+    }
+    const approved = this.parseQuote(input.approvedQuote, customer.id);
+    if (!Number.isFinite(Date.parse(approved.expiresAt)) || Date.parse(approved.expiresAt) <= Date.now()) {
+      throw await this.changedQuote(customer.id, input);
+    }
+    try {
+      const current = await this.buildQuote(this.prisma, customer.id, input);
+      if (this.digest(current) !== approved.digest) throw await this.changedQuote(customer.id, input);
+    } catch (error) {
+      if (error instanceof ConflictException && (error.getResponse() as any)?.code === 'QUOTE_CHANGED') throw error;
+      throw await this.changedQuote(customer.id, input);
+    }
 
     const cart = await this.prisma.cart.findFirst({
       where: { id: input.cartId, customerId: customer.id, status: 'ACTIVE' },
@@ -89,7 +217,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     });
     if (!address) throw new BadRequestException('Delivery address not found');
 
-    const allMethods = [PaymentMethod.COD, ...ONLINE_PAYMENT_METHODS] as string[];
+    const allMethods = [PaymentMethod.COD] as string[];
     if (!allMethods.includes(input.paymentMethod)) {
       throw new BadRequestException('Unsupported payment method');
     }
@@ -173,6 +301,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         customerId: customer.id,
         subtotalPaisa: totalSubtotal,
         merchantIds: perMerchant.map((g) => g.merchantId),
+        categoryIds: merchantProducts.map((mp) => mp.product.categoryId),
         city: address.city,
         paymentMethod: input.paymentMethod,
       });
@@ -195,7 +324,35 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
     let result: { parentId: string | null; childOrders: any[] };
     try {
-      result = await this.prisma.$transaction(async (tx) => {
+      result = await serializable(this.prisma, async (tx) => {
+        const committedQuote = await this.buildQuote(tx, customer.id, input);
+        if (this.digest(committedQuote) !== approved.digest || Date.parse(approved.expiresAt) <= Date.now()) {
+          throw new ConflictException({ code: 'QUOTE_CHANGED', message: 'Order details changed. Review and approve the current total.' });
+        }
+        // The write projection below was loaded outside this transaction. It
+        // must equal the transaction's signed snapshot even if a listing or
+        // cart changed and changed back between those reads.
+        const persistedProjection = {
+          cartId: cart.id,
+          paymentMethod: input.paymentMethod,
+          deliveryAddress: { id: address.id, fullAddress: address.fullAddress, city: address.city, latitude: address.latitude, longitude: address.longitude },
+          items: perMerchant.flatMap((g) => g.lines.map((line) => ({
+            merchantProductId: line.mp.id, productId: line.mp.productId, merchantId: g.merchantId,
+            name: line.mp.product.name, quantity: line.cartItem.quantity, unitPricePaisa: line.unitPricePaisa,
+          }))).sort((a, b) => a.merchantProductId.localeCompare(b.merchantProductId)),
+          merchants: perMerchant.map((g) => ({ merchantId: g.merchantId, shopName: g.merchant.shopName, subtotalPaisa: g.subtotalPaisa, deliveryFeePaisa: g.deliveryFeePaisa }))
+            .sort((a, b) => a.merchantId.localeCompare(b.merchantId)),
+          subtotalPaisa: totalSubtotal, deliveryFeePaisa: totalDeliveryFee, serviceFeePaisa, smallOrderFeePaisa,
+          discountPaisa, couponCode: couponCode ?? null, totalAmountPaisa: grandTotalPaisa,
+        };
+        if (this.digest(persistedProjection) !== this.digest(committedQuote)) {
+          throw new ConflictException({ code: 'QUOTE_CHANGED', message: 'Order details changed. Review and approve the current total.' });
+        }
+        const liveMerchants = await tx.merchant.findMany({ where: { id: { in: perMerchant.map((g) => g.merchantId) } } });
+        if (perMerchant.some((g) => {
+          const live = liveMerchants.find((merchant) => merchant.id === g.merchantId);
+          return !live || this.pricing.commissionPaisa(live, g.subtotalPaisa) !== g.commissionPaisa;
+        })) throw new ConflictException({ code: 'QUOTE_CHANGED', message: 'Shop terms changed. Review this order again.' });
         // Fence the same basket before stock/payment writes, including requests
         // from older clients without a requestId. Rollback releases the claim.
         const claimed = await tx.cart.updateMany({
@@ -320,6 +477,21 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           });
         }
 
+        await tx.auditLog.create({
+          data: {
+            id: `checkout:${input.requestId}`,
+            userId: customerUserId,
+            role: 'CUSTOMER',
+            action: 'CHECKOUT_CREATED',
+            entityType: 'Order',
+            entityId: paymentAnchorId,
+            newValue: JSON.stringify({
+              cartId: input.cartId,
+              fingerprint: this.digest({ cartId: input.cartId, deliveryAddressId: input.deliveryAddressId, paymentMethod: input.paymentMethod, customerNote: input.customerNote ?? '', couponCode: input.couponCode ?? null, approvedQuote: input.approvedQuote }),
+            }),
+          },
+        });
+
         return { parentId, childOrders };
       });
     } catch (cause) {
@@ -332,7 +504,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
     // Post-commit notifications + realtime (only when already sent to merchants).
     if (!isOnlinePayment) {
-      await this.announceToMerchants(result.childOrders, customer.user.fullName ?? 'A customer');
+      await this.announceToMerchants(result.childOrders, customer.user.fullName ?? 'A customer')
+        .catch((error) => this.logger.warn(`Post-commit merchant notification failed: ${error}`));
     }
     await this.notifications.notify({
       userId: customerUserId,
@@ -342,7 +515,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         : 'Your order was sent to the shop. We will notify you when it is accepted.',
       type: NotificationType.ORDER_PLACED,
       referenceId: result.parentId ?? result.childOrders[0].id,
-    });
+    }).catch((error) => this.logger.warn(`Post-commit customer notification failed: ${error}`));
 
     return this.detailForCustomer(customerUserId, result.parentId ?? result.childOrders[0].id);
   }
@@ -351,8 +524,19 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (!input.requestId) return null;
     const order = await this.prisma.order.findUnique({ where: { id: input.requestId } });
     if (!order) return null;
+    const audit = await this.prisma.auditLog.findUnique({ where: { id: `checkout:${input.requestId}` } });
+    if (audit?.action === 'CHECKOUT_CREATED') {
+      let recorded: { cartId?: string; fingerprint?: string } = {};
+      try { recorded = JSON.parse(audit.newValue ?? '{}'); } catch { /* malformed legacy metadata fails closed */ }
+      const fingerprint = this.digest({ cartId: input.cartId, deliveryAddressId: input.deliveryAddressId, paymentMethod: input.paymentMethod, customerNote: input.customerNote ?? '', couponCode: input.couponCode ?? null, approvedQuote: input.approvedQuote });
+      if (order.customerId !== customerId || order.channel !== 'ONLINE' || recorded.cartId !== input.cartId || recorded.fingerprint !== fingerprint) {
+        throw new ConflictException('Checkout reference cannot be reused. Check your orders before retrying.');
+      }
+      return this.detailForCustomer(customerUserId, order.id);
+    }
     if (
       order.customerId !== customerId ||
+      order.channel !== 'ONLINE' ||
       order.deliveryAddressId !== input.deliveryAddressId ||
       order.paymentMethod !== input.paymentMethod ||
       (order.customerNote ?? '') !== (input.customerNote ?? '') ||
@@ -523,32 +707,24 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   async cancelByCustomer(customerUserId: string, orderId: string, reason?: string) {
     const customerId = await this.access.customerId(customerUserId);
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, customerId },
-      include: { children: true },
+    const { order, targets, changes, refund } = await serializable(this.prisma, async (tx) => {
+      const order = await tx.order.findFirst({ where: { id: orderId, customerId }, include: { children: true } });
+      if (!order) throw new NotFoundException('Order not found');
+      const targets = order.isParent ? order.children : [order];
+      if (targets.some((target) => !CUSTOMER_CANCELLABLE.includes(target.status))) {
+        throw new BadRequestException('Order can no longer be cancelled — the shop has already accepted it. Contact support.');
+      }
+      const changes: Array<Awaited<ReturnType<OrderStatusService['applyInTransaction']>>> = [];
+      for (const child of [...targets].sort((a, b) => a.id.localeCompare(b.id))) {
+        const changed = await this.statusService.applyInTransaction(tx, child.id, OrderStatus.CANCELLED_BY_CUSTOMER, { userId: customerUserId, role: 'CUSTOMER', notes: reason }, { cancellationReason: reason ?? 'Cancelled by customer', cancelledAt: new Date() }, CUSTOMER_CANCELLABLE);
+        await this.restoreStockInTransaction(tx, child.id);
+        changes.push(changed);
+      }
+      const refund = await this.refundIfPaidInTransaction(tx, order.isParent ? order.id : targets[0].id, customerId, 'Order cancelled by customer');
+      return { order, targets, changes, refund };
     });
-    if (!order) throw new NotFoundException('Order not found');
-
-    const targets = order.isParent ? order.children : [order];
-    const blocked = targets.filter((o) => !CUSTOMER_CANCELLABLE.includes(o.status));
-    if (blocked.length > 0) {
-      throw new BadRequestException(
-        'Order can no longer be cancelled — the shop has already accepted it. Contact support.',
-      );
-    }
-
+    changes.forEach((change) => this.statusService.broadcastStatus(change));
     for (const child of targets) {
-      await this.restoreStock(child.id);
-      await this.statusService.apply(
-        child.id,
-        OrderStatus.CANCELLED_BY_CUSTOMER,
-        {
-          userId: customerUserId,
-          role: 'CUSTOMER',
-          notes: reason,
-        },
-        { cancellationReason: reason ?? 'Cancelled by customer', cancelledAt: new Date() },
-      );
       if (child.merchantId) {
         const userIds = await this.access.merchantUserIds(child.merchantId);
         await this.notifications.notifyMany(userIds, {
@@ -556,52 +732,84 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           body: `Order ${child.orderNumber} was cancelled by the customer.`,
           type: NotificationType.ORDER_CANCELLED,
           referenceId: child.id,
-        });
+        }).catch((error) => this.logger.warn(`Post-commit cancellation notification failed: ${error}`));
       }
     }
-    if (order.isParent) {
-      await this.prisma.order.update({
-        where: { id: order.id },
-        data: {
-          status: OrderStatus.CANCELLED_BY_CUSTOMER,
-          cancellationReason: reason ?? 'Cancelled by customer',
-          cancelledAt: new Date(),
-        },
-      });
-    }
-    await this.refundIfPaid(
-      order.isParent ? order.id : targets[0].id,
-      customerId,
-      'Order cancelled by customer',
-    );
+    if (refund) await this.refunds.notifyCompleted(refund);
     return this.detailForCustomer(customerUserId, orderId);
+  }
+
+  async cancelByAdmin(adminUserId: string, orderId: string, reason: string) {
+    const result = await serializable(this.prisma, async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: orderId }, include: { children: true, customer: { select: { userId: true } } } });
+      if (!order) throw new NotFoundException('Order not found');
+      const children = order.isParent ? order.children : [order];
+      const terminal = [OrderStatus.DELIVERED, ...CANCELLED_ORDER_STATUSES] as string[];
+      const targets = children.filter((child) => !terminal.includes(child.status)).sort((a, b) => a.id.localeCompare(b.id));
+      if (!targets.length) throw new BadRequestException('Order is already completed or cancelled');
+      const changes = [] as Array<Awaited<ReturnType<OrderStatusService['applyInTransaction']>>>;
+      for (const child of targets) {
+        changes.push(await this.statusService.applyInTransaction(tx, child.id, OrderStatus.CANCELLED_BY_ADMIN, { userId: adminUserId, role: 'ADMIN', notes: reason }, { cancellationReason: reason, cancelledAt: new Date() }, [child.status]));
+        await this.restoreStockInTransaction(tx, child.id);
+      }
+      const refunds = [] as any[];
+      if (order.isParent && targets.length === children.length) {
+        const refund = await this.refundIfPaidInTransaction(tx, order.id, order.customerId, `Admin cancellation: ${reason}`);
+        if (refund) refunds.push(refund);
+      } else {
+        for (const child of targets) {
+          const refund = await this.refundIfPaidInTransaction(tx, child.id, order.customerId, `Admin cancellation: ${reason}`);
+          if (refund) refunds.push(refund);
+        }
+      }
+      await tx.auditLog.create({ data: { userId: adminUserId, role: 'ADMIN', action: 'ORDER_CANCELLED_BY_ADMIN', entityType: 'Order', entityId: orderId, newValue: JSON.stringify({ reason, targetIds: targets.map((child) => child.id), refundIds: refunds.map((refund) => refund.id) }) } });
+      return { order, changes, refunds };
+    });
+    result.changes.forEach((change) => this.statusService.broadcastStatus(change));
+    await this.notifications.notify({ userId: result.order.customer.userId, title: 'Order cancelled', body: `Order ${result.order.orderNumber} was cancelled by SirfBazar: ${reason}. Any collected payment will be refunded.`, type: NotificationType.ORDER_CANCELLED, referenceId: result.order.id })
+      .catch((error) => this.logger.warn(`Post-commit admin cancellation notification failed: ${error}`));
+    for (const refund of result.refunds) await this.refunds.notifyCompleted(refund);
+    return { ok: true, status: OrderStatus.CANCELLED_BY_ADMIN };
   }
 
   /** Restores stock for all confirmed items of an order (spec 12.8). */
   async restoreStock(orderId: string) {
-    const items = await this.prisma.orderItem.findMany({
+    return serializable(this.prisma, (tx) => this.restoreStockInTransaction(tx, orderId));
+  }
+
+  async restoreStockInTransaction(tx: Prisma.TransactionClient, orderId: string) {
+    const items = await tx.orderItem.findMany({
       where: { orderId, itemStatus: { in: ['CONFIRMED', 'REPLACEMENT_SUGGESTED'] } },
+      orderBy: { merchantProductId: 'asc' },
     });
     for (const item of items) {
-      await this.prisma.merchantProduct
-        .update({
-          where: { id: item.merchantProductId },
-          data: { stockQuantity: { increment: item.quantity } },
-        })
-        .catch(() => undefined);
+      await tx.merchantProduct.update({ where: { id: item.merchantProductId }, data: { stockQuantity: { increment: item.quantity } } });
     }
   }
 
   /** Auto-refund of online payments when an order dies before fulfilment. */
-  async refundIfPaid(anchorOrderId: string, customerId: string, reason: string) {
-    const payment = await this.prisma.payment.findFirst({
-      where: { orderId: anchorOrderId, status: PaymentStatus.PAID },
+  async refundIfPaid(orderId: string, customerId: string, reason: string) {
+    const refund = await serializable(this.prisma, (tx) => this.refundIfPaidInTransaction(tx, orderId, customerId, reason));
+    if (refund) await this.refunds.notifyCompleted(refund);
+    return refund;
+  }
+
+  async notifyCompletedRefund(refund: any) {
+    await this.refunds.notifyCompleted(refund);
+  }
+
+  async refundIfPaidInTransaction(tx: Prisma.TransactionClient, orderId: string, customerId: string, reason: string) {
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (!order || order.customerId !== customerId) return;
+    const anchorOrderId = order.parentOrderId ?? order.id;
+    const payment = await tx.payment.findFirst({
+      where: { orderId: anchorOrderId, status: { in: [PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED] } },
     });
     if (!payment) return;
-    await this.refunds.create({
-      orderId: anchorOrderId,
+    return this.refunds.createInTransaction(tx, {
+      orderId,
       customerId,
-      amountPaisa: payment.amountPaisa,
+      amountPaisa: order.isParent ? payment.amountPaisa : Math.min(payment.amountPaisa, order.totalAmountPaisa),
       reason,
       autoApprove: true,
     });
@@ -734,37 +942,20 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   async respondToReplacement(customerUserId: string, orderId: string, itemId: string, accept: boolean) {
     const customerId = await this.access.customerId(customerUserId);
-    const order = await this.prisma.order.findFirst({
-      where: { id: orderId, customerId },
-      include: { items: true },
-    });
-    if (!order) throw new NotFoundException('Order not found');
-
-    const suggestion = order.items.find(
-      (i) => i.replacementForItemId === itemId && i.itemStatus === 'REPLACEMENT_SUGGESTED',
-    );
-    const original = order.items.find((i) => i.id === itemId);
-    if (!suggestion || !original) throw new NotFoundException('No pending replacement for this item');
-
-    if (accept) {
-      await this.prisma.orderItem.update({ where: { id: original.id }, data: { itemStatus: 'REPLACED' } });
-      await this.prisma.orderItem.update({ where: { id: suggestion.id }, data: { itemStatus: 'CONFIRMED' } });
-    } else {
-      await this.prisma.orderItem.update({ where: { id: original.id }, data: { itemStatus: 'UNAVAILABLE' } });
-      await this.prisma.orderItem.update({ where: { id: suggestion.id }, data: { itemStatus: 'REMOVED' } });
-      // Return the suggested item's reserved stock.
-      await this.prisma.merchantProduct
-        .update({
-          where: { id: suggestion.merchantProductId },
-          data: { stockQuantity: { increment: suggestion.quantity } },
-        })
-        .catch(() => undefined);
-    }
-    await this.recomputeOrderTotals(order.id);
-    await this.statusService.appendTimeline(order.id, 'REPLACEMENT_' + (accept ? 'ACCEPTED' : 'REJECTED'), {
-      userId: customerUserId,
-      role: 'CUSTOMER',
-      notes: `Item ${original.productNameSnapshot}`,
+    const { order, original } = await serializable(this.prisma, async (tx) => {
+      const order = await tx.order.findFirst({ where: { id: orderId, customerId }, include: { items: true } });
+      if (!order) throw new NotFoundException('Order not found');
+      if ([OrderStatus.DELIVERED, ...CANCELLED_ORDER_STATUSES].includes(order.status as any)) throw new ConflictException('Order is no longer active');
+      const suggestion = order.items.find((item) => item.replacementForItemId === itemId && item.itemStatus === 'REPLACEMENT_SUGGESTED');
+      const original = order.items.find((item) => item.id === itemId && item.itemStatus === 'UNAVAILABLE');
+      if (!suggestion || !original) throw new NotFoundException('No pending replacement for this item');
+      const claimed = await tx.orderItem.updateMany({ where: { id: suggestion.id, itemStatus: 'REPLACEMENT_SUGGESTED' }, data: { itemStatus: accept ? 'CONFIRMED' : 'REMOVED' } });
+      if (claimed.count !== 1) throw new ConflictException('Replacement was already answered');
+      if (accept) await tx.orderItem.update({ where: { id: original.id }, data: { itemStatus: 'REPLACED' } });
+      else await tx.merchantProduct.update({ where: { id: suggestion.merchantProductId }, data: { stockQuantity: { increment: suggestion.quantity } } });
+      await this.recomputeOrderTotals(order.id, tx);
+      await this.statusService.appendTimeline(order.id, 'REPLACEMENT_' + (accept ? 'ACCEPTED' : 'REJECTED'), { userId: customerUserId, role: 'CUSTOMER', notes: `Item ${original.productNameSnapshot}` }, tx);
+      return { order, original };
     });
     if (order.merchantId) {
       const userIds = await this.access.merchantUserIds(order.merchantId);
@@ -773,14 +964,14 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         body: `Customer ${accept ? 'accepted' : 'rejected'} the replacement for ${original.productNameSnapshot} on order ${order.orderNumber}.`,
         type: NotificationType.REPLACEMENT_REQUESTED,
         referenceId: order.id,
-      });
+      }).catch((error) => this.logger.warn(`Post-commit replacement notification failed: ${error}`));
     }
     return this.detailForCustomer(customerUserId, orderId);
   }
 
   /** Re-derives money fields after item-level changes. */
-  async recomputeOrderTotals(orderId: string) {
-    const order = await this.prisma.order.findUnique({
+  async recomputeOrderTotals(orderId: string, db: PrismaService | Prisma.TransactionClient = this.prisma) {
+    const order = await db.order.findUnique({
       where: { id: orderId },
       include: { items: true, merchant: true },
     });
@@ -797,7 +988,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         order.smallOrderFeePaisa -
         order.discountAmountPaisa,
     );
-    await this.prisma.order.update({
+    await db.order.update({
       where: { id: orderId },
       data: {
         subtotalPaisa: subtotal,
@@ -807,12 +998,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (order.parentOrderId) {
-      const siblings = await this.prisma.order.findMany({ where: { parentOrderId: order.parentOrderId } });
-      const parent = await this.prisma.order.findUnique({ where: { id: order.parentOrderId } });
+      const siblings = await db.order.findMany({ where: { parentOrderId: order.parentOrderId } });
+      const parent = await db.order.findUnique({ where: { id: order.parentOrderId } });
       if (parent) {
         const subtotalSum = siblings.reduce((s, o) => s + o.subtotalPaisa, 0);
         const deliverySum = siblings.reduce((s, o) => s + o.deliveryFeePaisa, 0);
-        await this.prisma.order.update({
+        await db.order.update({
           where: { id: parent.id },
           data: {
             subtotalPaisa: subtotalSum,
@@ -859,25 +1050,28 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     });
     for (const order of stale) {
       this.logger.log(`Auto-rejecting unaccepted order ${order.orderNumber}`);
-      await this.restoreStock(order.id);
-      await this.statusService.apply(
-        order.id,
-        OrderStatus.MERCHANT_REJECTED,
-        {
-          role: 'SYSTEM',
-          notes: `Shop did not respond within ${timeoutMinutes} minutes`,
-        },
-        { cancellationReason: 'Merchant did not respond in time', cancelledAt: new Date() },
-      );
+      let changed;
+      let refund;
+      try {
+        ({ changed, refund } = await serializable(this.prisma, async (tx) => {
+          const result = await this.statusService.applyInTransaction(tx, order.id, OrderStatus.MERCHANT_REJECTED, { role: 'SYSTEM', notes: `Shop did not respond within ${timeoutMinutes} minutes` }, { cancellationReason: 'Merchant did not respond in time', cancelledAt: new Date() }, [OrderStatus.SENT_TO_MERCHANT]);
+          await this.restoreStockInTransaction(tx, order.id);
+          const refund = await this.refundIfPaidInTransaction(tx, order.id, order.customerId, 'Merchant did not respond in time');
+          return { changed: result, refund };
+        }));
+      } catch (error) {
+        if (error instanceof ConflictException) continue;
+        throw error;
+      }
+      this.statusService.broadcastStatus(changed);
       await this.notifications.notify({
         userId: order.customer.userId,
         title: 'Order not accepted',
         body: `The shop did not respond to order ${order.orderNumber} in time. Any payment will be refunded.`,
         type: NotificationType.ORDER_TIMEOUT,
         referenceId: order.id,
-      });
-      const anchorId = order.parentOrderId ?? order.id;
-      await this.refundIfPaid(anchorId, order.customerId, 'Merchant did not respond in time');
+      }).catch((error) => this.logger.warn(`Post-commit timeout notification failed: ${error}`));
+      if (refund) await this.refunds.notifyCompleted(refund);
     }
   }
 

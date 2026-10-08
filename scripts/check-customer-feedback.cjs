@@ -1,5 +1,5 @@
 // Local production browser test. Every API request is intercepted; no real orders.
-async (page) => {
+module.exports = async (page, baseUrl) => {
   const address = { id: 'address-fixture', label: 'Home', fullAddress: 'Test Street', city: 'Lahore', isDefault: true, latitude: 31.52, longitude: 74.35 };
   const cart = { id: 'cart-fixture', itemCount: 1, subtotalPaisa: 30000, deliveryFeePaisa: 5000, serviceFeePaisa: 1000, totalPaisa: 36000, groups: [{ merchant: { id: 'shop-fixture', shopName: 'Fixture shop' }, deliveryFeePaisa: 5000, items: [{ id: 'line-fixture', inStock: true, quantity: 1 }] }] };
   const categories = [{ id: 'dairy', slug: 'milk-eggs-bread', name: 'Milk, Eggs & Bread', children: [{ id: 'milk', slug: 'fresh-milk', name: 'Fresh Milk' }, { id: 'eggs', slug: 'fresh-eggs', name: 'Eggs' }] }, { id: 'produce', slug: 'fruits-vegetables', name: 'Fruits & Vegetables', children: [{ id: 'fruit', slug: 'fresh-fruits', name: 'Fresh Fruits' }, { id: 'veg', slug: 'fresh-vegetables', name: 'Fresh Vegetables' }] }];
@@ -21,8 +21,7 @@ async (page) => {
   });
   await page.context().addInitScript(() => { localStorage.setItem('sb.accessToken','fixture'); localStorage.setItem('sb.user',JSON.stringify({ id:'customer-fixture' })); localStorage.setItem('sb.location',JSON.stringify({ latitude:31.52,longitude:74.35,label:'Test area' })); localStorage.setItem('sb.theme','light'); });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.evaluate(() => localStorage.removeItem('sb.checkoutRecovery.v1'));
-  await page.goto('http://127.0.0.1:5194/checkout');
+  await page.goto(`${baseUrl}/checkout`);
   const review = page.locator('.sb-checkout-summary').getByRole('button',{name:'Review order',exact:true});
   await review.click();
   const toast = page.locator('[data-toast-host]');
@@ -52,7 +51,7 @@ async (page) => {
   await page.getByRole('button',{name:'Retry saved request'}).click();
   await page.waitForFunction(()=>document.querySelector('[data-toast-host] [role=alert]'));
   if (submitted.length!==2 || JSON.stringify(submitted[0])!==JSON.stringify(submitted[1])) throw Error('Retry changed saved request');
-  await page.goto('http://127.0.0.1:5194/search?category=milk-eggs-bread');
+  await page.goto(`${baseUrl}/search?category=milk-eggs-bread`);
   const subsections = page.getByRole('navigation',{name:'Subsections of Milk, Eggs & Bread'});
   await subsections.getByRole('link',{name:'Fresh Milk',exact:true}).click();
   await page.waitForFunction(()=>new URL(location.href).searchParams.get('category')==='fresh-milk');

@@ -150,7 +150,8 @@ async function main() {
         name: p.name,
         brand: p.brand ?? null,
         description: cleanDescription(p.description),
-        categoryId,
+        // Re-importing source files must not flatten an existing reviewed subsection.
+        categoryId: existing?.categoryId ?? categoryId,
         unit: p.unit || 'piece',
         size: p.size ?? null,
         barcode: p.barcode ?? null,
