@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH);
 const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_BROWSER_EXECUTABLE || undefined });
 const json = (data, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(data) });
+const visibleToast = (page) => page.locator('[data-toast-host] > div').last();
 const findings = [];
 await mkdir('output/playwright', { recursive: true });
 
@@ -34,7 +35,7 @@ try {
   await webPage.goto(`${process.env.BROWSER_WEB_URL}/checkout`);
   await webPage.getByRole('heading', { name: 'Check your saved order' }).waitFor();
   await webPage.getByRole('button', { name: 'Check saved order' }).click();
-  await webPage.getByText('No saved order was found yet.').waitFor();
+  await visibleToast(webPage).getByText('No saved order was found yet.').waitFor();
   await webPage.getByRole('button', { name: 'Retry saved request' }).click();
   assert.deepEqual(retried, checkoutPayload, 'web recovery must POST identical saved payload and ID');
   console.log('PASS web saved checkout survives consumed cart and retries identical request');
@@ -61,7 +62,7 @@ try {
   const rejectedPage = await rejectedWeb.newPage();
   await rejectedPage.goto(`${process.env.BROWSER_WEB_URL}/checkout`);
   await rejectedPage.getByRole('button', { name: 'Check saved order' }).click();
-  await rejectedPage.getByText('No saved order was found yet.').waitFor();
+  await visibleToast(rejectedPage).getByText('No saved order was found yet.').waitFor();
   assert.equal((await rejectedPage.evaluate(() => JSON.parse(localStorage.getItem('sb.checkoutRecovery.v1')))).payload.requestId, requestId, 'GET 404 alone retains saved checkout ID');
   await rejectedPage.getByRole('button', { name: 'Retry saved request' }).click();
   assert.deepEqual(rejectedRetry, checkoutPayload, 'expired quote retry must use identical saved POST payload');
@@ -111,7 +112,7 @@ try {
   await firstPicker.waitFor({ state: 'hidden' });
   const displayedPin = await firstPage.getByText(/^Pinned: /).textContent();
   await firstPage.getByRole('button', { name: 'Save as new address' }).click();
-  await firstPage.getByText('Delivery details saved.').waitFor();
+  await visibleToast(firstPage).getByText('Delivery details saved.').waitFor();
   assert.equal(Number.isFinite(addressPost?.latitude), true, 'first address POST has selected numeric latitude');
   assert.equal(Number.isFinite(addressPost?.longitude), true, 'first address POST has selected numeric longitude');
   assert.notEqual(addressPost.longitude, 0, 'map keyboard pan selects an actual location');
@@ -146,7 +147,8 @@ try {
   const picker = mapPage.getByRole('dialog', { name: 'Choose a delivery location' });
   await picker.waitFor();
   await picker.getByRole('button', { name: 'Use current location' }).click();
-  await picker.getByText(/Location access failed/).waitFor();
+  await mapPage.getByText(/Location access failed/).waitFor();
+  await picker.getByRole('button', { name: 'Dismiss notification' }).click();
   await picker.locator('.leaflet-container').focus();
   await mapPage.keyboard.press('ArrowRight');
   await picker.getByRole('button', { name: 'Select map center' }).click();
@@ -238,7 +240,7 @@ try {
       await retryPage.getByRole('button', { name: /Charge Rs/ }).waitFor();
       await retryPage.screenshot({ path: 'output/playwright/pos-definitive-rejection-review.png', fullPage: true });
     } else {
-      await retryPage.getByText('Temporary unknown error').waitFor();
+      await retryPage.getByText('The service is temporarily unavailable. Check the saved status before trying the action again.').waitFor();
       assert.equal((await retryPage.evaluate(() => JSON.parse(localStorage.getItem('sbp.saleRecovery.v1')))).payload.requestId, saved.payload.requestId, 'unknown POS retry error retains pending ID');
       await retryPage.getByRole('button', { name: 'Retry saved request' }).waitFor();
     }
@@ -263,41 +265,46 @@ try {
   const iposPage = await ipos.newPage();
   await iposPage.goto(`${process.env.BROWSER_SHOP_URL}/ipos`);
   await iposPage.locator('.ipos-product').filter({ hasText: 'Fixture milk' }).click();
-  const toastRegion = iposPage.locator('.toast-region');
-  await toastRegion.getByText(/Fixture milk added to the bill/).waitFor();
+  const toastRegion = iposPage.locator('[data-toast-host]');
+  await visibleToast(iposPage).getByText(/Fixture milk added to the bill/).waitFor();
   assert.equal(await toastRegion.evaluate((node) => node.parentElement === document.body), true, 'normal toast portals to body');
   await iposPage.screenshot({ path: 'output/playwright/merchant-ipos-toast-normal.png', fullPage: true });
+  await toastRegion.getByRole('button', { name: 'Dismiss notification' }).click();
   await iposPage.locator('#ipos-scan').focus();
   await iposPage.keyboard.press('F6');
   const shortcutState = await iposPage.locator('.ipos-nav').innerText();
   assert.match(shortcutState, /Held bills \(1\)/, 'existing F6 shortcut holds the bill while scanning');
-  await toastRegion.getByText('Bill held in this browser.').waitFor();
+  await visibleToast(iposPage).getByText('Bill held in this browser.').waitFor();
   assert.equal(await iposPage.locator('#ipos-scan').evaluate((node) => node === document.activeElement), true, 'hold toast leaves scanner input focused');
+  await toastRegion.getByRole('button', { name: 'Dismiss notification' }).click();
   await iposPage.locator('.ipos-product').filter({ hasText: 'Fixture milk' }).click();
   await iposPage.getByRole('button', { name: /Discard bill/ }).first().click();
   const discardDialog = iposPage.getByRole('dialog', { name: 'Discard this unpaid bill?' });
   await discardDialog.waitFor();
   assert.equal(await toastRegion.evaluate((node) => node.parentElement?.tagName), 'DIALOG', 'toast region moves into active dialog');
+  await toastRegion.getByRole('button', { name: 'Dismiss notification' }).click();
   await discardDialog.getByRole('button', { name: 'Discard unpaid bill' }).click();
-  await toastRegion.getByText('Unpaid bill discarded.').waitFor();
+  await visibleToast(iposPage).getByText('Unpaid bill discarded.').waitFor();
   await iposPage.screenshot({ path: 'output/playwright/merchant-ipos-toast-modal.png', fullPage: true });
+  await toastRegion.getByRole('button', { name: 'Dismiss notification' }).click();
   const fullscreen = iposPage.getByRole('button', { name: 'Full screen' });
   await fullscreen.click();
   await iposPage.waitForFunction(() => ['browser', 'window'].includes(document.documentElement.dataset.iposFullscreen));
   const mode = await iposPage.evaluate(() => document.documentElement.dataset.iposFullscreen);
   assert.ok(mode === 'browser' || mode === 'window', 'iPOS enters native or fallback fullscreen');
   await iposPage.locator('.ipos-product').filter({ hasText: 'Fixture milk' }).click();
-  await toastRegion.getByText(/Fixture milk added to the bill/).waitFor();
+  await visibleToast(iposPage).getByText(/Fixture milk added to the bill/).waitFor();
   const fullscreenTarget = await toastRegion.evaluate((node) => ({ parent: node.parentElement?.tagName, insideFullscreen: !!document.fullscreenElement?.contains(node) }));
   if (mode === 'browser') assert.equal(fullscreenTarget.insideFullscreen, true, 'native fullscreen toast is inside fullscreen element');
   await iposPage.screenshot({ path: `output/playwright/merchant-ipos-toast-${mode}.png`, fullPage: true });
+  await toastRegion.getByRole('button', { name: 'Dismiss notification' }).click();
   await iposPage.getByRole('button', { name: /Exit full screen/ }).click();
   await iposPage.waitForFunction(() => !document.documentElement.dataset.iposFullscreen);
   await iposPage.evaluate(() => Object.defineProperty(document, 'fullscreenEnabled', { configurable: true, value: false }));
   await iposPage.getByRole('button', { name: 'Full screen' }).click();
   await iposPage.waitForFunction(() => document.documentElement.dataset.iposFullscreen === 'window');
   await iposPage.locator('.ipos-product').filter({ hasText: 'Fixture milk' }).click();
-  await toastRegion.getByText(/Fixture milk added to the bill/).waitFor();
+  await visibleToast(iposPage).getByText(/Fixture milk added to the bill/).waitFor();
   await iposPage.screenshot({ path: 'output/playwright/merchant-ipos-toast-fallback.png', fullPage: true });
   assert.equal(await toastRegion.evaluate((node) => node.parentElement === document.body), true, 'fallback fullscreen toast portals to body');
   await iposPage.keyboard.press('Escape');
@@ -354,10 +361,11 @@ try {
   await shopMap.waitFor({ state: 'hidden' });
   assert.equal(await editShop.isVisible(), true, 'confirm keeps edit drawer open');
   assert.equal(await shopPinTrigger.evaluate((node) => node === document.activeElement), true, 'shop map confirm restores edit pin focus');
-  const selectedToast = editShop.locator('.toast-region').getByText('Shop pin selected. Save changes to publish it.');
+  const selectedToast = visibleToast(profilePage).getByText('Shop pin selected. Save changes to publish it.');
   await selectedToast.waitFor();
   assert.equal(await selectedToast.isVisible(), true, 'selected-pin toast is visible inside native edit drawer');
   assert.equal(profileSave, null, 'pin confirmation does not save merchant profile');
+  await editShop.getByRole('button', { name: 'Dismiss notification' }).click();
   await editShop.getByRole('button', { name: 'Save changes' }).click();
   await editShop.getByRole('alert').getByText('Fixture shop save rejected').waitFor();
   assert.equal(profileSave.latitude, 31.52123, 'shop save attempts selected latitude');
@@ -408,26 +416,27 @@ try {
   await shopPage.getByRole('heading', { name: 'Products', exact: true }).waitFor();
   await shopPage.getByRole('button', { name: 'Expand Grocery' }).click();
   await shopPage.getByRole('button', { name: 'Rice', exact: true }).click();
-  await shopPage.getByRole('button', { name: /Select visible products/ }).click();
-  assert.equal(await shopPage.getByRole('checkbox', { name: 'Select product' }).count(), 1);
+  await shopPage.getByRole('checkbox', { name: 'Select visible', exact: true }).check();
+  assert.equal(await shopPage.getByRole('checkbox', { name: /^Select product:/ }).count(), 1);
+  assert.equal(await shopPage.getByRole('checkbox', { name: /^Already in my shop:/ }).isDisabled(), true);
   await shopPage.getByRole('button', { name: 'Tea', exact: true }).click();
-  await shopPage.getByRole('heading', { name: 'Fixture Tea' }).waitFor();
+  await shopPage.locator('.catalog-product-name').getByText('Fixture Tea', { exact: true }).waitFor();
   await shopPage.locator('article.catalog-card').filter({ hasText: 'Fixture Tea' }).getByRole('checkbox', { name: 'Select product' }).check();
-  await shopPage.getByRole('button', { name: 'Add 2 selected' }).waitFor();
-  await shopPage.getByRole('button', { name: /Grocery \(includes subcategories\)/ }).click();
+  await shopPage.getByRole('button', { name: 'Add 2 products to shop', exact: true }).waitFor();
+  await shopPage.getByRole('button', { name: 'Grocery', exact: true }).click();
   const review = shopPage.getByRole('complementary', { name: 'Selected products' });
-  assert.match(await review.innerText(), /Review selected products 2/);
-  await review.getByLabel('Sale price (Rs)').nth(0).fill('650.25');
-  await review.getByLabel('Stock quantity (units)').nth(0).fill('5');
-  await review.getByLabel('Sale price (Rs)').nth(1).fill('250');
-  await review.getByLabel('Stock quantity (units)').nth(1).fill('3');
+  await review.getByRole('heading', { name: 'Ready for your shop 2', exact: true }).waitFor();
+  await review.getByLabel('Sale price (Rs) for Fixture Basmati Rice', { exact: true }).fill('650.25');
+  await review.getByLabel('Stock quantity for Fixture Basmati Rice', { exact: true }).fill('5');
+  await review.getByLabel('Sale price (Rs) for Fixture Tea', { exact: true }).fill('250');
+  await review.getByLabel('Stock quantity for Fixture Tea', { exact: true }).fill('3');
   await shopPage.screenshot({ path: 'output/playwright/merchant-bulk-desktop.png', fullPage: true });
-  await review.getByRole('button', { name: 'Add 2 selected' }).click();
+  await review.getByRole('button', { name: 'Add 2 products to shop', exact: true }).click();
   await review.getByText(/1 added/).waitFor();
   assert.equal(uploads[0].mode, 'ADD_MISSING');
   assert.equal(uploads[0].items.length, 2);
   assert.match(await review.innerText(), /Fixture row failure/);
-  assert.match(await review.innerText(), /Review selected products 1/);
+  await review.getByRole('heading', { name: 'Ready for your shop 1', exact: true }).waitFor();
   await review.getByRole('button', { name: 'Retry same selection' }).click();
   assert.equal(uploads[1].requestId, uploads[0].requestId);
   await shopPage.setViewportSize({ width: 320, height: 720 });
@@ -543,6 +552,14 @@ try {
   assert.equal(await authPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'password recovery must reflow at 320px');
   console.log('PASS merchant sign-in API error and dummy password recovery request at 320px');
   await auth.close();
+  for (const [fixture, url] of [
+    ['./check-category-browser.cjs', process.env.BROWSER_SHOP_URL],
+    ['./check-customer-feedback.cjs', process.env.BROWSER_WEB_URL],
+  ]) {
+    const context = await browser.newContext();
+    try { console.log(await require(fixture)(await context.newPage(), url)); }
+    finally { await context.close(); }
+  }
   assert.deepEqual(findings, [], `Rendered browser findings: ${findings.join('; ')}`);
 } finally {
   await browser.close();

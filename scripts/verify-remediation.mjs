@@ -20,7 +20,7 @@ function packageScript(app, script, env = process.env) {
 }
 function run(label, command, args, timeout = 120000, env = process.env) {
   console.log(`\n[RUN] ${label}`);
-  const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', timeout, shell: process.platform === 'win32' });
+  const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', timeout, shell: process.platform === 'win32' && command === 'npm' });
   if (result.error || result.status !== 0) {
     results.push({ label, ok: false });
     throw new Error(`${label} failed${result.error ? `: ${result.error.message}` : ` (exit ${result.status})`}`);
@@ -57,10 +57,10 @@ function requireHttpLocal(name, value) {
 try {
   if (!modes.size) {
     packageScript('api', 'typecheck'); packageScript('api', 'build');
-    for (const test of ['test:pos', 'test:waha', 'test:whatsapp']) packageScript('api', test);
+    for (const test of ['test:bind', 'test:pos', 'test:waha', 'test:whatsapp', 'test:google']) packageScript('api', test);
     for (const app of ['web', 'admin', 'shop', 'pos']) packageScript(app, 'build');
     packageScript('web', 'test'); packageScript('pos', 'test');
-    for (const test of ['test:ipos', 'test:alerts', 'test:bulk']) packageScript('shop', test);
+    for (const test of ['test:ipos', 'test:alerts', 'test:bulk', 'test:catalog']) packageScript('shop', test);
     for (const app of ['customer-app', 'merchant-app', 'rider-app']) { packageScript(app, 'typecheck'); packageScript(app, 'test'); }
     console.log('\nExternal gates: database, browser, native device, staging were not run. Invoke their explicit modes with prerequisites.');
   }

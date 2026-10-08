@@ -6,6 +6,8 @@ On 8 October 2026 the owner initially requested preparation only, then explicitl
 
 The API already runs on `129.153.16.84`. Production uses the dedicated `sirfbazar-api.service`, existing native PostgreSQL database `sirfbazar`, and the direct Cloudflare A record plus Caddy route to `127.0.0.1:3002`. It does not require a tunnel or a running Windows API.
 
+The consolidation moves the release source to `master`. The historical first-run branch above is retained as evidence, not as another maintained production branch. See [the consolidation record](MASTER-CONSOLIDATION.md) for merge and verification status.
+
 ## What Each Production Push Does
 
 1. Run the existing API, web, admin, POS/shop/mobile, browser-fixture and disposable-database CI checks, plus deployment helper tests. Production is not contacted during those checks.
@@ -17,7 +19,9 @@ The API already runs on `129.153.16.84`. Production uses the dedicated `sirfbaza
 7. Check local and public anonymous catalogue/categories, nearby discovery, coupons, a sample self-hosted image when available, quote/import-preview routes, website/POS CORS and the authenticated WhatsApp `/ready` endpoint. No OTP, order or payment is sent. Confirm the live environment and service file are unchanged.
 8. On restart or health failure, restore the previous code pointer, restart only SirfBazar and repeat the checks. Never restore the database automatically: orders may have arrived after restart. Report failure even when rollback succeeds.
 
-The deployment job requires **all** CI dependencies to pass. It accepts only a `push` to `refs/heads/codex/server-api-deployment` with the **repository-level** variable `SIRFBAZAR_API_DEPLOY_ENABLED` equal to `true`. Missing or false means skipped. Pull requests, other branches, `master`, tags and manual CI dispatch cannot deploy. Deployment concurrency does not cancel an in-flight promotion; a server lock also prevents overlapping promotions.
+The deployment job requires the **release-checks** aggregate to pass. That aggregate runs even after a failed dependency and rejects failed, skipped, cancelled or missing results from all seven gate groups: deployment tools, API, web, admin, all remaining clients, browser fixtures and database regressions. It accepts only a `push` to `refs/heads/master` with the **repository-level** variable `SIRFBAZAR_API_DEPLOY_ENABLED` equal to `true`. Missing or false means skipped. Pull requests, other branches (including `codex/server-api-deployment`), tags and manual CI dispatch cannot deploy. Deployment concurrency does not cancel an in-flight promotion; a server lock also prevents overlapping promotions.
+
+Protect `master` with pull requests, the required `release-checks` status, an up-to-date branch, conversation resolution and no administrator bypass, force pushes or deletion. On 8 October 2026 the owner rescinded the independent-review requirement: pull requests remain required, but the required approving-review count is zero. Do not bypass the remaining requirements to complete a release. The environment must keep Selected branches and tags with the exact Branch rule `master`; keep its existing secrets unchanged.
 
 ## Activation Procedure
 
@@ -35,7 +39,7 @@ These steps were completed under explicit owner approval. They document the inst
    This creates only `sirfbazar-deploy`, its root-owned SSH authorization file, root-owned helpers and a sudo rule for the single validating promotion helper. It refuses to overwrite a pre-existing account or helper installation. The password is locked; the login shell exists only so SSH can execute the forced command. Authorized-key restrictions disable shell access, PTY and forwarding. Do not install an unrestricted authorized key for this user.
 
 5. Verify the account cannot run `bash`, `id`, SCP/SFTP, arbitrary paths or other service commands. Verify `status` reports the existing release and `active`. Exercise the helper tests in disposable directories on Linux before any real promotion; do not aim fixtures at production.
-6. Create the GitHub environment `sirfbazar-api-production`, restrict deployment branches to the exact `codex/server-api-deployment` name, and configure required reviewers if the release process requires approval per push. Preserve existing Vercel environments. Store these **environment secrets** without printing them or committing them:
+6. Create the GitHub environment `sirfbazar-api-production`, restrict deployment branches to the exact `master` name, and configure required reviewers if the release process requires approval per push. The initial activation used `codex/server-api-deployment`; consolidation replaces that branch rule, not the credentials. Preserve existing Vercel environments. Store these **environment secrets** without printing them or committing them:
 
    | Secret | Value |
    | --- | --- |

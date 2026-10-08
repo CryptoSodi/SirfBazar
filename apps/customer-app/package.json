@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/customer-flow.test.cjs test/checkout-draft.test.cjs test/customer-reference.test.cjs test/product-purchase.test.cjs"
+    "test": "node --test test/customer-flow.test.cjs test/checkout-draft.test.cjs test/customer-reference.test.cjs test/product-purchase.test.cjs test/feedback.test.cjs"
   },
   "dependencies": {
     "lucide-react-native": "1.48.0",

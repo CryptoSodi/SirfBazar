@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master, codex/server-api-deployment]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -19,6 +19,7 @@ jobs:
           node-version: 22
       - run: python3 -B -m unittest discover -s deploy/api -p 'test_*.py' -v
       - run: node --test deploy/api/healthcheck.test.cjs
+      - run: node --test scripts/release-checks.test.cjs
       - run: bash -n deploy/api/install.sh
 
   api:
@@ -147,7 +148,7 @@ jobs:
         run: npm test
         working-directory: apps/pos
       - if: matrix.app == 'shop'
-        run: npm run test:ipos && npm run test:alerts && npm run test:bulk
+        run: npm run test:ipos && npm run test:alerts && npm run test:bulk && npm run test:catalog
         working-directory: apps/shop
       - if: contains(fromJSON('["customer-app","merchant-app","rider-app"]'), matrix.app)
         run: npm test
@@ -204,6 +205,15 @@ jobs:
           curl -fsS "$BROWSER_SHOP_URL/products" >/dev/null
           node scripts/verify-remediation.mjs --browser
 
+      - name: Retain isolated browser screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-fixture-screenshots
+          path: output/playwright/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
   database-regressions:
     runs-on: ubuntu-latest
     services:
@@ -240,14 +250,29 @@ jobs:
         run: psql "$REMEDIATION_DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/remediation-disposable-fixture.sql
       - run: node scripts/verify-remediation.mjs --database
 
+  release-checks:
+    if: ${{ always() }}
+    needs: [deployment-tools, api, web, admin, remaining-clients, browser-journeys, database-regressions]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require every release gate to succeed
+        env:
+          RELEASE_CHECK_RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/release-checks.cjs
+
   # Production activation and verified first run are recorded in docs/API-AUTO-DEPLOYMENT.md.
   # Keep the explicit branch, repository-variable, environment and full-CI gates.
   deploy-api:
     if: >-
       github.event_name == 'push' &&
-      github.ref == 'refs/heads/codex/server-api-deployment' &&
+      github.ref == 'refs/heads/master' &&
       vars.SIRFBAZAR_API_DEPLOY_ENABLED == 'true'
-    needs: [deployment-tools, api, web, admin, remaining-clients, browser-journeys, database-regressions]
+    needs: [release-checks]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: sirfbazar-api-production

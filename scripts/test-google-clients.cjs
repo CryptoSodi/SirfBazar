@@ -28,6 +28,7 @@ function harness(file, { imports = {}, globals = {}, post, googleToken = 'google
     '../lib/google': { googleSignInIdToken: async () => googleToken },
     '../lib/theme': { s: {}, useTheme: () => ({ s: {} }) },
     '../lib/appearance': { useRiderTheme: () => ({ palette: {} }) },
+    '../components/Toast': { ToastMessage: 'ToastMessage' },
   };
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS,
     target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
@@ -120,7 +121,10 @@ for (const [name, user, allowed] of [
 ]) test(`merchant Google session adapter checks ${name} membership`, async () => {
   const requests = [];
   const h = harness('apps/shop/src/auth/lib/api.ts', {
-    imports: { '../../lib/api': { API_URL: 'http://localhost:3001/api', ApiError: Error, resolveApiUrl: (base, path) => base + path } },
+    imports: {
+      '../../lib/api': { API_URL: 'http://localhost:3001/api', ApiError: Error, resolveApiUrl: (base, path) => base + path },
+      '../../lib/friendly-error': harness('apps/shop/src/lib/friendly-error.ts').exports,
+    },
     globals: { AbortSignal, fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => ({ accessToken: 'session', refreshToken: 'refresh', user }) }; } },
   });
   if (allowed) assert.equal((await h.exports.merchantApi.googleLogin('proof')).role, 1);
