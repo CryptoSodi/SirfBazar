@@ -2,32 +2,60 @@ import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage, pkr } from '../lib/api';
 import { Modal, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
-import { ReferenceIcon } from '../components/ReferenceIcon';
+import { ReferenceIcon, type ReferenceIconName } from '../components/ReferenceIcon';
 import { CardSkeleton, InlineSkeleton, LoadingFrame } from '../components/Skeleton';
 import { readMemory, writeMemory } from '../lib/memoryCache';
 import { readListingsPage, type MerchantListing, type Paged } from '../lib/merchant-contracts';
 import BulkImport from '../components/BulkImport';
 import { parseRupees, parseStock, type BulkItem, type UploadResult } from '../lib/bulk-import';
 import { categoryPath, type CatalogCategory } from '../lib/catalog-categories';
+import './catalog-workspace.css';
 
 /** A merchant's own product listing row (GET /merchant/products). */
 type MP = MerchantListing;
 type CatalogItem = { productId: string; name: string; brand?: string | null; imageUrl?: string | null; unit?: string | null; size?: string | null; category?: { name?: string | null }; alreadyListed: boolean };
 type CatalogResult = { items: CatalogItem[]; total: number; totalPages: number };
-type Selection = { item: CatalogItem; price: string; stock: string; error?: string };
+type Selection = { item: CatalogItem; price: string; stock: string; error?: string; invalidField?: 'price' | 'stock' };
 
-function CategoryNode({ category, selected, onSelect }: { category: CatalogCategory; selected: string; onSelect: (id: string) => void }) {
+function categoryGlyph(name: string): ReferenceIconName {
+  if (/fruit|vegetable/i.test(name)) return 'carrot';
+  if (/milk|dairy|egg/i.test(name)) return 'milk';
+  if (/bakery|bread/i.test(name)) return 'bakery';
+  if (/drink|beverage/i.test(name)) return 'drink';
+  if (/care|beauty/i.test(name)) return 'care';
+  if (/household|clean/i.test(name)) return 'household';
+  if (/baby/i.test(name)) return 'baby';
+  return 'package';
+}
+
+function CatalogPicture({ item }: { item: CatalogItem }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [item.imageUrl]);
+  return item.imageUrl && !failed
+    ? <img src={item.imageUrl} alt="" loading="lazy" onError={() => setFailed(true)} />
+    : <span className="catalog-picture-fallback"><ReferenceIcon name="package" size="lg" /><span>Image unavailable</span></span>;
+}
+
+function CategoryNode({ category, selected, onSelect, depth = 0 }: { category: CatalogCategory; selected: string; onSelect: (id: string) => void; depth?: number }) {
   const [open, setOpen] = useState(false);
   const containsSelection = categoryPath([category], selected).length > 0;
   useEffect(() => { if (containsSelection) setOpen(true); }, [containsSelection]);
-  return <div className="catalog-category-node"><div className="catalog-category-line">{category.children?.length ? <button type="button" className="catalog-disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${category.name}`} aria-expanded={open} onClick={() => setOpen(!open)}><ReferenceIcon name={open ? "down" : "right"} size="sm" /></button> : <span className="catalog-disclosure-spacer" />}<button type="button" className={selected === category.id ? 'active' : ''} aria-pressed={selected === category.id} onClick={() => { setOpen(true); onSelect(category.id); }}>{category.name}{category.children?.length ? ' (includes subcategories)' : ''}</button></div>{open && category.children?.length ? <div className="catalog-children">{category.children.map((child) => <CategoryNode key={child.id} category={child} selected={selected} onSelect={onSelect} />)}</div> : null}</div>;
+  return <div className={`catalog-category-node ${depth ? 'is-subsection' : 'is-department'}`}>
+    <div className={`catalog-category-line ${selected === category.id ? 'active' : ''}`}>
+      <button type="button" className="catalog-category-name" aria-pressed={selected === category.id} onClick={() => { setOpen(true); onSelect(category.id); }}>
+        {!depth && <ReferenceIcon name={categoryGlyph(category.name)} size="sm" />}<span>{category.name}</span>
+      </button>
+      {!!category.children?.length && <button type="button" className="catalog-disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${category.name}`} aria-expanded={open} aria-controls={`category-${category.id}`} onClick={() => setOpen(!open)}><ReferenceIcon name={open ? 'down' : 'right'} size="sm" /></button>}
+    </div>
+    {!!category.children?.length && <div id={`category-${category.id}`} className="catalog-children" hidden={!open}>{category.children.map((child) => <CategoryNode key={child.id} category={child} selected={selected} onSelect={onSelect} depth={depth + 1} />)}</div>}
+  </div>;
 }
 
 function ProductViewTabs({ view, onChange }: { view: 'catalog' | 'shop'; onChange: (view: 'catalog' | 'shop') => void }) {
   return <div className="product-view-tabs" role="group" aria-label="Product view"><button type="button" className={view === 'catalog' ? 'active' : ''} aria-pressed={view === 'catalog'} onClick={() => onChange('catalog')}>Browse catalog</button><button type="button" className={view === 'shop' ? 'active' : ''} aria-pressed={view === 'shop'} onClick={() => onChange('shop')}>My shop listings</button></div>;
 }
 
-function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') => void; onAdded: () => void }) {
+function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view: 'catalog' | 'shop') => void; onAdded: () => void; onImport: () => void; refreshKey: number }) {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -43,10 +71,22 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
   const [bulkResult, setBulkResult] = useState<UploadResult | null>(null);
   const [bulkRequest, setBulkRequest] = useState<{ requestId: string; items: BulkItem[] } | null>(null);
   const [revision, setRevision] = useState(0);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [sort, setSort] = useState('az');
+  const reviewRef = useRef<HTMLElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const selectedCount = Object.keys(selected).length;
   const activePath = categoryPath(categories, categoryId);
   const activeCategory = activePath.at(-1);
   const eligibleItems = result?.items.filter((item) => !item.alreadyListed) ?? [];
   const allVisibleSelected = eligibleItems.length > 0 && eligibleItems.every((item) => !!selected[item.productId]);
+  const visibleItems = [...(result?.items ?? [])].sort((a, b) => sort === 'az' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+  useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = !allVisibleSelected && eligibleItems.some((item) => !!selected[item.productId]); }, [selected, result, allVisibleSelected]);
+  const chooseCategory = (id: string) => { setCategoryId(id); setPage(1); };
+  const reviewSelection = () => {
+    reviewRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    reviewRef.current?.focus({ preventScroll: true });
+  };
 
   const toggleSelected = (item: CatalogItem) => setSelected((current) => {
     const next = { ...current };
@@ -66,6 +106,16 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
     try {
       let batch = bulkRequest;
       if (!retry || !batch) {
+        for (const { item, price, stock } of Object.values(selected)) {
+          for (const field of ['price', 'stock'] as const) {
+            try { if (field === 'price') parseRupees(price); else parseStock(stock); }
+            catch (cause) {
+              setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], error: errorMessage(cause), invalidField: field } }));
+              document.getElementById(`catalog-${field}-${item.productId}`)?.focus();
+              return;
+            }
+          }
+        }
         const items = Object.values(selected).map(({ item, price, stock }) => ({ rowId: item.productId, productId: item.productId, pricePaisa: parseRupees(price), stockQuantity: parseStock(stock) }));
         if (!items.length) throw Error('Select at least one available catalogue product.');
         batch = { requestId: crypto.randomUUID(), items }; setBulkRequest(batch);
@@ -120,30 +170,58 @@ function CatalogPage({ onView, onAdded }: { onView: (view: 'catalog' | 'shop') =
       .catch((cause: Error) => { if (active) setError(cause.message || 'The catalog could not be loaded.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [page, query, categoryId, revision]);
+  }, [page, query, categoryId, revision, refreshKey]);
 
-  return <div>
+  return <div className="catalog-workspace">
     <section className="page-heading">
-      <div><div className="kicker">Catalogue &amp; inventory</div><h1>Products</h1><p>Browse the shared catalog, then add products with your shop's price and stock.</p></div>
-      <div className="heading-actions"><input className={inputCls} type="search" aria-label="Search catalog" placeholder="Search catalog products…" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+      <div><h1>Products</h1><p>Find the right products. Set your price. Stock your shop.</p></div>
+      <button className="btn catalog-import" type="button" aria-label="Import products" onClick={onImport}><ReferenceIcon name="upload" size="sm" /><span>Import products</span></button>
     </section>
     <ProductViewTabs view="catalog" onChange={onView} />
     <div className="catalog-layout catalog-bulk-layout">
-    <aside className="catalog-categories" aria-label="Catalog categories"><h2>Categories</h2><button type="button" className={!categoryId ? 'active' : ''} aria-pressed={!categoryId} onClick={() => { setCategoryId(''); setPage(1); }}>All products</button>{categories.map((category) => <CategoryNode key={category.id} category={category} selected={categoryId} onSelect={(id) => { setCategoryId(id); setPage(1); }} />)}{categoryError && <p role="alert">{categoryError} <button type="button" onClick={() => setRevision((value) => value + 1)}>Retry</button></p>}</aside>
-    <div className="catalog-results"><h2 className="catalog-section-title">{activePath.length ? activePath.map((category) => category.name).join(' / ') : 'All products'}</h2><div className="catalog-summary" role="status">{result ? `${result.total.toLocaleString()} products${activeCategory?.children?.length ? ' including subsections' : ''}` : 'Loading catalog products…'}{loading && result && <span className="muted"> · Refreshing…</span>}</div><button type="button" className="btn catalog-select-visible" disabled={loading || !eligibleItems.length || !!bulkRequest} onClick={selectVisible}>{allVisibleSelected ? 'Deselect visible products' : 'Select visible products'} ({eligibleItems.length} eligible)</button>
+    <aside className={`catalog-categories ${categoriesOpen ? 'is-open' : ''}`} aria-label="Catalog categories">
+      <div className="catalog-category-heading"><h2>Categories</h2><span>{categories.length || ''}</span><button className="catalog-mobile-categories" type="button" aria-expanded={categoriesOpen} aria-controls="catalog-category-list" onClick={() => setCategoriesOpen(!categoriesOpen)}>{categoriesOpen ? 'Hide categories' : 'Change category'}<ReferenceIcon name={categoriesOpen ? 'up' : 'down'} size="sm" /></button></div>
+      <div id="catalog-category-list"><button type="button" className={`catalog-all ${!categoryId ? 'active' : ''}`} aria-pressed={!categoryId} onClick={() => chooseCategory('')}><ReferenceIcon name="grid" size="sm" />All products</button>{categories.map((category) => <CategoryNode key={category.id} category={category} selected={categoryId} onSelect={chooseCategory} />)}</div>
+      {categoryError && <p role="alert">{categoryError} <button type="button" onClick={() => setRevision((value) => value + 1)}>Retry categories</button></p>}
+      <div className="catalog-category-help"><strong>A shared catalogue.<br />Your own shop.</strong><p>Select products from any section. Your selection stays here while you browse.</p></div>
+    </aside>
+    <section className="catalog-results" aria-labelledby="catalog-section-title">
+      <div className="catalog-path">{activePath.length > 1 ? activePath.slice(0, -1).map((category) => category.name).join(' / ') : 'Shared catalogue'}<ReferenceIcon name="right" size="sm" /></div>
+      <div className="catalog-results-heading"><h2 id="catalog-section-title" className="catalog-section-title">{activeCategory?.name || 'All products'}</h2><div className="catalog-summary" role="status">{result ? `${result.total.toLocaleString()} products${activeCategory?.children?.length ? ' including subsections' : ''}` : 'Loading…'}{loading && result && <span> · Refreshing…</span>}</div></div>
+      <div className="catalog-tools"><label className="catalog-search"><span className="sr-only">Search catalog</span><ReferenceIcon name="search" size="sm" /><input className={inputCls} type="search" placeholder="Search this category…" value={search} onChange={(event) => setSearch(event.target.value)} /></label><label className="catalog-sort"><span className="sr-only">Sort products on this page</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="az">A–Z · this page</option><option value="za">Z–A · this page</option></select></label></div>
+      <div className="catalog-selection-tools"><label className="catalog-select-visible"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} disabled={loading || !!error || !eligibleItems.length || !!bulkRequest} onChange={selectVisible} />{allVisibleSelected ? 'Deselect visible' : 'Select visible'}</label><span>Already listed products can’t be selected</span></div>
     {error && <div className="panel catalog-error" role="alert"><p>{error}</p><button type="button" className="btn" onClick={() => setRevision((value) => value + 1)}>Retry</button></div>}
     {loading && !result ? <LoadingFrame label="Loading catalog products"><div className="catalog-grid">{Array.from({ length: 8 }, (_, index) => <CardSkeleton key={index} />)}</div></LoadingFrame> : null}
-    {result && result.items.length > 0 && <div className="catalog-grid">{result.items.map((item) => <article className="catalog-card" key={item.productId}>
-      <div className="catalog-image">{item.imageUrl ? <img src={item.imageUrl} alt={item.name} loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : <ReferenceIcon name="package" size="lg" />}</div>
-      <div className="catalog-card-body"><span className="catalog-category">{item.category?.name || 'Product'}</span><h2 title={item.name}>{item.name}</h2><p>{[item.brand, item.size ?? item.unit].filter(Boolean).join(' · ') || 'Catalog item'}</p>
-        {item.alreadyListed ? <button type="button" className="btn" onClick={() => onView('shop')}>Already in my shop</button> : <label className="catalog-select"><input type="checkbox" aria-label={`Select product: ${item.name}`} disabled={!!bulkRequest || loading} checked={!!selected[item.productId]} onChange={() => toggleSelected(item)} /> Select product</label>}
-      </div>
+    {result && result.items.length > 0 && <div className="catalog-grid">{visibleItems.map((item) => <article className={`catalog-card ${selected[item.productId] ? 'is-selected' : ''} ${item.alreadyListed ? 'is-listed' : ''}`} key={item.productId}>
+      <input id={`catalog-pick-${item.productId}`} className="catalog-card-checkbox" type="checkbox" aria-label={item.alreadyListed ? `Already in my shop: ${item.name}` : `Select product: ${item.name}`} disabled={item.alreadyListed || !!bulkRequest || loading || !!error} checked={!!selected[item.productId]} onChange={() => toggleSelected(item)} />
+      <label htmlFor={`catalog-pick-${item.productId}`} className="catalog-card-label"><span className="catalog-image"><CatalogPicture item={item} /></span><span className="catalog-card-body"><span className="catalog-product-name">{item.name}</span><span className="catalog-product-meta">{[item.brand, item.size ?? item.unit].filter(Boolean).join(' · ') || item.category?.name || 'Catalog item'}</span><span className="catalog-product-status">{(item.alreadyListed || selected[item.productId]) && <ReferenceIcon name="check" size="sm" />}{item.alreadyListed ? 'In your shop' : selected[item.productId] ? 'Selected' : 'Select product'}</span></span></label>
     </article>)}</div>}
     {!loading && result?.items.length === 0 && !error && <div className="panel catalog-empty"><p>{query ? `No catalog products match “${query}”${activeCategory ? ` in ${activeCategory.name}` : ''}.` : `No products are available${activeCategory ? ` in ${activeCategory.name}` : ''}.`}</p><button type="button" className="btn" onClick={() => { setSearch(''); setQuery(''); setCategoryId(''); setPage(1); }}>Show all products</button></div>}
     {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Catalog pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}><UiIcon name="back" /> Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next <UiIcon name="arrow" /></button></nav>}
+    </section>
+    <aside ref={reviewRef} tabIndex={-1} className="catalog-review" aria-label="Selected products">
+      <div className="catalog-review-heading"><h2>Ready for your shop <span>{selectedCount}</span></h2><p>Set the selling price and stock for each product.</p></div>
+      <div className="catalog-review-items">
+        {!selectedCount && <div className="catalog-review-empty"><ReferenceIcon name="basket" size="lg" /><h3>Start with a product</h3><p>Select a product to set its price and stock here.</p></div>}
+        {Object.values(selected).map(({ item, price, stock, error: rowError, invalidField }) => <div className="catalog-review-item" key={item.productId}>
+          <div className="catalog-review-item-title"><span className="catalog-review-thumb"><CatalogPicture item={item} /></span><div><strong>{item.name}</strong><span>{item.size ?? item.unit ?? item.brand}</span></div><button type="button" className="catalog-remove" disabled={!!bulkRequest} onClick={() => { toggleSelected(item); reviewRef.current?.focus({ preventScroll: true }); }} aria-label={`Remove ${item.name} from selection`}><ReferenceIcon name="close" size="sm" /></button></div>
+          <div className="catalog-review-fields">
+            <label htmlFor={`catalog-price-${item.productId}`}>Sale price (Rs)<input id={`catalog-price-${item.productId}`} className={inputCls} aria-label={`Sale price (Rs) for ${item.name}`} aria-invalid={invalidField === 'price' || undefined} aria-describedby={rowError ? `catalog-error-${item.productId}` : undefined} inputMode="decimal" placeholder="0.00" value={price} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], price: event.target.value, error: undefined, invalidField: undefined } }))} /></label>
+            <label htmlFor={`catalog-stock-${item.productId}`}>Stock quantity<input id={`catalog-stock-${item.productId}`} className={inputCls} aria-label={`Stock quantity for ${item.name}`} aria-invalid={invalidField === 'stock' || undefined} aria-describedby={rowError ? `catalog-error-${item.productId}` : undefined} inputMode="numeric" placeholder="0" value={stock} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], stock: event.target.value, error: undefined, invalidField: undefined } }))} /></label>
+          </div>{rowError && <p className="catalog-field-error" id={`catalog-error-${item.productId}`} role="alert">{rowError}</p>}
+        </div>)}
+      </div>
+      <p className="catalog-selection-note"><ReferenceIcon name="info" size="sm" />Selections stay when you change categories.</p>
+      <div className="catalog-review-footer">
+        <div className="catalog-review-total" role="status"><span>Products selected</span><strong>{selectedCount}</strong></div>
+        {bulkError && <p className="inline-error" role="alert">{bulkError}</p>}
+        {bulkResult && <div className="catalog-bulk-result" role="status"><p>{bulkResult.created} added · {bulkResult.skipped} skipped · {bulkResult.failed.length} failed</p>{bulkResult.rows.filter((row) => row.error).map((row) => <p key={row.rowId}>{selected[row.rowId]?.item.name || row.rowId}: {row.error}</p>)}</div>}
+        {bulkRequest ? <><p className="catalog-retry-note">This selection is locked until its saved result is checked.</p><button type="button" className="btn primary" disabled={bulkBusy} onClick={() => void submitSelected(true)}>{bulkBusy ? 'Checking…' : 'Retry same selection'}</button>{bulkResult?.failed.length ? <button type="button" className="btn" disabled={bulkBusy} onClick={() => { setBulkRequest(null); setBulkResult(null); setBulkError(''); }}>Edit failed rows</button> : null}</> : <button type="button" className="btn primary" disabled={bulkBusy} onClick={() => void submitSelected()}>{bulkBusy ? 'Adding…' : `Add ${selectedCount} ${selectedCount === 1 ? 'product' : 'products'} to shop`}<ReferenceIcon name="arrow" size="sm" /></button>}
+        <p className="catalog-action-note">Products are added only after the server confirms.</p>
+      </div>
+    </aside>
     </div>
-    <aside className="catalog-review" aria-label="Selected products"><h2>Review selected products <span>{Object.keys(selected).length}</span></h2>{!Object.keys(selected).length && <p>Select products from the visible page to set their sale price and stock.</p>}{Object.values(selected).map(({ item, price, stock }) => <div className="catalog-review-item" key={item.productId}><strong>{item.name}</strong><button type="button" className="btn tiny" disabled={!!bulkRequest} onClick={() => toggleSelected(item)} aria-label={`Remove ${item.name} from selection`}>Remove</button><label>Sale price (Rs)<input className={inputCls} inputMode="decimal" value={price} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], price: event.target.value } }))} /></label><label>Stock quantity (units)<input className={inputCls} inputMode="numeric" value={stock} disabled={!!bulkRequest} onChange={(event) => setSelected((current) => ({ ...current, [item.productId]: { ...current[item.productId], stock: event.target.value } }))} /></label></div>)}{bulkError && <p className="inline-error" role="alert">{bulkError}</p>}{bulkResult && <div role="status"><p>{bulkResult.created} added · {bulkResult.skipped} skipped · {bulkResult.failed.length} failed</p>{bulkResult.rows.filter((row) => row.error).map((row) => <p key={row.rowId}>{row.rowId}: {row.error}</p>)}</div>}{bulkRequest ? <><button type="button" className="btn primary" disabled={bulkBusy} onClick={() => void submitSelected(true)}>{bulkBusy ? 'Checking…' : 'Retry same selection'}</button>{bulkResult?.failed.length ? <button type="button" className="btn" disabled={bulkBusy} onClick={() => { setBulkRequest(null); setBulkResult(null); setBulkError(''); }}>Edit failed rows</button> : null}</> : <button type="button" className="btn primary" disabled={bulkBusy || !Object.keys(selected).length} onClick={() => void submitSelected()}>{bulkBusy ? 'Adding…' : `Add ${Object.keys(selected).length} selected`}</button>}</aside>
-    </div>
+    <div className="catalog-mobile-review"><span><strong>{selectedCount}</strong> selected</span><button className="btn primary" type="button" onClick={reviewSelection}>Review selection<ReferenceIcon name="arrow" size="sm" /></button></div>
   </div>;
 }
 
@@ -221,7 +299,7 @@ export default function Products() {
 
   const visible = items;
 
-  if (view === 'catalog') return <><CatalogPage onView={setView} onAdded={() => setRevision((value) => value + 1)} />{node}</>;
+  if (view === 'catalog') return <><CatalogPage onView={setView} onAdded={() => setRevision((value) => value + 1)} onImport={() => setBulkOpen(true)} refreshKey={revision} />{bulkOpen && <BulkImport onClose={() => setBulkOpen(false)} onSaved={() => setRevision((value) => value + 1)} />}{node}</>;
 
   return (
     <div className="products-shop">
