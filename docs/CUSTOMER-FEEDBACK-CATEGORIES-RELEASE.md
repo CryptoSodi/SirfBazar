@@ -22,7 +22,7 @@ Web hosts follow native dialogs, modal panels and fullscreen. Native modal hosts
 - Customer web production build and merchant production build passed.
 - Admin and standalone POS TypeScript passed; Vite builds passed with `--configLoader runner` (the default config bundler encounters a Windows permissions issue locally).
 - Customer, merchant and rider native TypeScript passed.
-- 90 automated tests passed: customer web 12, merchant web 23, customer native 45, merchant native 7, standalone POS 3. Rider has no matching automated test suite.
+- 90 automated tests passed: customer web 9, merchant web 23, customer native 48, merchant native 7, standalone POS 3. The native policy tests also cover the rider error helper; rider has no separate screen test suite.
 - Mocked customer browser journey: friendly error redaction, no inline action error, valid basket/UUID/quote payload, unchanged retry after reload, child-category API filtering, and no overflow at 320/390/768/1440 px.
 - Toast remained visible after 5.5 seconds, moved inside a top-layer dialog and returned to the body when the dialog closed.
 - Mocked merchant catalogue regression: category filtering, bulk selection, partial retry, keyboard/focus, dialog draft retention, dark appearance, and responsive widths 320–1440 px.

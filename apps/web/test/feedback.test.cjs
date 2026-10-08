@@ -7,7 +7,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '../../..');
 function load(file) { const module = { exports: {} }; vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module, exports: module.exports }); return module.exports; }
 const source = fs.readFileSync(path.join(root,'apps/web/lib/friendly-error.ts'),'utf8').replace(/\r/g,'');
-for (const app of ['web','shop','admin','pos','customer-app','merchant-app','rider-app']) {
+for (const app of ['web','shop','admin','pos']) {
   const folder = ['shop','admin','pos'].includes(app) ? 'src/lib' : 'lib';
   const file = path.join(root,'apps',app,folder,'friendly-error.ts');
   test(`${app}: plain-language policy parity and validation redaction`, () => {
