@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
@@ -26,7 +27,7 @@ export default function Coupons() {
         <h1 className="text-xl font-bold">Coupons</h1>
         <button className={btnCls} onClick={() => setCreating(true)}>+ New coupon</button>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Code', 'Title', 'Discount', 'Min order', 'Validity', 'Used', 'Status', '']}>
         {items.map((c) => (
           <tr key={c.id} className="hover:bg-slate-50">

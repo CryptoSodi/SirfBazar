@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastMessage } from '@/components/Toast';
 import { AppIcon, type AppIconName } from './AppIcon';
 
 import dynamic from 'next/dynamic';
@@ -177,7 +178,7 @@ export function AddressForm({
         Set as default delivery address
       </label>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <div className="flex gap-2">
         <button className="btn-primary text-sm" onClick={save} disabled={busy}>
           {busy ? 'Saving…' : initial?.id ? 'Save changes' : 'Save address'}

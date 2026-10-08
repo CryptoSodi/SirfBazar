@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastMessage } from '@/components/Toast';
 import { AppIcon } from './AppIcon';
 import { AppIcon as UiIcon } from './AppIcon';
 
@@ -130,7 +131,7 @@ export function MapPicker({
 
         <div className="border-t border-stone-200 p-4">
           <p className="mb-2 text-xs text-stone-500">Move the map so the pin sits on your doorstep. Use the map keyboard controls, then select its center.</p>
-          {error && <p role="alert" className="mb-2 text-sm text-red-700">{error}</p>}
+          {error && <ToastMessage>{error}</ToastMessage>}
           <button type="button" className="btn-secondary mb-2 w-full" onClick={() => { syncCenter(); setChosen(true); }}>Select map center</button>
           <button
             className="btn-primary w-full"

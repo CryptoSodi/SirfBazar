@@ -1,4 +1,5 @@
 import { clearMemory, invalidateMemory } from './memoryCache';
+import { friendlyError } from './friendly-error';
 
 const configuredApiUrl = (import.meta.env?.VITE_API_URL || '').trim();
 
@@ -25,13 +26,13 @@ export const API_URL = configuredApiUrl;
 export type ApiErrorKind = 'config' | 'network' | 'timeout' | 'unauthorized' | 'permission' | 'http' | 'contract';
 export class ApiError extends Error {
   constructor(public kind: ApiErrorKind, message: string, public status?: number) {
-    super(message);
+    super(friendlyError(message, status));
     this.name = 'ApiError';
   }
 }
 
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'An unexpected error occurred.';
+  return friendlyError(error);
 }
 
 const LS = { access: 'sbs.accessToken', refresh: 'sbs.refreshToken', user: 'sbs.user' };
@@ -142,7 +143,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     /* empty */
   }
   if (!res.ok) {
-    const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
+    const msg = friendlyError(data?.message, res.status, path, data?.code);
     if (res.status === 401) throw new ApiError('unauthorized', 'Your session needs to be renewed. Sign in and refresh this record before retrying.', 401);
     if (res.status === 403) throw new ApiError('permission', `Your merchant account does not have permission for this action. ${msg}`, 403);
     throw new ApiError('http', msg, res.status);
@@ -179,7 +180,7 @@ async function authenticatedFileRequest(path: string, init: RequestInit): Promis
   if (!response.ok) {
     let data: any = null;
     try { data = await response.json(); } catch { /* non-JSON response */ }
-    const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${response.status})`;
+    const message = friendlyError(data?.message, response.status, path, data?.code);
     if (response.status === 401) throw new ApiError('unauthorized', 'Your session needs to be renewed. Sign in again before retrying.', 401);
     if (response.status === 403) throw new ApiError('permission', `Your merchant account does not have permission for this action. ${message}`, 403);
     throw new ApiError('http', message, response.status);

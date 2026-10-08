@@ -4,6 +4,7 @@ import Image from 'next/image';
 import './globals.css';
 import 'leaflet/dist/leaflet.css';
 import { Header } from '@/components/Header';
+import { ToastHost } from '@/components/Toast';
 
 export const metadata: Metadata = {
   icons: { icon: '/brand/sirfbazar-basket.svg' },
@@ -19,6 +20,7 @@ const footerLinks = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <html lang="en" suppressHydrationWarning><body>
     <Header />
+    <ToastHost />
     <main className="sb-app-main">{children}</main>
     <footer className="sb-footer"><div className="sb-site-container">
       <Image src="/brand/sirfbazar-horizontal-no-slogan.svg" alt="SirfBazar" width={154} height={39} className="sb-footer-brand" />

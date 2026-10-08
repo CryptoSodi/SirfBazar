@@ -1,4 +1,5 @@
 'use client';
+import { ToastMessage } from '@/components/Toast';
 import { AppIcon as UiIcon } from '../../components/AppIcon';
 
 
@@ -63,7 +64,7 @@ export default function CartPage() {
     </section>)}<p className="sb-cart-info">Prices and stock are checked again before placement. Adding another shop keeps your existing basket.</p></div>
     <aside className="card sb-cart-summary"><h2>Your order summary</h2><dl><div><dt>Items subtotal ({cart.itemCount})</dt><dd>{formatPKR(cart.subtotalPaisa)}</dd></div>{cart.groups.map((group: any) => <div key={group.merchant.id}><dt>{group.merchant.shopName} delivery</dt><dd>{formatPKR(group.deliveryFeePaisa)}</dd></div>)}<div><dt>Service fee</dt><dd>{formatPKR(cart.serviceFeePaisa)}</dd></div>{cart.smallOrderFeePaisa > 0 && <div><dt>Small order fee</dt><dd>{formatPKR(cart.smallOrderFeePaisa)}</dd></div>}{cart.discountPaisa > 0 && <div><dt>Discount</dt><dd>−{formatPKR(cart.discountPaisa)}</dd></div>}<div className="sb-total"><dt>Estimated total</dt><dd>{formatPKR(cart.totalPaisa)}</dd></div></dl><p className="sb-muted mt-3">Delivery will be checked against your final address.</p>
       {blocked && <div className="sb-cart-warning" role="alert">One or more items changed. Review their price and availability before continuing.</div>}
-      {error && <p className="sb-error" role="alert">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <button className="btn-primary mt-4 w-full" onClick={() => blocked ? setReviewedUpdates(true) : router.push('/checkout')} disabled={busy}>{blocked ? 'I’ve reviewed the update' : <>Continue to checkout <UiIcon name="arrow" size={18} /></>}</button><p className="sb-muted mt-3 text-center">Sign in or create an account only at checkout.</p>
       <details className="sb-coupon"><summary>Have a coupon?</summary><div><label className="sr-only" htmlFor="coupon-code">Coupon code</label><input id="coupon-code" className="input" value={coupon} onChange={(e) => setCoupon(e.target.value.toUpperCase())} placeholder="Coupon code" /><button className="btn-secondary" onClick={() => void applyCoupon()} disabled={busy}>Apply</button></div>{cart.couponError && <p role="alert" className="sb-error">{cart.couponError}</p>}</details>
       <p className="sb-cart-info">{cart.groups.length === 1 ? 'One shop, one delivery. You’ll see each shop’s progress.' : `Items from ${cart.groups.length} shops arrive in separate deliveries. You’ll see each shop’s progress.`}</p>

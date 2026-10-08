@@ -1,3 +1,4 @@
+import { ToastHost, ToastMessage } from './Toast';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -179,12 +180,12 @@ export function LoginSheet({ visible, onClose, onSuccess, reason = 'account', on
                   <Text style={s.btnText}>{busy ? 'Checking basket…' : 'Check basket again'}</Text>
                 </TouchableOpacity>
               </>)}
-            {!!error && <View style={{ marginTop: 16 }}><Notice danger>{error}</Notice></View>}
+            {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error}</ToastMessage></View>}
             <TouchableOpacity accessibilityRole="button" style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 13 }} disabled={busy} onPress={onClose}>
               <Text style={{ color: colors.muted, fontSize: 13 }}>Continue shopping instead</Text>
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
-    </Modal>);
+    <ToastHost active={visible} /></Modal>);
 }

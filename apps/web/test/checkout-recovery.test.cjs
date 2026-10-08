@@ -44,3 +44,12 @@ test('uncertain/auth/conflict results retain recovery; definitive no-write rejec
   assert.equal(isDefinitiveNoWrite(404), true); // only when returned by the saved POST; a GET 404 never calls this helper
   assert.equal(isDefinitiveNoWrite(undefined), false);
 });
+
+test('checkout cannot persist malformed request identity or a missing cart', () => {
+  const { recovery } = harness();
+  for (const payload of [ { ...record().payload, requestId: 'not-a-uuid' }, { ...record().payload, cartId: '' }, { ...record().payload, cartId: undefined }, { ...record().payload, approvedQuote: '' } ]) {
+    assert.equal(recovery.validCheckoutPayload(payload), false);
+    assert.throws(() => recovery.saveCheckoutRecovery({ ...record(), payload }), /basket.*verified/);
+  }
+  assert.equal(recovery.validCheckoutPayload(record().payload), true);
+});

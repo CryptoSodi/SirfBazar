@@ -61,7 +61,7 @@ export function RecoveryCodeForm({ email, pending, preview = false, deliveryMess
 
 function RequestError({ error }: { error: Error | null }) {
   if (!error) return null
-  return <p role="alert" className="recovery-request-error">{error instanceof ApiError ? error.message : 'Unable to complete the request. Please try again.'}</p>
+  return <ToastMessage>{error instanceof ApiError ? error.message : 'Unable to complete the request. Please try again.'}</ToastMessage>
 }
 
 export default function RecoveryPage({ previewCode = false }: { previewCode?: boolean }) {
@@ -135,3 +135,4 @@ export default function RecoveryPage({ previewCode = false }: { previewCode?: bo
     <dialog className="information-dialog" ref={dialog} aria-labelledby="recovery-notice-title" onClick={event => { if (event.target === dialog.current) dialog.current.close() }}><h2 id="recovery-notice-title">{info[notice][0]}</h2><p>{info[notice][1]}</p><button className="primary-action" onClick={() => dialog.current?.close()}>Close</button></dialog>
   </div>
 }
+import { ToastMessage } from '../components/Toast';

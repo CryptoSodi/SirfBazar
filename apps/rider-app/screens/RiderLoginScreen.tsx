@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
@@ -76,7 +77,7 @@ export default function RiderLoginScreen() {
     <Field label="Sign-in code" value={code} onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" placeholder="••••••" maxLength={6} style={{ marginTop: 16 }} />
     <LinkButton onPress={() => void sendCode()} style={{ marginTop: 20 }}>Resend code</LinkButton>
     <Note icon="shield" style={{ marginTop: 22 }}>This signs you in. A customer’s delivery code is requested later, at drop-off.</Note>
-    {!!message && <Note tone="red" style={{ marginTop: 12 }}>{message}</Note>}
+    {!!message && <ToastMessage>{message}</ToastMessage>}
   </Page>;
   return <Page>
     <View style={{ height: 166, borderRadius: 22, backgroundColor: palette.mint, alignItems: 'center', justifyContent: 'center', marginTop: 12, overflow: 'hidden' }}><View style={{ width: 88, height: 88, backgroundColor: palette.action, borderRadius: 25, justifyContent: 'center', alignItems: 'center' }}><Icon name="box" color="#FFFFFF" size={42} /></View><View style={{ position: 'absolute', bottom: 23, right: 20, backgroundColor: palette.surface, borderColor: palette.line, borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: 'row', gap: 8, alignItems: 'center' }}><Icon name="check" color={palette.accent} size={17} /><Text style={{ color: palette.ink, fontWeight: '700', fontSize: 12 }}>Your shop. Your deliveries.</Text></View></View>
@@ -87,7 +88,7 @@ export default function RiderLoginScreen() {
     <Button variant="secondary" onPress={() => void google()} disabled={busy}>Continue with Google</Button>
     <Body muted small style={{ textAlign: 'center', marginTop: 24 }}>New rider? Sign in first, then request to join your shop.</Body>
     <Image source={mode === 'dark' ? require('../assets/brand/rider-slogan-dark.png') : require('../assets/brand/rider-slogan-light.png')} resizeMode="contain" style={{ width: 158, height: 30, alignSelf: 'center', marginTop: 20 }} accessibilityLabel="بازار وہی۔ طریقہ نیا۔" />
-    {!!message && <Note tone="red" style={{ marginTop: 14 }}>{message}</Note>}
+    {!!message && <ToastMessage>{message}</ToastMessage>}
     <Sheet visible={!!newGoogleToken} title="Join a delivery team?" onClose={() => setNewGoogleToken(null)}><Body muted>This Google account is not linked to a rider yet. If your shop added you by phone, choose Not now and sign in with that number. Otherwise, continue to request to join your shop.</Body><Button onPress={() => void createGoogleIdentity()} disabled={busy} style={{ marginTop: 16 }}>Continue as new rider</Button><Button variant="secondary" onPress={() => setNewGoogleToken(null)} style={{ marginTop: 10 }}>Not now</Button></Sheet>
   </Page>;
 }

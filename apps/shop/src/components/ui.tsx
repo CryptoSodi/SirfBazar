@@ -33,25 +33,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   return createPortal(<dialog ref={dialogRef} className="drawer" aria-label={title} onCancel={(event) => { event.preventDefault(); closeRef.current(); }} onClick={(event) => { if (event.target === event.currentTarget) closeRef.current(); }}><div className="dialog-inner"><div className="dialog-head"><div><div className="kicker">Merchant workspace</div><h2>{title}</h2></div><button type="button" data-modal-close className="icon-btn" aria-label={`Close ${title}`} onClick={() => closeRef.current()}><ReferenceIcon name="close" /></button></div><div className="dialog-body">{children}</div></div></dialog>, document.body);
 }
 
-export function useToast() {
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  const [target, setTarget] = useState<HTMLElement | null>(null);
-  useEffect(() => {
-    const update = () => {
-      const dialogs = Array.from(document.querySelectorAll<HTMLDialogElement>('dialog[open]'));
-      setTarget(dialogs.at(-1) ?? (document.fullscreenElement as HTMLElement | null) ?? document.body);
-    };
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
-    document.addEventListener('fullscreenchange', update);
-    return () => { observer.disconnect(); document.removeEventListener('fullscreenchange', update); };
-  }, []);
-  useEffect(() => { if (!msg || !msg.ok) return; const timer = setTimeout(() => setMsg(null), 3500); return () => clearTimeout(timer); }, [msg]);
-  const toast = useCallback((text: string, ok = true) => setMsg({ text, ok }), []);
-  const node = target ? createPortal(<div className="toast-region" role="status" aria-live="polite" aria-atomic="true">{msg && <div role={msg.ok ? undefined : 'alert'} className="toast">{msg.text}{!msg.ok && <button type="button" className="btn tiny" aria-label="Dismiss error" onClick={() => setMsg(null)}>Dismiss</button>}</div>}</div>, target) : null;
-  return { toast, node };
-}
+export { useToast } from './Toast';
 
 export const inputCls = 'field-control';
 export const btnCls = 'btn primary';

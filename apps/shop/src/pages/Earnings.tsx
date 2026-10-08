@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useEffect, useState } from 'react';
 import { api, pkr } from '../lib/api';
@@ -66,7 +67,7 @@ export default function Earnings() {
       </div>
 
       <section className="panel" style={{ marginTop: 20 }}><div className="panel-head"><div><h2>Settlement history</h2><p>Recorded payouts for your shop.</p></div></div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <div className="mt-3">
         <Table headers={['Period', 'Amount', 'Status', 'Paid at', 'Reference', 'Created', '']}>
           {items.map((s) => (

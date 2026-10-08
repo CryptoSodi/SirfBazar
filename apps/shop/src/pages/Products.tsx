@@ -214,7 +214,7 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
       <p className="catalog-selection-note"><ReferenceIcon name="info" size="sm" />Selections stay when you change categories.</p>
       <div className="catalog-review-footer">
         <div className="catalog-review-total" role="status"><span>Products selected</span><strong>{selectedCount}</strong></div>
-        {bulkError && <p className="inline-error" role="alert">{bulkError}</p>}
+        {bulkError && <ToastMessage>{bulkError}</ToastMessage>}
         {bulkResult && <div className="catalog-bulk-result" role="status"><p>{bulkResult.created} added · {bulkResult.skipped} skipped · {bulkResult.failed.length} failed</p>{bulkResult.rows.filter((row) => row.error).map((row) => <p key={row.rowId}>{selected[row.rowId]?.item.name || row.rowId}: {row.error}</p>)}</div>}
         {bulkRequest ? <><p className="catalog-retry-note">This selection is locked until its saved result is checked.</p><button type="button" className="btn primary" disabled={bulkBusy} onClick={() => void submitSelected(true)}>{bulkBusy ? 'Checking…' : 'Retry same selection'}</button>{bulkResult?.failed.length ? <button type="button" className="btn" disabled={bulkBusy} onClick={() => { setBulkRequest(null); setBulkResult(null); setBulkError(''); }}>Edit failed rows</button> : null}</> : <button type="button" className="btn primary" disabled={bulkBusy} onClick={() => void submitSelected()}>{bulkBusy ? 'Adding…' : `Add ${selectedCount} ${selectedCount === 1 ? 'product' : 'products'} to shop`}<ReferenceIcon name="arrow" size="sm" /></button>}
         <p className="catalog-action-note">Products are added only after the server confirms.</p>
@@ -744,3 +744,4 @@ function AddCatalogItem({
     </Modal>
   );
 }
+import { ToastMessage } from '../components/Toast';

@@ -52,6 +52,7 @@ function apiHarness(fetcher) {
   const storage = { getItem: async (key) => values.get(key) ?? null, setItem: async (key, value) => values.set(key, value),
     removeItem: async (key) => values.delete(key), multiRemove: async (keys) => keys.forEach((key) => values.delete(key)) };
   const api = load('api', {
+    './friendly-error': load('friendly-error'),
     '@react-native-async-storage/async-storage': { default: storage },
     './credentials': { readCredential: storage.getItem, writeCredential: storage.setItem, removeCredential: storage.removeItem },
     './customer-events': { publishCustomerEvent: () => {} },

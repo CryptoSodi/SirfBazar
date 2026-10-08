@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useState } from 'react';
 import { AppIcon } from '../components/AppIcon';
 import { categoryIconChoices, categoryIconName } from '../lib/category-icons';
@@ -27,7 +28,7 @@ export default function Categories() {
         <h1 className="text-xl font-bold">Categories</h1>
         <button className={btnCls} onClick={() => setEditing('new')}>+ New category</button>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Category', 'Parent section', 'Slug', 'Products', 'Sort', 'Status', '']}>
         {items.map((c) => (
           <tr key={c.id} className="hover:bg-slate-50">

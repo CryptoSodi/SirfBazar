@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { IconLabel } from '../components/IconLabel';
 import { RouteProp, useRoute } from '@react-navigation/native';
@@ -18,7 +19,7 @@ export default function DeliveryScreen() {
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(() => {
-    api.get(`/rider/orders/${route.params.orderId}`).then(setOrder).catch((e) => alert(e.message));
+    api.get(`/rider/orders/${route.params.orderId}`).then(setOrder).catch((e) => toast(e.message, false));
   }, [route.params.orderId]);
 
   useEffect(load, [load]);
@@ -58,7 +59,7 @@ export default function DeliveryScreen() {
       await api.post(`/rider/orders/${route.params.orderId}/${action}`, body ?? {});
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -177,7 +178,7 @@ export default function DeliveryScreen() {
             style={s.btnDanger}
             onPress={async () => {
               await act('report-issue', { description: 'Issue during delivery — needs support attention' });
-              alert('Issue reported to the shop and support.');
+              toast('Issue reported to the shop and support.', true);
             }}
           >
             <IconLabel icon="warning" style={s.btnDangerText}>Report an issue</IconLabel>

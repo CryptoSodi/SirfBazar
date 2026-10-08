@@ -1,3 +1,4 @@
+import { friendlyError } from './friendly-error';
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 const LS = { access: 'sba.accessToken', refresh: 'sba.refreshToken', user: 'sba.user' };
@@ -51,7 +52,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     /* empty */
   }
   if (!res.ok) {
-    const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
+    const msg = friendlyError(data?.message, res.status, path, data?.code);
     throw new Error(msg);
   }
   return data;

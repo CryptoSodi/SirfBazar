@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
 import { Image, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -48,7 +49,7 @@ export default function DashboardScreen() {
 
   const toggleOnline = async (value: boolean) => {
     try { await api.post(`/merchant/${value ? 'online' : 'offline'}`); load(); }
-    catch (e: any) { alert(e.message); }
+    catch (e: any) { toast(e.message, false); }
   };
 
   if (!stats) return <SafeAreaView style={ui.screen}><Text style={[ui.description, { padding: 18 }]}>Loading your shop overview…</Text></SafeAreaView>;

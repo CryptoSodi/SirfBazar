@@ -68,6 +68,8 @@ function AppNavigation() {
         <Stack.Screen name="Permissions" component={PermissionsScreen} />
         <Stack.Screen name="Report" component={ReportScreen} />
       </Stack.Navigator>
+      <ToastHost />
     </NavigationContainer>
   );
 }
+import { ToastHost } from './components/Toast';

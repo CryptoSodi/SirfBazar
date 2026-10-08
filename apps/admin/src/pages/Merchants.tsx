@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
@@ -36,7 +37,7 @@ export default function Merchants() {
         </select>
         <input className={`${inputCls} max-w-xs`} placeholder="Search shop, city, phone…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Shop', 'Owner', 'City', 'Status', 'Online', 'Commission', 'Orders', '']}>
         {items.map((m) => (
           <tr key={m.id} className="hover:bg-slate-50">

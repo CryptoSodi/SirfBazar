@@ -1,4 +1,5 @@
 'use client';
+import { toast, ToastMessage } from '@/components/Toast';
 import { AppIcon as UiIcon } from '../../../components/AppIcon';
 
 
@@ -49,7 +50,7 @@ function OrderTracking() {
       await api.post(`/orders/${id}/cancel`, { reason });
       await load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -60,9 +61,9 @@ function OrderTracking() {
     setBusy(true);
     try {
       await api.post(`/orders/${id}/rate`, { merchantRating: rating, riderRating: rating });
-      alert('Thanks for your rating!');
+      toast('Thanks for your rating!', true);
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -77,9 +78,9 @@ function OrderTracking() {
         title: `Issue with order ${track?.orderNumber}`,
         description,
       });
-      alert('Support ticket created — we will get back to you.');
+      toast('Support ticket created — we will get back to you.', true);
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -259,7 +260,7 @@ function ReplacementPrompt({ orderId, item, original, onDone }: { orderId: strin
       <div className="sb-replacement-choice"><small>Original</small><strong>{original?.productNameSnapshot || 'Original item'}</strong><span>{original?.totalPricePaisa != null ? formatPKR(original.totalPricePaisa) : 'Price unavailable'}</span></div>
       <div className="sb-replacement-choice selected"><small>Suggested replacement</small><strong>{item.productNameSnapshot}</strong><span>{formatPKR(item.totalPricePaisa)}</span></div>
       <p className="sb-cart-warning">The service must recalculate the final order total and any refund. No automatic refund is promised here.</p>
-      {error && <p role="alert" className="sb-error">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <div className="sb-replacement-actions"><button className="btn-secondary" disabled={busy} onClick={() => void respond(false)}>Decline replacement</button><button className="btn-primary" disabled={busy} onClick={() => void respond(true)}>{busy ? 'Please wait…' : 'Accept replacement'}</button></div>
     </div></div>, document.body)}
   </>;

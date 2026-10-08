@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { NavigationAction, RouteProp, useFocusEffect, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -507,7 +508,7 @@ export default function CheckoutScreen() {
     const button = (label: string, onPress: () => void, secondary = false, disabled = false) => <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy || disabled }} disabled={busy || disabled} onPress={onPress} style={[secondary ? s.btnGhost : s.btn, { justifyContent: 'center', opacity: busy || disabled ? 0.55 : 1 }]}><Text style={secondary ? s.btnGhostText : s.btnText}>{busy ? 'Checking…' : label}</Text></TouchableOpacity>;
     const link = (label: string, onPress: () => void) => <TouchableOpacity accessibilityRole="button" onPress={onPress} disabled={busy} style={{ minHeight: 44, justifyContent: 'center' }}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '600' }}>{label}</Text></TouchableOpacity>;
     const iconArt = (name: 'check' | 'info') => <View style={{ alignSelf: 'center', width: 90, height: 90, backgroundColor: colors.emeraldBg, borderRadius: 28, marginTop: 28, marginBottom: 24, alignItems: 'center', justifyContent: 'center' }}><Icon name={name} size={40} color={colors.primary}/></View>;
-    const errorNotices = <>{orderError ? <Notice danger>{orderError}</Notice> : null}{storageError ? <Notice danger>{storageError}</Notice> : null}{loadError && cart ? <Notice danger>{loadError} Your previous basket is shown; retry before continuing.</Notice> : null}
+    const errorNotices = <>{orderError ? <ToastMessage>{orderError}</ToastMessage> : null}{storageError ? <ToastMessage>{storageError}</ToastMessage> : null}{loadError && cart ? <ToastMessage>{loadError} Your previous basket is shown; retry before continuing.</ToastMessage> : null}
       {recovery ? <Notice tone="info">This review keeps the original checkout reference and delivery details. Nothing is retried until you choose Place order.</Notice> : null}
       {cart?.couponError ? <View style={{ gap: 8 }}><Notice danger>{cart.couponError} Remove this promo code or apply an eligible code before placing an order.</Notice>{link('Review promo code in basket', () => goTab(navigation, 'CartTab'))}</View> : null}</>;
     let content: React.ReactNode;

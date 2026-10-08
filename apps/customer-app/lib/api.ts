@@ -1,3 +1,4 @@
+import { friendlyError } from './friendly-error';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { readCredential, writeCredential, removeCredential } from './credentials';
 import { publishCustomerEvent } from './customer-events';
@@ -218,9 +219,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     /* empty body */
   }
   if (!res.ok) {
-    const msg = Array.isArray(data?.message)
-      ? data.message.join(', ')
-      : data?.message || `Request failed (${res.status})`;
+    const msg = friendlyError(data?.message, res.status, path, data?.code);
     throw new ApiError(msg, res.status, data?.code, data);
   }
   return data;

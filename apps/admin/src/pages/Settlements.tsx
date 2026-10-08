@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
@@ -43,7 +44,7 @@ export default function Settlements() {
         </select>
         <button className={btnCls} onClick={() => setGenerating(true)}><UiIcon name="settings" size={18} /> Generate settlements</button>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Shop', 'Period', 'Amount', 'Status', 'Paid at', 'Reference', '']}>
         {items.map((s) => (
           <tr key={s.id} className="hover:bg-slate-50">

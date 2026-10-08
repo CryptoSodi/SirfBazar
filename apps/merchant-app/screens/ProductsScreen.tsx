@@ -1,3 +1,4 @@
+import { toast, ToastHost } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -31,7 +32,7 @@ export default function ProductsScreen() {
       await api.put(`/merchant/products/${id}`, body);
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -52,7 +53,7 @@ export default function ProductsScreen() {
       setEditing(null);
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -137,7 +138,7 @@ export default function ProductsScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      <ToastHost active={!!editing} /></Modal>
     </SafeAreaView>
   );
 }

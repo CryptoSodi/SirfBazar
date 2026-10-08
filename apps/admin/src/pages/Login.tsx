@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
@@ -63,7 +64,7 @@ export default function Login() {
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
         />
-        {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <ToastMessage>{error}</ToastMessage>}
         <button className={`${btnCls} mt-5 w-full py-2.5`} disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>

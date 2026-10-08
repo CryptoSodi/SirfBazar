@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -31,7 +32,7 @@ export default function Products() {
         <input className={`${inputCls} max-w-xs`} placeholder="Search name…" value={q} onChange={(e) => setQ(e.target.value)} />
         <button className={btnCls} onClick={() => setEditing('new')}>+ New product</button>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Product', 'Category', 'Unit', 'Listings', 'Status', '']}>
         {items.map((p) => (
           <tr key={p.id} className="hover:bg-slate-50">

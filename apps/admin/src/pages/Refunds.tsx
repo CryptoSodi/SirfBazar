@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { AppIcon as UiIcon } from '../components/AppIcon';
 import { useState } from 'react';
 import { api, pkr } from '../lib/api';
@@ -29,7 +30,7 @@ export default function Refunds() {
           ))}
         </select>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Order', 'Customer', 'Shop', 'Amount', 'Reason', 'Status', '']}>
         {items.map((r) => (
           <tr key={r.id} className="hover:bg-slate-50">

@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useRef, useState } from 'react';
@@ -119,7 +120,7 @@ export default function LoginScreen() {
               <Text style={s.btnGhostText}>Change number or request a new code</Text>
             </TouchableOpacity>
           </>}
-          <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 14, lineHeight: 21 }}>{error}</Text>
+          <ToastMessage>{error}</ToastMessage>
           <Text style={[s.muted, { textAlign: 'center' }]}>{signup ? 'Already have a merchant account?' : 'New to SirfBazar?'}</Text>
           <TouchableOpacity accessibilityRole="button" disabled={busy} style={[s.btnGhost, { minHeight: 48 }]} onPress={switchMode}>
             <Text style={[s.btnGhostText, { fontSize: 16 }]}>{signup ? 'Sign in' : 'Sign up — create a shop'}</Text>

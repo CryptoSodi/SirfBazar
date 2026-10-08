@@ -58,25 +58,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   </dialog>, document.body);
 }
 
-export function useToast() {
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  useEffect(() => {
-    if (!msg) return;
-    const t = setTimeout(() => setMsg(null), 3500);
-    return () => clearTimeout(t);
-  }, [msg]);
-  const toast = useCallback((text: string, ok = true) => setMsg({ text, ok }), []);
-  const node = msg ? (
-    <div
-      className={`fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-lg ${
-        msg.ok ? 'bg-emerald-600' : 'bg-red-600'
-      }`}
-    >
-      {msg.text}
-    </div>
-  ) : null;
-  return { toast, node };
-}
+export { useToast } from './Toast';
 
 /** Tiny inline SVG bar chart for orders-by-day. */
 export function BarChart({ data, height = 120 }: { data: Array<{ label: string; value: number }>; height?: number }) {

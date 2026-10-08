@@ -1,3 +1,4 @@
+import { friendlyError } from './friendly-error';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authDestination, type AuthContext } from './auth-flow';
 
@@ -93,7 +94,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     /* empty body */
   }
   if (!res.ok) {
-    const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
+    const msg = friendlyError(data?.message, res.status, path, data?.code);
     throw new Error(msg);
   }
   return data;
@@ -125,7 +126,7 @@ export async function uploadImage(uri: string): Promise<string> {
   } catch {
     /* empty */
   }
-  if (!res.ok) throw new Error(data?.message || 'Image upload failed');
+  if (!res.ok) throw new Error(friendlyError(data?.message, res.status, '/uploads/image'));
   return data.url as string;
 }
 

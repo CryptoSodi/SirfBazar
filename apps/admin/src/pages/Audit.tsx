@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useState } from 'react';
 import { usePaged, Pager } from '../lib/usePaged';
 import { Table, inputCls } from '../components/ui';
@@ -16,7 +17,7 @@ export default function Audit() {
           ))}
         </select>
       </div>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['When', 'Actor', 'Action', 'Entity', 'Details']}>
         {items.map((l) => (
           <tr key={l.id} className="hover:bg-slate-50">

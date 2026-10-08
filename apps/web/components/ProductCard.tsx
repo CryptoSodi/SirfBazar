@@ -1,5 +1,6 @@
 'use client';
 
+import { ToastMessage } from '@/components/Toast';
 import { AppIcon } from '@/components/AppIcon';
 
 import Link from 'next/link';
@@ -47,6 +48,6 @@ export function ProductCard({ card }: { card: ProductCardData }) {
 
   return <article className="card sb-product-card">
     <Link href={`/product/${card.productId}`} className="sb-product-media"><ProductImage name={card.name} imageUrl={card.imageUrl} className="sb-product-image" /></Link>
-    <div className="sb-product-details"><Link href={`/product/${card.productId}`} className="sb-product-name">{card.name}</Link><p className="sb-product-size">{[card.brand, card.size ?? card.unit].filter(Boolean).join(' · ') || 'See product details'}</p><p className="sb-product-shop"><Icon name="shop" size={11} />{card.merchant?.shopName || 'Choose a shop'}</p><div className="sb-product-actions"><span className="sb-product-price">{priced ? formatPKR(price) : 'Check shops'}</span><button type="button" className="sb-product-add" onClick={add} disabled={adding || !available} aria-label={`Add ${card.name} to basket`}>{card.stockQuantity === 0 ? 'Out of stock' : added ? <><AppIcon name="check" size={16} /> Added</> : adding ? 'Adding…' : <><AppIcon name="plus" size={16} /> Add</>}</button></div>{error && <p role="alert" className="sb-error sb-card-error">{error}</p>}</div>
+    <div className="sb-product-details"><Link href={`/product/${card.productId}`} className="sb-product-name">{card.name}</Link><p className="sb-product-size">{[card.brand, card.size ?? card.unit].filter(Boolean).join(' · ') || 'See product details'}</p><p className="sb-product-shop"><Icon name="shop" size={11} />{card.merchant?.shopName || 'Choose a shop'}</p><div className="sb-product-actions"><span className="sb-product-price">{priced ? formatPKR(price) : 'Check shops'}</span><button type="button" className="sb-product-add" onClick={add} disabled={adding || !available} aria-label={`Add ${card.name} to basket`}>{card.stockQuantity === 0 ? 'Out of stock' : added ? <><AppIcon name="check" size={16} /> Added</> : adding ? 'Adding…' : <><AppIcon name="plus" size={16} /> Add</>}</button></div>{error && <ToastMessage>{error}</ToastMessage>}</div>
   </article>;
 }

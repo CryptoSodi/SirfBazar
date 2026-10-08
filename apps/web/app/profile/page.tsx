@@ -1,5 +1,6 @@
 'use client';
 
+import { toast } from '@/components/Toast';
 import { AppIcon } from '@/components/AppIcon';
 import { AppIcon as UiIcon } from '../../components/AppIcon';
 
@@ -80,9 +81,9 @@ export default function ProfilePage() {
   const saveName = async () => {
     try {
       await api.put('/customer/profile', { fullName: name });
-      alert('Saved');
+      toast('Saved', true);
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -146,7 +147,7 @@ export default function ProfilePage() {
                             await api.del(`/customer/addresses/${a.id}`);
                             load();
                           } catch (e: any) {
-                            alert(e.message);
+                            toast(e.message, false);
                           }
                         }
                       }}

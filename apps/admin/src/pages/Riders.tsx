@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { api } from '../lib/api';
 import { usePaged, Pager } from '../lib/usePaged';
@@ -20,7 +21,7 @@ export default function Riders() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-bold">Riders</h1>
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Rider', 'Shop', 'Vehicle', 'Online', 'Status', 'Active order', '']}>
         {items.map((r) => (
           <tr key={r.id} className="hover:bg-slate-50">

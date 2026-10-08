@@ -85,6 +85,7 @@ function addButtonHarness({ detail = product, read = async () => ({ id: 'cart-a'
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, { module, exports: module.exports, require: (name) => {
     if (name === 'react') return react;
+    if (name === './Toast') return { ToastMessage: 'ToastMessage' };
     if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
     if (name === 'react-native') return { ActivityIndicator: 'ActivityIndicator', Text: 'Text', TouchableOpacity: 'Button', View: 'View' };
     if (name === '@react-native-async-storage/async-storage') return { default: { getItem: async (key) => values.get(key) ?? null, setItem: async (key, value) => values.set(key, value), removeItem: async (key) => values.delete(key) } };

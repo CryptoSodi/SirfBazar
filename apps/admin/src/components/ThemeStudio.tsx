@@ -1,3 +1,4 @@
+import { ToastMessage } from './Toast';
 import { AppIcon as UiIcon } from './AppIcon';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { contrast, deriveTheme, MAX_THEME_BYTES, normalizeHex, originalTheme, parseThemeJSON, presets, THEME_KEY, validateTheme, type SirfBazarTheme } from '../../../shared/design/theme';
@@ -93,7 +94,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
             <fieldset><legend>Appearance</legend><div className="ops-segment">{(['light', 'dark', 'system'] as const).map((value) => <button key={value} type="button" aria-pressed={theme.mode === value} onClick={() => change({ mode: value })}>{value}</button>)}</div></fieldset>
             <fieldset><legend>Accent colour</legend><div className="sb-theme-presets">{presets.map(([name, color]) => <button type="button" key={name} aria-label={`${name} ${color}`} aria-pressed={theme.color === color} onClick={() => change({ color })}><span style={{ background: color }} />{name}</button>)}</div>
               <div className="sb-theme-hex"><label htmlFor="sb-theme-color">Custom HEX</label><input id="sb-theme-color" value={hex} onChange={(e) => setHex(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') applyHex(); }} aria-invalid={!!error} aria-describedby="sb-theme-error" maxLength={7} /><input type="color" aria-label="Pick custom accent colour" value={theme.color} onChange={(e) => change({ color: e.target.value })} /><button type="button" className="ops-button" onClick={applyHex}>Apply</button></div>
-              <p id="sb-theme-error" role="alert" className="sb-theme-error">{error}</p><p className="sb-theme-note">White text on the current action colour: {contrast(derived.tokens['--sb-action'], '#FFFFFF').toFixed(2)}:1.</p>
+              <ToastMessage>{error}</ToastMessage><p className="sb-theme-note">White text on the current action colour: {contrast(derived.tokens['--sb-action'], '#FFFFFF').toFixed(2)}:1.</p>
             </fieldset>
             <fieldset><legend>Workspace sidebar</legend><div className="ops-segment">{(['light', 'dark'] as const).map((value) => <button key={value} type="button" aria-pressed={theme.sidebar === value} onClick={() => change({ sidebar: value })}>{value === 'light' ? 'Match page' : 'Dark'}</button>)}</div></fieldset>
             <fieldset><legend>Table density</legend><div className="ops-segment">{(['comfortable', 'compact'] as const).map((value) => <button key={value} type="button" aria-pressed={theme.density === value} onClick={() => change({ density: value })}>{value}</button>)}</div></fieldset>

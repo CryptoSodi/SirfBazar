@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useEffect, useRef, useState } from 'react';
 import { api, pkr } from '../lib/api';
 import { Badge, Modal, Stat, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
@@ -200,7 +201,7 @@ export default function Profile() {
   };
 
   if (loading && !merchant) return <PageSkeleton variant="settings" label="Loading shop settings" />;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (error) return <ToastMessage>{error}</ToastMessage>;
   if (!merchant) return <p className="text-sm text-slate-400">No shop found.</p>;
 
   const isOnline = !!merchant.isOnline;

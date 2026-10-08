@@ -1,3 +1,4 @@
+import { ToastMessage, ToastHost } from './Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
@@ -81,8 +82,8 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
         {!globalCatalog && <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}><View style={{ flex: 1 }}><SearchField value={q} onChangeText={(value) => { sequence.current++; setQ(value); setPage(1); }} placeholder={merchantId ? 'Search this shop' : 'What do you need?'} /></View>{!merchantId && <IconButton name="filter" label={filterCount ? `Filters, ${filterCount} applied` : 'Filters'} onPress={() => { setDraft({ ...filters }); setDraftCategory(selected); setFilterError(''); setSheet('filters'); }} />}</View>}
         {!merchantId && !globalCatalog && <CategoryChips items={categories} selected={selected} onSelect={choose} />}
         {!globalCatalog && <><SectionTitle title={merchantId ? 'Shop products' : q.trim() ? `Results for “${q.trim()}”` : findCategoryName(categories, selected) ?? 'Find your essentials'} />{!merchantId && typeof total === 'number' && !loading && <Text style={[s.muted, { marginBottom: 4 }]}>{total} {total === 1 ? 'listing' : 'listings'} · prices by shop{filterCount ? ` · ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'} applied` : ''}</Text>}</>}
-        {!!metaError && <View style={{ marginBottom: 12 }}><Notice danger>{metaError} Product results may still be available.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 10 }]} onPress={retry}><Text style={s.btnGhostText}>Retry details</Text></TouchableOpacity></View>}
-        {!!error && items.length > 0 && <Notice danger>{error} Loaded products are still shown. Retry below for the next page.</Notice>}
+        {!!metaError && <View style={{ marginBottom: 12 }}><ToastMessage>{metaError} Product results may still be available.</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 10 }]} onPress={retry}><Text style={s.btnGhostText}>Retry details</Text></TouchableOpacity></View>}
+        {!!error && items.length > 0 && <ToastMessage>{error} Loaded products are still shown. Retry below for the next page.</ToastMessage>}
       </View>}
       ListEmptyComponent={<StatePanel loading={loading} icon={error ? 'wifi' : 'search'} title={error ? 'Couldn’t load products.' : 'Let’s try\nanother search.'} message={error ? `${error} Your basket has not been cleared.` : emptyMessage} action={error ? 'Try again' : 'Search again'} onPress={error ? retry : () => { setQ(''); setSelected(''); setFilters(emptyFilters); setPage(1); retry(); }} secondaryAction={error ? undefined : 'Browse categories'} onSecondary={() => goTab(navigation, 'HomeTab', { screen: 'Browse' })} />}
       renderItem={({ item }) => <View style={{ width: (width - inset * 2 - 12) / 2 }}><ProductCard item={merchantId ? { ...item, merchant: shop ?? item.merchant } : item} onPress={() => navigation.navigate('Product', { productId: item.productId ?? item.id, ...(globalCatalog ? {} : { merchantProductId: item.merchantProductId }) })} /></View>}
@@ -100,7 +101,7 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
               <Text style={[s.body, { fontWeight: '600' }]}>Sort by</Text><View accessibilityRole="radiogroup" accessibilityLabel="Sort products" style={{ gap: 8, marginTop: 8 }}>{sortOptions.map(([value, label]) => <TouchableOpacity key={value} accessibilityRole="radio" accessibilityState={{ checked: draft.sort === value }} onPress={() => setDraft({ ...draft, sort: value })} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, minHeight: 44, borderColor: draft.sort === value ? colors.primary : colors.border, backgroundColor: draft.sort === value ? colors.emeraldBg : colors.card }}><Icon name={draft.sort === value ? 'check' : 'filter'} color={draft.sort === value ? colors.primary : colors.muted} size={18} /><Text style={s.body}>{label}</Text></TouchableOpacity>)}</View>
               <Field label="Brand · optional" value={draft.brand} onChangeText={(brand) => setDraft({ ...draft, brand })} placeholder="Brand name" />
               <View style={{ flexDirection: 'row', gap: 12 }}><View style={{ flex: 1 }}><Field label="Minimum price · Rs" value={draft.min} onChangeText={(min) => setDraft({ ...draft, min })} placeholder="0" keyboardType="decimal-pad" /></View><View style={{ flex: 1 }}><Field label="Maximum price · Rs" value={draft.max} onChangeText={(max) => setDraft({ ...draft, max })} placeholder="Any" keyboardType="decimal-pad" /></View></View>
-              {!!filterError && <View style={{ marginTop: 12 }}><Notice danger>{filterError}</Notice></View>}
+              {!!filterError && <View style={{ marginTop: 12 }}><ToastMessage>{filterError}</ToastMessage></View>}
               <TouchableOpacity accessibilityRole="button" onPress={applyFilters} style={[s.btn, { marginTop: 20, justifyContent: 'center' }]}><Text style={s.btnText}>Apply filters</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" onPress={() => { setDraft({ ...emptyFilters }); setDraftCategory(''); setFilterError(''); }} style={{ minHeight: 44, marginTop: 8, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>Clear filters</Text></TouchableOpacity>
             </> : <>
               {!!shop?.description && <Text style={[s.body, { marginTop: 16 }]}>{shop.description}</Text>}
@@ -115,6 +116,6 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
           </ScrollView><SafeAreaView edges={['bottom']} />
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    <ToastHost active={sheet !== null} /></Modal>
   </View>;
 }

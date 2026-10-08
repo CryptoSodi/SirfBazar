@@ -1,4 +1,5 @@
 'use client';
+import { ToastMessage } from '@/components/Toast';
 import { AppIcon as UiIcon } from '../../components/AppIcon';
 
 
@@ -136,10 +137,13 @@ export default function CheckoutPage() {
   };
 
   const reviewOrder = async () => {
-    setBusy(true); setError(''); setNotice('');
+    setBusy(true); setError(''); setNotice(''); setReviewed(false); setApproved(null);
     try {
       const current = await fetchCart();
       setCart(current);
+      if (!current || typeof current.id !== 'string' || !current.id.trim() || !Array.isArray(current.groups) || !current.groups.length) {
+        throw new Error('Your basket could not be verified. Open your basket, review its items, then return to checkout.');
+      }
       if (current.groups.some((group: any) => group.items.some((item: any) => item.inStock === false))) {
         setReviewed(false);
         setError('An item is unavailable. Remove or replace it in your basket before placing the order.');
@@ -247,7 +251,7 @@ export default function CheckoutPage() {
     else void placeOrder();
   };
 
-  if (recovery) return <section className="card p-6" aria-labelledby="recovery-title"><h1 id="recovery-title" className="text-xl font-bold">Check your saved order</h1><p className="mt-3">This checkout may already have placed an order. Reference: <code>{recovery.payload.requestId}</code></p><p className="mt-2">Check its saved status before retrying the same request. Keep this reference if you contact support.</p>{notice && <p role="status" className="sb-notice">{notice}</p>}{error && <p role="alert" className="sb-error">{error}</p>}<div className="mt-4 flex flex-wrap gap-3"><button className="btn-primary" disabled={busy} onClick={() => void checkSavedOrder()}>Check saved order</button><button className="btn-secondary" disabled={busy} onClick={() => void retrySavedOrder()}>Retry saved request</button><Link className="btn-secondary" href="/contact">Contact support</Link></div></section>;
+  if (recovery) return <section className="card p-6" aria-labelledby="recovery-title"><h1 id="recovery-title" className="text-xl font-bold">Check your saved order</h1><p className="mt-3">This checkout may already have placed an order. Reference: <code>{recovery.payload.requestId}</code></p><p className="mt-2">Check its saved status before retrying the same request. Keep this reference if you contact support.</p>{notice && <ToastMessage ok>{notice}</ToastMessage>}{error && <ToastMessage>{error}</ToastMessage>}<div className="mt-4 flex flex-wrap gap-3"><button className="btn-primary" disabled={busy} onClick={() => void checkSavedOrder()}>Check saved order</button><button className="btn-secondary" disabled={busy} onClick={() => void retrySavedOrder()}>Retry saved request</button><Link className="btn-secondary" href="/contact">Contact support</Link></div></section>;
   if (loading && !cart) return <p role="status">Loading checkout…</p>;
   if (!cart) return <div role="alert" className="card p-5"><p>{error || 'Checkout could not load.'}</p><button className="btn-secondary mt-3" onClick={() => void refresh()}>Try again</button></div>;
   if (!(cart.groups ?? []).length) return <div className="card p-6"><h1 className="text-xl font-bold">Your basket is empty</h1><Link href="/cart" className="btn-primary mt-4 inline-flex">Back to basket</Link></div>;
@@ -293,13 +297,13 @@ export default function CheckoutPage() {
           <div className="sb-total"><dt>Total to pay</dt><dd>{formatPKR(approved?.quote?.totalAmountPaisa ?? cart.totalPaisa)}</dd></div>
         </dl>}<p className="sb-muted mt-3">Prices and availability are checked again before you place the order.</p>
           {approved?.quote && <div className="sb-notice mt-3"><strong>Approved order review</strong><p>Deliver to {approved.quote.deliveryAddress?.fullAddress}, {approved.quote.deliveryAddress?.city}</p><p>{approved.quote.items?.length ?? 0} items · {formatPKR(approved.quote.totalAmountPaisa)} · Cash on delivery</p></div>}
-          {notice && <p role="status" className="sb-notice">{notice}</p>}
-          {error && <p role="alert" className="sb-error">{error}</p>}
+          {notice && <ToastMessage ok>{notice}</ToastMessage>}
+          {error && <ToastMessage>{error}</ToastMessage>}
           <button className="btn-primary mt-4 w-full" disabled={busy} onClick={onContinue}>{busy ? 'Please wait…' : !signedIn ? 'Continue to sign in' : !addressId ? 'Save delivery details' : reviewed ? 'Place order' : 'Review order'}</button>
           <p className="sb-muted mt-3 text-center">{cart.groups.length === 1 ? 'One shop, one delivery.' : `${cart.groups.length} shops will make separate deliveries.`}</p>
         </aside>
       </div>
-      <div className="sb-checkout-mobile-action"><span><small>Total to pay</small><strong>{formatPKR(cart.totalPaisa)}</strong></span><button className="btn-primary" disabled={busy} onClick={onContinue}>{busy ? 'Please wait…' : !signedIn ? 'Continue to sign in' : !addressId ? 'Save address' : reviewed ? 'Place order' : 'Review order'}&nbsp; <UiIcon name="arrow" size={18} /></button></div>
+      <div className="sb-checkout-mobile-action"><span><small>Total to pay</small><strong>{formatPKR(approved?.quote?.totalAmountPaisa ?? cart.totalPaisa)}</strong></span><button className="btn-primary" disabled={busy} onClick={onContinue}>{busy ? 'Please wait…' : !signedIn ? 'Continue to sign in' : !addressId ? 'Save address' : reviewed ? 'Place order' : 'Review order'}&nbsp; <UiIcon name="arrow" size={18} /></button></div>
       {showLogin && <LoginSheet title="Continue to checkout" description="Sign in, then review your basket and place the order yourself." onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); setReviewed(false); setNotice('Your basket has been merged. Check the items and total before placing the order.'); void refresh(); }} />}
       {showMap && (hasMapsKey ? <MapPicker initial={draft.latitude !== null && draft.longitude !== null ? { latitude: draft.latitude, longitude: draft.longitude } : null} onConfirm={pinLocation} onClose={closeMap} returnFocusTo={mapTrigger.current} /> : <OpenMapPicker initial={draft.latitude !== null && draft.longitude !== null ? { latitude: draft.latitude, longitude: draft.longitude } : null} onConfirm={pinLocation} onClose={closeMap} returnFocusTo={mapTrigger.current} />)}
       {uncertain && <div className="sb-modal-backdrop"><div ref={uncertainFocus.ref} onKeyDown={uncertainFocus.onKeyDown} tabIndex={-1} className="card sb-modal" role="alertdialog" aria-modal="true" aria-labelledby="order-uncertain-title"><h2 id="order-uncertain-title">We’re checking your order</h2><p>The response didn’t arrive. Your order may already have been created. Do not place it again yet.</p><Link className="btn-primary mt-4 inline-flex w-full justify-center" href="/orders">Check order status</Link><Link className="btn-secondary mt-2 inline-flex w-full justify-center" href="/contact">Contact support</Link></div></div>}

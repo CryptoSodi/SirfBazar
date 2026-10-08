@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -36,8 +37,8 @@ export default function RatingScreen() {
         <Field label="Tell us more · optional" value={review} onChangeText={setReview} editable={!busy} multiline placeholder="What went well? What could improve?" maxLength={4000} />
         <Text style={[s.faint, { lineHeight: 17, marginTop: 16 }]}>Reviews are optional. Your review is saved only after you submit and receive confirmation.</Text>
       </>}
-      {!!actionError && <View style={{ marginTop: 16 }}><Notice danger>{actionError}</Notice></View>}
-      {!!error && order && <View style={{ marginTop: 16 }}><Notice danger>{error} Refresh to check this delivery’s status.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh order</Text></TouchableOpacity></View>}
+      {!!actionError && <View style={{ marginTop: 16 }}><ToastMessage>{actionError}</ToastMessage></View>}
+      {!!error && order && <View style={{ marginTop: 16 }}><ToastMessage>{error} Refresh to check this delivery’s status.</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh order</Text></TouchableOpacity></View>}
     </ScrollView>
     {eligible && !saved && <ActionDock><TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => void submit()} style={[s.btn, { justifyContent: 'center' }]}><Text style={s.btnText}>{busy ? 'Submitting review…' : 'Submit review'}</Text></TouchableOpacity></ActionDock>}
   </KeyboardAvoidingView>;

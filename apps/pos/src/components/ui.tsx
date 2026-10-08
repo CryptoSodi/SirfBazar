@@ -74,25 +74,7 @@ export function Modal({ title, onClose, children, returnFocus }: { title: string
   );
 }
 
-export function useToast() {
-  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
-  useEffect(() => {
-    if (!msg) return;
-    const t = setTimeout(() => setMsg(null), 3500);
-    return () => clearTimeout(t);
-  }, [msg]);
-  const toast = (text: string, ok = true) => setMsg({ text, ok });
-  const node = msg ? (
-    <div
-      className={`fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-xl px-4 py-2.5 text-sm font-medium text-white shadow-lg ${
-        msg.ok ? 'bg-emerald-600' : 'bg-red-600'
-      }`}
-    >
-      {msg.text}
-    </div>
-  ) : null;
-  return { toast, node };
-}
+export { useToast } from './Toast';
 
 export const inputCls =
   'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none';

@@ -92,6 +92,8 @@ export default function App() {
         <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
         <Stack.Screen name="Catalog" component={CatalogScreen} options={{ title: 'Add from catalog' }} />
       </Stack.Navigator>
+      <ToastHost />
     </NavigationContainer>
   );
 }
+import { ToastHost } from './components/Toast';

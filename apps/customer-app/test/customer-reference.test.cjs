@@ -15,6 +15,7 @@ function harness() {
   const data = new Map(); const requests = []; const events = [];
   const storage = { getItem: async k => data.get(k) ?? null, setItem: async (k, v) => data.set(k, v), removeItem: async k => data.delete(k) };
   const api = load('api', {
+    './friendly-error': load('friendly-error', {}),
     '@react-native-async-storage/async-storage': { default: storage },
     './credentials': { readCredential: storage.getItem, writeCredential: storage.setItem, removeCredential: storage.removeItem },
     './customer-events': { publishCustomerEvent: name => events.push(name) },

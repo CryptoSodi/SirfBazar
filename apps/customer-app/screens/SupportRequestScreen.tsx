@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -69,7 +70,7 @@ export default function SupportRequestScreen() {
       <View style={{ marginTop: 16 }}><Text style={[s.body, { fontSize: 12, fontWeight: '700', marginBottom: 7 }]}>Title</Text><TextInput ref={titleInput} accessibilityLabel="Title" value={title} onChangeText={setTitle} editable={!busy} placeholder="A short summary" placeholderTextColor={colors.faint} style={s.input} returnKeyType="next" onSubmitEditing={() => descriptionInput.current?.focus()} /></View>
       <View style={{ marginTop: 16 }}><Text style={[s.body, { fontSize: 12, fontWeight: '700', marginBottom: 7 }]}>Details</Text><TextInput ref={descriptionInput} accessibilityLabel="Details" value={description} onChangeText={setDescription} editable={!busy} multiline placeholder="Tell us which item or delivery needs attention." placeholderTextColor={colors.faint} style={[s.input, { minHeight: 86, textAlignVertical: 'top', lineHeight: 22 }]} /></View>
       <View style={{ flexDirection: 'row', gap: 9, padding: 12, borderRadius: 12, backgroundColor: colors.blueBg, marginTop: 16 }}><Icon name="info" color={colors.blue} size={18} /><Text style={[s.muted, { color: colors.blue, flex: 1 }]}>Your request is sent only after you submit. It does not cancel an order.</Text></View>
-      {!!error && <View style={{ marginTop: 12 }}><Notice danger>{error}</Notice></View>}
+      {!!error && <View style={{ marginTop: 12 }}><ToastMessage>{error}</ToastMessage></View>}
       {!!status && <View style={{ marginTop: 12 }}><Notice tone="blue">{status}</Notice></View>}
       {uncertain && <View style={{ gap: 12, marginTop: 12 }}><TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={() => goTab(navigation, 'ProfileTab', { screen: 'SupportTickets' })}><Text style={s.btnGhostText}>Check support requests</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={() => { setUncertain(false); setError('Check that no matching request was saved before submitting again.'); }}><Text style={s.btnGhostText}>I checked — no matching request</Text></TouchableOpacity></View>}
     </ScrollView>

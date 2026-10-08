@@ -1,3 +1,4 @@
+import { toast, ToastHost, ToastMessage } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useState } from 'react';
@@ -41,7 +42,7 @@ export default function RidersScreen() {
       await api.post(`/merchant/riders/${rider.id}/${rider.isActive ? 'deactivate' : 'activate'}`);
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -50,7 +51,7 @@ export default function RidersScreen() {
       await api.post(`/merchant/riders/${rider.id}/${action}`);
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -120,7 +121,7 @@ export default function RidersScreen() {
               value={phone}
               onChangeText={setPhone}
             />
-            {!!error && <Text style={{ color: colors.danger, marginTop: 8, fontSize: 13 }}>{error}</Text>}
+            {!!error && <ToastMessage>{error}</ToastMessage>}
             <TouchableOpacity style={[s.btn, { marginTop: 12 }]} onPress={addRider} disabled={busy || !name.trim()}>
               <Text style={s.btnText}>{busy ? 'Adding…' : 'Add rider'}</Text>
             </TouchableOpacity>
@@ -129,7 +130,7 @@ export default function RidersScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      <ToastHost active={adding} /></Modal>
     </SafeAreaView>
   );
 }

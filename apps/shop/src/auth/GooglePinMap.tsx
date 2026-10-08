@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader'
 import { useEffect, useRef, useState } from 'react'
 
@@ -90,6 +91,6 @@ export default function GooglePinMap({ latitude, longitude, onSelect }: Props) {
 
   return <div className="signup-google-map-shell">
     <div ref={elementRef} className="signup-google-map" role="application" aria-label="Google map for choosing the shop entrance" />
-    {error && <div className="signup-map-error" role="alert">{error}</div>}
+    {error && <ToastMessage>{error}</ToastMessage>}
   </div>
 }

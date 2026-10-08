@@ -1,3 +1,4 @@
+import { toast } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { AppIcon } from '../components/AppIcon';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -73,7 +74,7 @@ export default function HomeScreen() {
 
   const toggleOnline = async (value: boolean) => {
     try { await api.post(`/rider/${value ? 'online' : 'offline'}`); load(); }
-    catch (e: any) { alert(e.message); }
+    catch (e: any) { toast(e.message, false); }
   };
   const codToCollect = orders.filter((order) => order.paymentMethod === 'COD').reduce((sum, order) => sum + (order.totalAmountPaisa ?? 0), 0);
   const current = orders[0];

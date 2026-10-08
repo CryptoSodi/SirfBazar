@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -91,7 +92,7 @@ export default function AddressEditScreen() {
   return <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={58}>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}>
       <Text accessibilityRole="header" style={s.h1}>Delivery address</Text><Text style={[s.muted, { marginTop: 8 }]}>Tell your shop’s rider exactly where to go.</Text>
-      {!!error && <View style={{ marginTop: 16 }}><Notice danger>{error}</Notice></View>}
+      {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error}</ToastMessage></View>}
       {!addressReady && !error && <View style={[s.row, { gap: 8, marginTop: 16 }]}><ActivityIndicator color={colors.primary} /><Text style={s.muted}>Loading saved address…</Text></View>}
       <View style={{ marginTop: 16 }}>{fieldLabel('Full address')}<TextInput ref={addressInput} accessibilityLabel="Full address" autoComplete="street-address" style={s.input} placeholder="House / apartment, street, area" placeholderTextColor={colors.faint} value={fullAddress} onChangeText={setFullAddress} editable={addressReady && !saving} /></View>
       <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
