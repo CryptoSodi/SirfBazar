@@ -154,6 +154,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_API_URL: http://127.0.0.1:3001/api
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3001/api
+      # These fixtures exercise the key-free map, not the production Google SDK.
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ''
       BROWSER_WEB_URL: http://127.0.0.1:3000
       BROWSER_POS_URL: http://127.0.0.1:4173
       BROWSER_SHOP_URL: http://127.0.0.1:4174
