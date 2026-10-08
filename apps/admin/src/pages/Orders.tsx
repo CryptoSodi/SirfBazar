@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, pkr } from '../lib/api';
+import { orderRepairOptions } from '../lib/order-repair';
 import { usePaged, Pager } from '../lib/usePaged';
 import { Badge, Modal, Table, btnDanger, btnGhost, inputCls, useToast } from '../components/ui';
 
@@ -76,15 +77,7 @@ function OrderModal({ orderId, onClose, toast, reload }: any) {
     } finally { setBusy(false); }
   };
 
-  const forward: Record<string, string[]> = {
-    SENT_TO_MERCHANT: ['MERCHANT_ACCEPTED'],
-    MERCHANT_ACCEPTED: ['PREPARING', 'READY_FOR_PICKUP'],
-    PREPARING: ['READY_FOR_PICKUP'],
-  };
-  const repairOptions = order.channel === 'ONLINE' && !order.isParent && !order.riderId && !order.pickedUpAt &&
-    order.paymentMethod === 'COD' && order.paymentStatus === 'CASH_PENDING' &&
-    !(order.items ?? []).some((item: any) => item.itemStatus === 'REPLACEMENT_SUGGESTED')
-      ? forward[order.status] ?? [] : [];
+  const repairOptions = orderRepairOptions(order);
 
   return (
     <Modal title={`Order ${order.orderNumber}`} onClose={onClose}>
@@ -144,7 +137,7 @@ function OrderModal({ orderId, onClose, toast, reload }: any) {
         </div>
         {repairOptions.length > 0 && <div className="rounded-xl border border-slate-200 p-3"><label className="block font-medium">Forward status repair
           <select className={`${inputCls} mt-1 w-full`} value={repairStatus} onChange={(event) => setRepairStatus(event.target.value)}><option value="">Choose a valid next status</option>{repairOptions.map((option) => <option key={option} value={option}>{option.replace(/_/g, ' ')}</option>)}</select>
-        </label><p className="my-2 text-xs text-slate-500">Available only before rider assignment and pickup for a cash-on-delivery order. The server rechecks all prerequisites.</p><button className={btnGhost} disabled={busy || !repairOptions.includes(repairStatus) || !reason.trim()} onClick={() => void act(() => api.post(`/admin/orders/${orderId}/status`, { status: repairStatus, reason: reason.trim() }), 'Order status repaired and audited.')}>Save status repair</button></div>}
+        </label><p className="my-2 text-xs leading-normal text-slate-500">Available before rider assignment and pickup when payment is confirmed or cash is due on delivery. The server checks the latest evidence before saving.</p><button className={btnGhost} disabled={busy || !repairOptions.includes(repairStatus) || !reason.trim()} onClick={() => void act(() => api.post(`/admin/orders/${orderId}/status`, { status: repairStatus, reason: reason.trim() }), 'Order status repaired and audited.')}>Save status repair</button></div>}
       </div>
     </Modal>
   );

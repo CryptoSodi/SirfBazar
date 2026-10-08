@@ -204,6 +204,7 @@ export class AdminMarketplaceService {
         rider: { select: { id: true, fullName: true, phoneNumber: true } },
         deliveryAddress: true,
         payments: true,
+        parent: { select: { payments: { select: { status: true, providerTransactionId: true } } } },
         refunds: true,
         children: { include: { items: true, merchant: { select: { shopName: true } } } },
       },

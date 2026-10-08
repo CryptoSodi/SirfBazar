@@ -118,6 +118,7 @@ jobs:
           cache-dependency-path: apps/admin/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: node ../../scripts/test-admin-order-repair.cjs
 
   remaining-clients:
     runs-on: ubuntu-latest

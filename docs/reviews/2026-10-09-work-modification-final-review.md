@@ -75,3 +75,26 @@ The independent reviewer reran browser transport 86/86, native transport 33/33, 
 The reviewer accepts the 320px persistent-toast overlap as a minor presentation WARN because visible Dismiss restores access. Native/API dependency advisories, conservative legacy notifications, device/APK/staging/provider gaps and Linux-only deployment checks remain WARNs requiring their own disposition. CI configuration is not executed CI evidence. This verdict supports human source acceptance only; it is not production or native release certification.
 
 The user approved this final review on 9 October 2026 and requested live deployment plus installable customer, merchant and rider APKs. Approval does not turn the recorded dependency/device/staging warnings into passed checks. Proceed through protected CI and preserve the existing signing identity; record actual deployment and APK outcomes separately.
+
+## Pre-release PR findings addressed
+
+PR #4 surfaced two additional bounded findings before production merge. Rider support replies/status updates now select a creator-owned audience rather than using order association column precedence. Mismatched or ambiguous recipients fail closed. Failed audience lookups preserve the already-saved reply/status, suppress the notification and log only a fixed generic warning. The support suite passes 24/24; the full API remediation unit suite passes 38/38.
+
+Admin forward repair now includes provider-confirmed prepaid orders, including child orders whose payment belongs to the parent. The admin-only detail route exposes only parent payment status/provider reference for that display hint. Five table-driven cases cover COD/prepaid, absent/wrong-owner payment evidence, rider/pickup/parent/channel blocks and unresolved replacements. Payment authority, authorization, transactional prerequisites and audit rollback remain on the API, unchanged. API/admin typechecks and the admin build pass. Independent review returns PASS on both fixes.
+
+The prior cross-client Google harness was updated for the existing owner-bound toast/session helpers rather than reverting production behavior: 22/22 pass, including old-account completion rejection. Browser transport 86/86, owner-toast 33/33 and feedback bridge 8/8 passed again. PR CI run 37853173205 passed all release gates before these final review fixes; the new commit must run the gates again.
+
+### Narrow interface review: admin forward repair
+
+Scope is the existing order modal's eligibility, explanatory copy and recovery controls only, in React/Vite with established admin tokens. AGENTS.md and the approved project review records informed the review. No redesign, new modal or new payment authorization is introduced.
+
+| Domain | Evidence | Result |
+| --- | --- | --- |
+| Accessibility | Native labelled reason/select/button, empty-reason disable state, keyboard focus and scroll into the recovery area in an isolated browser | No new actionable finding |
+| Layout | Mocked provider-confirmed parent payment at 320px; modal scroll width stays within its client width | No new actionable finding |
+| Writing | Help copy matches the existing API eligibility and explicitly says evidence is rechecked | Clear |
+| Typography | Updated multiline help uses 12px text and 18px line height; supported by measured browser styles | Clear for updated copy |
+| Colors | Updated help measured rgb(88,113,104) on white, contrast 5.28:1 | Clear for measured light pair; dark rendering not newly verified |
+| UI polish | Existing native controls, busy state, surfaces, spacing and action treatment retained | No new visual treatment introduced |
+
+Browser requests used fake admin/order fixtures and intercepted APIs; external providers were blocked. No status repair, refund, OTP or order was submitted to production. Screenshots are ignored local evidence in `output/playwright/release-admin-prepaid-320.png` and `release-admin-prepaid-keyboard-320.png`. This narrow review does not certify all pre-existing admin UI or native/device flows. Verdict: approve the inspected recovery-control scope; retain the broader warnings above.
