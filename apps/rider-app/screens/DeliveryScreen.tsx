@@ -1,4 +1,4 @@
-import { toast } from '../components/Toast';
+import { useToast } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { IconLabel } from '../components/IconLabel';
 import { RouteProp, useRoute } from '@react-navigation/native';
@@ -12,6 +12,7 @@ import { colors, s } from '../lib/theme';
 const ACTIVE = ['RIDER_ASSIGNED', 'RIDER_ARRIVED_AT_SHOP', 'PICKED_UP', 'ON_THE_WAY', 'RIDER_ARRIVED_AT_CUSTOMER'];
 
 export default function DeliveryScreen() {
+  const toast = useToast();
   const route = useRoute<RouteProp<RootStackParamList, 'Delivery'>>();
   const [order, setOrder] = useState<any>(null);
   const [otp, setOtp] = useState('');

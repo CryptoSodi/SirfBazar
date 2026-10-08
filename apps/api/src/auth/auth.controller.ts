@@ -2,7 +2,7 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { AdminLoginDto, GoogleLinkDto, GoogleLoginDto, MerchantLoginDto, MerchantPasswordRequestDto, MerchantPasswordResetDto, MerchantRegistrationStartDto, MerchantRegistrationVerifyDto, RefreshTokenDto, SendOtpDto, VerifyOtpDto } from './auth.dto';
-import { CurrentUser, Public, AuthUser } from '../common/decorators';
+import { CurrentUser, Public, AuthUser, AllowInactiveRider } from '../common/decorators';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -81,6 +81,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @AllowInactiveRider()
   me(@CurrentUser() user: AuthUser) {
     return this.authService.getMe(user.userId);
   }

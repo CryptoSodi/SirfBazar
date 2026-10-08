@@ -1,6 +1,6 @@
 'use client';
 
-import { toast } from '@/components/Toast';
+import { useToast } from '@/components/Toast';
 import { AppIcon } from '@/components/AppIcon';
 import { AppIcon as UiIcon } from '../../components/AppIcon';
 
@@ -14,6 +14,7 @@ import { AddressForm } from '@/components/AddressForm';
 import { GoogleAccountLink } from '@/components/GoogleAccountLink';
 
 export default function ProfilePage() {
+  const { toast } = useToast();
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
   const [addresses, setAddresses] = useState<any[]>([]);
@@ -74,7 +75,7 @@ export default function ProfilePage() {
   };
 
   if (needLogin) {
-    return <LoginSheet title="Sign in to your customer account" description={signInMessage || 'Sign in to view your profile and saved addresses.'} onClose={() => router.push('/')} onSuccess={() => { setSignInMessage(''); load(); }} />;
+    return <LoginSheet title="Sign in or create an account" description={signInMessage || 'Continue to your profile and saved addresses.'} onClose={() => router.push('/')} onSuccess={() => { setSignInMessage(''); load(); }} />;
   }
   if (loadError && !profile) return <div role="alert" className="card p-5"><p>Unable to load your profile: {loadError}</p><button className="btn-secondary mt-3" onClick={load}>Retry</button></div>;
   if (!profile) return <p role="status" className="text-stone-500">Loading profile…</p>;

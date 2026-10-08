@@ -18,18 +18,26 @@ export default function RiderHomeScreen() {
   const { palette } = useRiderTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [orders, setOrders] = useState<RiderOrder[]>([]);
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'error' | 'expired' | 'inactive' | 'pending'>('loading');
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'error' | 'expired' | 'inactive' | 'pending' | 'rejected'>('loading');
   const [message, setMessage] = useState('');
   const [presenceBusy, setPresenceBusy] = useState(false);
 
   const load = useCallback(async (showLoading = false) => {
     if (showLoading) setPhase('loading');
     try {
-      const [nextProfile, nextOrders] = await Promise.all([api.get('/rider/profile'), api.get('/rider/orders/assigned')]);
+      const nextProfile = await api.get('/rider/profile');
+      setProfile(nextProfile);
+      if (nextProfile?.approvalStatus === 'REJECTED') {
+        setOrders([]); setPhase('rejected'); setMessage(''); return;
+      }
+      if (nextProfile?.approvalStatus !== 'APPROVED' || nextProfile?.isActive !== true) {
+        setOrders([]); setPhase(nextProfile?.approvalStatus === 'PENDING' ? 'pending' : 'inactive'); setMessage(''); return;
+      }
+      const nextOrders = await api.get('/rider/orders/assigned');
       if (!Array.isArray(nextOrders)) throw new Error('The delivery list was not returned. Try again.');
       setProfile(nextProfile);
       setOrders(nextOrders.map(withoutDeliveryCode));
-      setPhase(nextProfile?.approvalStatus === 'PENDING' ? 'pending' : nextProfile?.isActive === false ? 'inactive' : 'ready');
+      setPhase('ready');
       setMessage('');
     } catch (e: any) {
       setOrders([]);
@@ -64,6 +72,7 @@ export default function RiderHomeScreen() {
     {phase === 'error' && <View style={{ alignItems: 'center', paddingTop: 46 }}><IconBox name="wifi" tone="red" size={76} /><H1 center style={{ marginTop: 24 }}>Couldn’t load{ '\n' }your deliveries.</H1><Body muted style={{ textAlign: 'center', marginTop: 12 }}>We couldn’t reach the service. Your assignments haven’t been changed.</Body><Button onPress={() => void load(true)} icon="refresh" style={{ marginTop: 26 }}>Try again</Button><Body muted small style={{ marginTop: 22, textAlign: 'center' }}>This is a connection problem, not an empty delivery list.</Body></View>}
     {phase === 'expired' && <View style={{ alignItems: 'center', paddingTop: 46 }}><IconBox name="lock" size={76} /><H1 center style={{ marginTop: 24 }}>Sign in again{ '\n' }to continue.</H1><Body muted style={{ textAlign: 'center', marginTop: 12 }}>Your session has ended. We’ve hidden private delivery details until you sign in.</Body><Note icon="shield" style={{ marginTop: 22 }}>After signing in, refresh the order before taking your next delivery action.</Note><Button onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })} icon="arrow" style={{ marginTop: 26 }}>Sign in</Button></View>}
     {phase === 'inactive' && <View style={{ alignItems: 'center', paddingTop: 46 }}><IconBox name="shield" tone="amber" size={76} /><View style={{ marginTop: 20 }}><Badge tone="amber">Account inactive</Badge></View><H1 center style={{ marginTop: 24 }}>Check in with{ '\n' }your shop.</H1><Body muted style={{ textAlign: 'center', marginTop: 12 }}>{profile?.merchant?.shopName ?? 'Your shop'} manages your rider access. Contact the owner to review your account.</Body><Note style={{ marginTop: 22 }}>This is different from being offline. The Online switch cannot reactivate an account.</Note><Button onPress={() => navigation.navigate('Help')} icon="phone" style={{ marginTop: 26 }}>Contact your shop</Button></View>}
+    {phase === 'rejected' && <View style={{ alignItems: 'center', paddingTop: 46 }}><IconBox name="shield" tone="amber" size={76} /><H1 center style={{ marginTop: 24 }}>Your request was not approved.</H1><Body muted style={{ textAlign: 'center', marginTop: 12 }}>You can apply again or ask the shop owner for details. No delivery assignments are available to this account.</Body><Button onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Onboard' }] })} icon="arrow" style={{ marginTop: 26 }}>Apply again</Button></View>}
     {phase === 'pending' && <View style={{ alignItems: 'center', paddingTop: 28 }}><IconBox name="clock" tone="amber" size={76} /><View style={{ marginTop: 20 }}><Badge tone="amber">Awaiting shop approval</Badge></View><H1 center style={{ marginTop: 24 }}>You’re nearly{ '\n' }on the team.</H1><Body muted style={{ textAlign: 'center', marginTop: 12 }}>Your request was sent to {profile?.merchant?.shopName ?? 'your shop'}.</Body><Card style={{ alignSelf: 'stretch', marginTop: 22 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><IconBox name="check" /><View><H2 style={{ fontSize: 16 }}>Request submitted</H2><Body muted small>Your shop has your details.</Body></View></View><View style={{ height: 1, backgroundColor: palette.line, marginVertical: 16 }} /><View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><IconBox name="clock" tone="amber" /><View><H2 style={{ fontSize: 16 }}>Shop review</H2><Body muted small>Waiting for the owner’s decision.</Body></View></View></Card><Note style={{ alignSelf: 'stretch', marginTop: 22 }}>No need to apply again. Check with your shop owner if you need an update.</Note><LinkButton onPress={() => void load(true)} icon="refresh" style={{ marginTop: 16 }}>Check approval status</LinkButton><Button variant="secondary" onPress={async () => { await clearAuth(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); }} style={{ marginTop: 14 }}>Back to sign in</Button></View>}
     {phase === 'ready' && <>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>

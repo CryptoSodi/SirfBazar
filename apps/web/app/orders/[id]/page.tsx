@@ -1,5 +1,5 @@
 'use client';
-import { toast, ToastMessage } from '@/components/Toast';
+import { useToast, ToastMessage } from '@/components/Toast';
 import { AppIcon as UiIcon } from '../../../components/AppIcon';
 
 
@@ -18,6 +18,7 @@ const TONE_CLASSES: Record<string, string> = {
 };
 
 function OrderTracking() {
+  const { toast } = useToast();
   const { id } = useParams<{ id: string }>();
   const [track, setTrack] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null);

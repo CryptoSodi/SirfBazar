@@ -25,12 +25,14 @@ import {
   OrderStatus,
   PaymentMethod,
   PaymentStatus,
+  RiderStatus,
 } from '../common/constants';
 import { haversineKm, estimateDeliveryMinutes } from '../common/utils/geo';
 import { generateNumericCode, generateOrderNumber } from '../common/utils/ids';
 import { Prisma } from '@prisma/client';
-import { createHash, createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { serializable } from '../common/transaction';
+import { lockOwners } from '../common/owner-lock';
 
 export interface PlaceOrderInput {
   requestId: string;
@@ -177,6 +179,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
   }
 
   async placeOrder(customerUserId: string, input: PlaceOrderInput) {
+    // Older clients may omit the immutable request ID. Give each attempt its
+    // own audit identity; the cart claim still prevents a double checkout.
+    if (!input.requestId) input = { ...input, requestId: randomUUID() };
     const customer = await this.prisma.customer.findUnique({
       where: { userId: customerUserId },
       include: { user: true },
@@ -325,6 +330,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     let result: { parentId: string | null; childOrders: any[] };
     try {
       result = await serializable(this.prisma, async (tx) => {
+        await lockOwners(tx, { customerIds: [customer.id] });
         const committedQuote = await this.buildQuote(tx, customer.id, input);
         if (this.digest(committedQuote) !== approved.digest || Date.parse(approved.expiresAt) <= Date.now()) {
           throw new ConflictException({ code: 'QUOTE_CHANGED', message: 'Order details changed. Review and approve the current total.' });
@@ -509,6 +515,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
     await this.notifications.notify({
       userId: customerUserId,
+      audience: 'CUSTOMER', scopeId: customerUserId,
       title: 'Order placed',
       body: isOnlinePayment
         ? 'Complete the payment to send your order to the shop.'
@@ -583,6 +590,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       if (!order.merchantId) continue;
       const userIds = await this.access.merchantUserIds(order.merchantId);
       await this.notifications.notifyMany(userIds, {
+        audience: 'MERCHANT', scopeId: order.merchantId,
         title: 'New order received',
         body: `${customerName} placed order ${order.orderNumber} (Rs ${(order.totalAmountPaisa / 100).toFixed(0)}).`,
         type: NotificationType.NEW_ORDER,
@@ -728,6 +736,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       if (child.merchantId) {
         const userIds = await this.access.merchantUserIds(child.merchantId);
         await this.notifications.notifyMany(userIds, {
+          audience: 'MERCHANT', scopeId: child.merchantId,
           title: 'Order cancelled',
           body: `Order ${child.orderNumber} was cancelled by the customer.`,
           type: NotificationType.ORDER_CANCELLED,
@@ -748,9 +757,22 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       const targets = children.filter((child) => !terminal.includes(child.status)).sort((a, b) => a.id.localeCompare(b.id));
       if (!targets.length) throw new BadRequestException('Order is already completed or cancelled');
       const changes = [] as Array<Awaited<ReturnType<OrderStatusService['applyInTransaction']>>>;
+      const returnReview = [] as Array<{ orderId: string; items: Array<{ merchantProductId: string; quantity: number }> }>;
       for (const child of targets) {
+        const pickupEvidence = await tx.orderTimelineEntry.findFirst({
+          where: { orderId: child.id, status: { in: [OrderStatus.PICKED_UP, OrderStatus.ON_THE_WAY, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER] } },
+          select: { id: true },
+        });
+        const pickedUp = !!child.pickedUpAt || !!pickupEvidence || ([OrderStatus.PICKED_UP, OrderStatus.ON_THE_WAY, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER] as string[]).includes(child.status);
+        if (pickedUp) {
+          const goods = await tx.orderItem.findMany({ where: { orderId: child.id, itemStatus: 'CONFIRMED' }, select: { merchantProductId: true, quantity: true } });
+          if (goods.length) returnReview.push({ orderId: child.id, items: goods });
+        }
         changes.push(await this.statusService.applyInTransaction(tx, child.id, OrderStatus.CANCELLED_BY_ADMIN, { userId: adminUserId, role: 'ADMIN', notes: reason }, { cancellationReason: reason, cancelledAt: new Date() }, [child.status]));
-        await this.restoreStockInTransaction(tx, child.id);
+        await this.restoreStockInTransaction(tx, child.id, pickedUp ? ['REPLACEMENT_SUGGESTED'] : ['CONFIRMED', 'REPLACEMENT_SUGGESTED']);
+        if (child.riderId) {
+          await tx.rider.updateMany({ where: { id: child.riderId, currentOrderId: child.id }, data: { currentOrderId: null, currentStatus: RiderStatus.IDLE } });
+        }
       }
       const refunds = [] as any[];
       if (order.isParent && targets.length === children.length) {
@@ -762,14 +784,14 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           if (refund) refunds.push(refund);
         }
       }
-      await tx.auditLog.create({ data: { userId: adminUserId, role: 'ADMIN', action: 'ORDER_CANCELLED_BY_ADMIN', entityType: 'Order', entityId: orderId, newValue: JSON.stringify({ reason, targetIds: targets.map((child) => child.id), refundIds: refunds.map((refund) => refund.id) }) } });
-      return { order, changes, refunds };
+      await tx.auditLog.create({ data: { userId: adminUserId, role: 'ADMIN', action: 'ORDER_CANCELLED_BY_ADMIN', entityType: 'Order', entityId: orderId, newValue: JSON.stringify({ reason, targetIds: targets.map((child) => child.id), refundIds: refunds.map((refund) => refund.id), stockDisposition: returnReview.length ? 'RETURN_REVIEW_REQUIRED' : 'RESTORED_PRE_PICKUP', returnReview }) } });
+      return { order, changes, refunds, returnReview };
     });
     result.changes.forEach((change) => this.statusService.broadcastStatus(change));
-    await this.notifications.notify({ userId: result.order.customer.userId, title: 'Order cancelled', body: `Order ${result.order.orderNumber} was cancelled by SirfBazar: ${reason}. Any collected payment will be refunded.`, type: NotificationType.ORDER_CANCELLED, referenceId: result.order.id })
+    await this.notifications.notify({ userId: result.order.customer.userId, audience: 'CUSTOMER', scopeId: result.order.customer.userId, title: 'Order cancelled', body: `Order ${result.order.orderNumber} was cancelled by SirfBazar: ${reason}. Any collected payment will be refunded.`, type: NotificationType.ORDER_CANCELLED, referenceId: result.order.id })
       .catch((error) => this.logger.warn(`Post-commit admin cancellation notification failed: ${error}`));
     for (const refund of result.refunds) await this.refunds.notifyCompleted(refund);
-    return { ok: true, status: OrderStatus.CANCELLED_BY_ADMIN };
+    return { ok: true, status: OrderStatus.CANCELLED_BY_ADMIN, returnReviewRequired: result.returnReview.length > 0, returnReview: result.returnReview };
   }
 
   /** Restores stock for all confirmed items of an order (spec 12.8). */
@@ -777,9 +799,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return serializable(this.prisma, (tx) => this.restoreStockInTransaction(tx, orderId));
   }
 
-  async restoreStockInTransaction(tx: Prisma.TransactionClient, orderId: string) {
+  async restoreStockInTransaction(tx: Prisma.TransactionClient, orderId: string, statuses: string[] = ['CONFIRMED', 'REPLACEMENT_SUGGESTED']) {
     const items = await tx.orderItem.findMany({
-      where: { orderId, itemStatus: { in: ['CONFIRMED', 'REPLACEMENT_SUGGESTED'] } },
+      where: { orderId, itemStatus: { in: statuses } },
       orderBy: { merchantProductId: 'asc' },
     });
     for (const item of items) {
@@ -960,6 +982,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (order.merchantId) {
       const userIds = await this.access.merchantUserIds(order.merchantId);
       await this.notifications.notifyMany(userIds, {
+        audience: 'MERCHANT', scopeId: order.merchantId,
         title: accept ? 'Replacement accepted' : 'Replacement rejected',
         body: `Customer ${accept ? 'accepted' : 'rejected'} the replacement for ${original.productNameSnapshot} on order ${order.orderNumber}.`,
         type: NotificationType.REPLACEMENT_REQUESTED,
@@ -1066,6 +1089,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       this.statusService.broadcastStatus(changed);
       await this.notifications.notify({
         userId: order.customer.userId,
+        audience: 'CUSTOMER', scopeId: order.customer.userId,
         title: 'Order not accepted',
         body: `The shop did not respond to order ${order.orderNumber} in time. Any payment will be refunded.`,
         type: NotificationType.ORDER_TIMEOUT,

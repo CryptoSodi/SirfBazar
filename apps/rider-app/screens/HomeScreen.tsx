@@ -1,4 +1,4 @@
-import { toast } from '../components/Toast';
+import { useToast } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { AppIcon } from '../components/AppIcon';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -54,6 +54,7 @@ const ui = StyleSheet.create({
 });
 
 export default function HomeScreen() {
+  const toast = useToast();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [profile, setProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);

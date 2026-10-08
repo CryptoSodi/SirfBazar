@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { Appearance, Platform } from 'react-native';
 import { useEffect } from 'react';
-import { isLoggedIn } from './lib/api';
+import { getAuthVersion, getUser, isLoggedIn } from './lib/api';
 import { loadThemeMode, useTheme } from './lib/theme';
 import HomeScreen from './screens/HomeScreen';
 import SearchScreen from './screens/SearchScreen';
@@ -42,13 +42,19 @@ import { notificationDestination } from './lib/customer-flow';
 import { subscribeCustomerEvent } from './lib/customer-events';
 
 const navigationRef = createNavigationContainerRef<any>();
-let pendingNotification: ReturnType<typeof notificationDestination> = null;
+let pendingNotification: { destination: NonNullable<ReturnType<typeof notificationDestination>>; userId: string; generation: number } | null = null;
 async function openPendingNotification() {
-  const destination = pendingNotification;
-  if (!navigationRef.isReady() || !destination || !(await isLoggedIn())) return;
+  const pending = pendingNotification;
+  if (!navigationRef.isReady() || !pending) return;
+  const user = await getUser();
+  if (getAuthVersion() !== pending.generation || user?.id !== pending.userId || !(await isLoggedIn())) {
+    if (pendingNotification === pending) pendingNotification = null;
+    return;
+  }
   // Another auth/ready callback may have consumed or replaced the notification.
-  if (pendingNotification !== destination) return;
+  if (pendingNotification !== pending || getAuthVersion() !== pending.generation) return;
   pendingNotification = null;
+  const destination = pending.destination;
   navigationRef.navigate(destination.screen === 'SupportDetail' ? 'ProfileTab' : 'OrdersTab', {
     screen: destination.screen,
     params: destination.screen === 'SupportDetail' ? { ticketId: destination.ticketId } : { orderId: destination.orderId },
@@ -219,8 +225,15 @@ export default function App() {
     let disposed = false;
     let remove: (() => void) | undefined;
     void import('expo-notifications').then(async (notifications) => {
-      const receive = (response: any) => {
-        pendingNotification = notificationDestination(response.notification.request.content.data);
+      const receive = async (response: any) => {
+        const data = response.notification.request.content.data;
+        const generation = getAuthVersion();
+        const { canReceivePush } = await import('./lib/push');
+        if (!await canReceivePush(data) || generation !== getAuthVersion()) return;
+        const destination = notificationDestination(data);
+        const user = await getUser();
+        if (!destination || !user?.id || generation !== getAuthVersion()) return;
+        pendingNotification = { destination, userId: user.id, generation };
         if (pendingNotification) {
           void openPendingNotification();
           if (navigationRef.isReady()) void isLoggedIn().then((ok) => {
@@ -232,7 +245,7 @@ export default function App() {
       const subscription = notifications.addNotificationResponseReceivedListener(receive);
       remove = () => subscription.remove();
       const initial = await notifications.getLastNotificationResponseAsync();
-      if (initial && !disposed) { receive(initial); await notifications.clearLastNotificationResponseAsync(); }
+      if (initial && !disposed) { await receive(initial); await notifications.clearLastNotificationResponseAsync(); }
     }).catch(() => undefined);
     return () => { disposed = true; remove?.(); unsubscribe(); };
   }, []);

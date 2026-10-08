@@ -15,6 +15,13 @@ export class SupportService {
     private readonly realtime: RealtimeService,
   ) {}
 
+  private participantAudience(ticket: { customerId?: string | null; merchantId?: string | null; riderId?: string | null; createdByUserId: string }) {
+    if (ticket.customerId) return { audience: 'CUSTOMER' as const, scopeId: ticket.createdByUserId };
+    if (ticket.merchantId) return { audience: 'MERCHANT' as const, scopeId: ticket.merchantId };
+    if (ticket.riderId) return { audience: 'RIDER' as const, scopeId: ticket.riderId };
+    return { audience: 'ACCOUNT' as const, scopeId: ticket.createdByUserId };
+  }
+
   // ── User-facing ────────────────────────────────────────────────────────────
 
   async create(
@@ -98,14 +105,18 @@ export class SupportService {
       }
       await this.notifications.notify({
         userId: ticket.createdByUserId,
+        ...this.participantAudience(ticket),
         title: 'Support replied',
         body: message.slice(0, 140),
         type: NotificationType.SUPPORT_REPLY,
         referenceId: ticket.id,
       });
     } else if (ticket.assignedToAdminId) {
+      const admin = await this.prisma.user.findUnique({ where: { id: ticket.assignedToAdminId }, select: { role: true } });
+      if (!admin || !ADMIN_ROLES.includes(admin.role as UserRole)) return row;
       await this.notifications.notify({
         userId: ticket.assignedToAdminId,
+        audience: 'ADMIN', scopeId: admin.role,
         title: `Ticket update: ${ticket.title}`,
         body: message.slice(0, 140),
         type: NotificationType.SUPPORT_REPLY,
@@ -156,6 +167,7 @@ export class SupportService {
     if (input.status && input.status !== ticket.status) {
       await this.notifications.notify({
         userId: ticket.createdByUserId,
+        ...this.participantAudience(ticket),
         title: 'Support ticket update',
         body: `Your ticket "${ticket.title}" is now ${input.status.replace(/_/g, ' ').toLowerCase()}.`,
         type: NotificationType.SUPPORT_REPLY,

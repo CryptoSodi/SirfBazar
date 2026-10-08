@@ -10,6 +10,7 @@
 node_modules/
 .expo/
 dist/
+dist-remediation/
 build/
 web-build/
 coverage/

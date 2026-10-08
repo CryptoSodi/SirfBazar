@@ -1,6 +1,6 @@
 import { AppState } from 'react-native';
 import { io, Socket } from 'socket.io-client';
-import { api, API_URL, getAccessToken, renewSession } from './api';
+import { api, API_URL, getAccessToken, getAuthVersion, renewSession } from './api';
 import { publishCustomerEvent, subscribeCustomerEvent } from './customer-events';
 
 let socket: Socket | null = null;
@@ -31,6 +31,7 @@ export function startCustomerRealtime() {
     publishCustomerEvent('support');
   };
   const sync = async () => {
+    const generation = getAuthVersion();
     if (syncing) {
       syncAgain = true;
       return;
@@ -38,7 +39,7 @@ export function startCustomerRealtime() {
     syncing = true;
     try {
       const next = await getAccessToken();
-      if (stopped) return;
+      if (stopped || generation !== getAuthVersion()) return;
       if (!next || AppState.currentState !== 'active') {
         socket?.disconnect();
         socket = null;
@@ -49,22 +50,25 @@ export function startCustomerRealtime() {
       // REST refresh validates the current app role before any new handshake.
       await api.get('/auth/me');
       const fresh = await getAccessToken();
-      if (!fresh || stopped) return;
+      if (!fresh || stopped || generation !== getAuthVersion()) return;
       socket?.disconnect();
       token = fresh;
-      socket = io(API_URL.replace(/\/api\/?$/, ''), {
-        auth: async (done) => done({ token: await getAccessToken() }),
+      const connectedSocket = io(API_URL.replace(/\/api\/?$/, ''), {
+        auth: (done) => done({ token: generation === getAuthVersion() ? fresh : '' }),
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         timeout: 10000,
       });
+      socket = connectedSocket;
+      const current = () => !stopped && socket === connectedSocket && generation === getAuthVersion();
       socket.on('connect', () => {
-        watched.forEach((_, orderId) => socket?.emit('join:order', { orderId }));
+        if (!current()) { connectedSocket.disconnect(); return; }
+        watched.forEach((_, orderId) => connectedSocket.emit('join:order', { orderId }));
         invalidate(); // Recover missed messages from canonical REST data.
       });
-      socket.on('order:update', () => publishCustomerEvent('orders'));
-      socket.on('rider:location', () => publishCustomerEvent('orders'));
-      socket.on('notification', invalidate);
+      socket.on('order:update', () => { if (current()) publishCustomerEvent('orders'); });
+      socket.on('rider:location', () => { if (current()) publishCustomerEvent('orders'); });
+      socket.on('notification', () => { if (current()) invalidate(); });
     } catch {
       /* Screens retain polling and their last confirmed data. */
     } finally {

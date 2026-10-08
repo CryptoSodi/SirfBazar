@@ -1,5 +1,6 @@
 'use client';
 import { friendlyError } from './friendly-error';
+import { browserSession } from './browserSession';
 
 /**
  * SirfBazar API client. Handles three header concerns transparently:
@@ -18,6 +19,12 @@ const LS = {
 };
 
 let refreshPromise: Promise<boolean> | null = null;
+const session = browserSession('sb');
+export const captureSession = session.read;
+export const sessionIsCurrent = session.sameOwner;
+export const sessionGenerationIsCurrent = session.sameGeneration;
+let creatingGuest: Promise<string> | null = null;
+const guestEpoch = () => localStorage.getItem('sb.guestEpoch') || 'legacy';
 
 export interface SbLocation {
   latitude: number;
@@ -40,15 +47,11 @@ export function storeLocation(loc: SbLocation) {
 
 export function getStoredUser(): any | null {
   if (typeof window === 'undefined') return null;
-  try {
-    return JSON.parse(localStorage.getItem(LS.user) || 'null');
-  } catch {
-    return null;
-  }
+  return session.read().user;
 }
 
 export function isLoggedIn() {
-  return typeof window !== 'undefined' && !!localStorage.getItem(LS.access);
+  return typeof window !== 'undefined' && !!session.read().access;
 }
 
 /** Reading the site header must not create a guest session. */
@@ -59,12 +62,19 @@ export function hasCartSession() {
 /** Use only after the person accepts losing an unrecoverable expired guest basket. */
 export function startNewGuestBasket() {
   if (isLoggedIn()) return;
+  localStorage.setItem('sb.guestEpoch', crypto.randomUUID());
   localStorage.removeItem(LS.guest);
   window.dispatchEvent(new Event('sb:cart'));
 }
 
 async function ensureGuestToken(): Promise<string> {
   let token = localStorage.getItem(LS.guest);
+  if (token) return token;
+  if (creatingGuest) return creatingGuest;
+  const generation = guestEpoch();
+  const auth = session.read();
+  const create = async () => {
+  token = localStorage.getItem(LS.guest);
   if (token) return token;
   const loc = getStoredLocation();
   const res = await fetch(`${API_URL}/guest/session`, {
@@ -81,16 +91,26 @@ async function ensureGuestToken(): Promise<string> {
     throw new ApiError(res.status, data?.message || 'Unable to start your basket. Try again.');
   }
   token = data.sessionToken as string;
+  if (generation !== guestEpoch() || session.read().epoch !== auth.epoch || isLoggedIn())
+    throw new ApiError(409, 'Your basket session changed. Try again.');
+  const winner = localStorage.getItem(LS.guest);
+  if (winner) return winner;
   localStorage.setItem(LS.guest, token);
   return token;
+  };
+  creatingGuest = (async () => {
+    if (navigator.locks?.request) return navigator.locks.request('sb.guest-create', create);
+    return create();
+  })().finally(() => { creatingGuest = null; });
+  return creatingGuest;
 }
 
 export class ApiError extends Error {
   status: number;
   code?: string;
   details?: any;
-  constructor(status: number, message: string, code?: string, details?: any) {
-    super(friendlyError(message, status, '', code));
+  constructor(status: number, message: string, code?: string, details?: any, path = '') {
+    super(friendlyError(message, status, path, code));
     this.status = status;
     this.code = code;
     this.details = details;
@@ -98,10 +118,14 @@ export class ApiError extends Error {
 }
 
 async function rawRequest(method: string, path: string, body?: unknown, retry = true): Promise<any> {
+  const captured = session.read();
+  const capturedGuestEpoch = guestEpoch();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
-  const access = localStorage.getItem(LS.access);
+  const access = captured.access;
   if (access) headers.authorization = `Bearer ${access}`;
   if (path.startsWith('/guest')) headers['x-guest-session'] = await ensureGuestToken();
+  if (!session.sameGeneration(captured) || (path.startsWith('/guest') && capturedGuestEpoch !== guestEpoch()))
+    throw new ApiError(409, 'Your session changed. Try again.');
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
@@ -109,10 +133,14 @@ async function rawRequest(method: string, path: string, body?: unknown, retry = 
     body: body != null ? JSON.stringify(body) : undefined,
   });
 
+  if (!session.sameGeneration(captured) || (path.startsWith('/guest') && capturedGuestEpoch !== guestEpoch()))
+    throw new ApiError(409, 'Your session changed. Try again.');
   if (res.status === 401 && access && retry) {
-    const refreshed = await refreshOnce();
-    if (refreshed) return rawRequest(method, path, body, false);
-    logoutLocal();
+    const refreshed = await session.renew(captured, `${API_URL}/auth/refresh-token`);
+    if (refreshed) {
+      if (!session.sameOwner(captured)) throw new ApiError(409, 'Your session changed. Try again.');
+      return rawRequest(method, path, body, false);
+    }
   }
 
   let data: any = null;
@@ -121,48 +149,20 @@ async function rawRequest(method: string, path: string, body?: unknown, retry = 
   } catch {
     /* empty */
   }
+  if (!session.sameGeneration(captured) || (path.startsWith('/guest') && capturedGuestEpoch !== guestEpoch()))
+    throw new ApiError(409, 'Your session changed. Try again.');
   if (!res.ok) {
-    const msg = friendlyError(data?.message, res.status, path, data?.code);
-    throw new ApiError(res.status, msg, data?.code, data);
+    throw new ApiError(res.status, data?.message || '', data?.code, data, path);
   }
   return data;
 }
 
-function refreshOnce(): Promise<boolean> {
-  if (!refreshPromise) {
-    refreshPromise = tryRefresh().finally(() => { refreshPromise = null; });
-  }
-  return refreshPromise;
-}
-
-async function tryRefresh(): Promise<boolean> {
-  const refreshToken = localStorage.getItem(LS.refresh);
-  if (!refreshToken) return false;
-  try {
-    const res = await fetch(`${API_URL}/auth/refresh-token`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    storeAuth(data);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
-  localStorage.setItem(LS.access, data.accessToken);
-  localStorage.setItem(LS.refresh, data.refreshToken);
-  localStorage.setItem(LS.user, JSON.stringify(data.user));
+  session.write(data);
 }
 
 export function logoutLocal() {
-  localStorage.removeItem(LS.access);
-  localStorage.removeItem(LS.refresh);
-  localStorage.removeItem(LS.user);
+  session.clear();
   window.dispatchEvent(new Event('sb:auth'));
 }
 
@@ -207,16 +207,18 @@ export class CartMergeUncertainError extends Error {
 /** After OTP/Google login: merge once, then require an explicit basket review. */
 export async function afterLogin(auth: { accessToken: string; refreshToken: string; user: any }) {
   storeAuth(auth);
+  const captured = session.read();
   window.dispatchEvent(new Event('sb:auth'));
   const guest = localStorage.getItem(LS.guest);
   if (guest) {
     try {
       await rawRequest('POST', '/guest/cart/merge-after-login');
-      localStorage.removeItem(LS.guest);
+      if (!session.sameOwner(captured)) throw new Error('Session changed');
+      if (localStorage.getItem(LS.guest) === guest) localStorage.removeItem(LS.guest);
     } catch {
-      window.dispatchEvent(new Event('sb:cart'));
+      if (session.sameOwner(captured)) window.dispatchEvent(new Event('sb:cart'));
       throw new CartMergeUncertainError();
     }
   }
-  window.dispatchEvent(new Event('sb:cart'));
+  if (session.sameOwner(captured)) window.dispatchEvent(new Event('sb:cart'));
 }

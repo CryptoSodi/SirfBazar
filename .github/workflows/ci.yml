@@ -63,6 +63,8 @@ jobs:
       - run: npm run test:waha
       - run: npm run test:whatsapp
       - run: npm run test:google
+      - run: npm run test:remediation:unit
+      - run: node ../../scripts/test-native-session-transports.cjs
       - run: node ../../scripts/test-google-native.cjs
       - run: node ../../scripts/test-google-clients.cjs
       - name: Verify Linux production packaging without connecting to production
@@ -144,8 +146,26 @@ jobs:
         working-directory: apps/${{ matrix.app }}
       - run: npm run ${{ matrix.check }}
         working-directory: apps/${{ matrix.app }}
+      - name: Compile Android JavaScript bundle
+        if: contains(fromJSON('["customer-app","merchant-app","rider-app"]'), matrix.app)
+        env:
+          EXPO_NO_TELEMETRY: '1'
+        run: npx expo export --platform android --max-workers 2 --output-dir "$RUNNER_TEMP/${{ matrix.app }}-android-export"
+        working-directory: apps/${{ matrix.app }}
       - if: matrix.app == 'pos'
         run: npm test
+        working-directory: apps/pos
+      - if: matrix.app == 'pos'
+        run: node ../../scripts/test-session-transports.cjs
+        working-directory: apps/pos
+      - if: matrix.app == 'pos'
+        run: node ../../scripts/test-money-formatters.cjs
+        working-directory: apps/pos
+      - if: matrix.app == 'pos'
+        run: node ../../scripts/test-toast-session.cjs
+        working-directory: apps/pos
+      - if: matrix.app == 'pos'
+        run: node ../../scripts/test-toast-bridge.cjs
         working-directory: apps/pos
       - if: matrix.app == 'shop'
         run: npm run test:ipos && npm run test:alerts && npm run test:bulk && npm run test:catalog

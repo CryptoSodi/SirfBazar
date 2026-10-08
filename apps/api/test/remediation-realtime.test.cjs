@@ -12,7 +12,7 @@ function socket(id, userId, role, sessionId = 'session-1') {
 }
 
 test('live room emission rechecks session, membership, assignment and fails closed', async () => {
-  const state = { status: 'ACTIVE', session: true, riderActive: true, staffActive: true, ownerActive: true, staffOrders: true, orderRider: 'rider-user', dbError: false };
+  const state = { status: 'ACTIVE', session: true, riderActive: true, riderApproval: 'APPROVED', staffActive: true, ownerActive: true, staffOrders: true, orderRider: 'rider-user', dbError: false };
   const prisma = {
     user: { findUnique: async ({ where }) => {
       if (state.dbError) throw new Error('database unavailable');
@@ -22,7 +22,7 @@ test('live room emission rechecks session, membership, assignment and fails clos
         customer: where.id === 'customer-user' ? { id: 'customer-1' } : null,
         merchant: null,
         staffOf: where.id === 'staff-user' && state.staffActive && state.ownerActive ? [{ id: 'staff-1' }] : [],
-        rider: where.id === 'rider-user' ? { id: 'rider-1', isActive: state.riderActive } : null,
+        rider: where.id === 'rider-user' ? { id: 'rider-1', isActive: state.riderActive, approvalStatus: state.riderApproval } : null,
       };
     } },
     refreshToken: { findFirst: async () => state.session ? { id: 'session-1' } : null },
@@ -49,6 +49,12 @@ test('live room emission rechecks session, membership, assignment and fails clos
   assert.equal(sent.length, 1, 'lost assignment receives nothing');
   assert.deepEqual(rider.left, ['order:order-1']);
   state.orderRider = 'rider-user';
+  state.riderApproval = 'PENDING';
+  await emit('order:order-1');
+  assert.equal(sent.length, 1, 'pending rider receives no order event');
+  assert.equal(rider.disconnected, true, 'pending rider socket is disconnected');
+  state.riderApproval = 'APPROVED';
+  subscribers.splice(0, 1, socket('socket-rider-inactive', 'rider-user', 'RIDER'));
   state.riderActive = false;
   await emit('order:order-1');
   assert.equal(sent.length, 1);

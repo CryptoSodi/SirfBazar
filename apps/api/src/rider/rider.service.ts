@@ -103,9 +103,10 @@ export class RiderService {
       ownerIds.map((uid) =>
         this.notifications.notify({
           userId: uid,
+          audience: 'MERCHANT', scopeId: merchant.id,
           title: 'New rider request',
           body: `${dto.fullName} wants to deliver for ${merchant.shopName}.`,
-          type: NotificationType.SYSTEM,
+          type: NotificationType.RIDER_REQUEST,
         }),
       ),
     );
@@ -125,7 +126,10 @@ export class RiderService {
 
   async setOnline(userId: string, online: boolean) {
     const rider = await this.access.riderByUser(userId);
-    await this.prisma.rider.update({ where: { id: rider.id }, data: { isOnline: online } });
+    const claimed = await serializable(this.prisma, (tx) => tx.rider.updateMany({
+      where: { id: rider.id, isActive: true, approvalStatus: 'APPROVED' }, data: { isOnline: online },
+    }));
+    if (claimed.count !== 1) throw new ForbiddenException('Rider approval is required');
     this.realtime.emitToMerchant(rider.merchantId, 'rider:presence', {
       riderId: rider.id,
       isOnline: online,
@@ -149,6 +153,8 @@ export class RiderService {
     const orderId = input.orderId ?? rider.currentOrderId;
     if (!orderId) throw new BadRequestException('An active assigned delivery is required');
     await serializable(this.prisma, async (tx) => {
+      const eligible = await tx.rider.findFirst({ where: { id: rider.id, isActive: true, approvalStatus: 'APPROVED', currentOrderId: orderId }, select: { id: true } });
+      if (!eligible) throw new ForbiddenException('Rider approval and current assignment are required');
       const order = await tx.order.findFirst({ where: { id: orderId, riderId: rider.id }, select: { status: true } });
       if (!order || ![OrderStatus.RIDER_ASSIGNED, OrderStatus.RIDER_ARRIVED_AT_SHOP, OrderStatus.ON_THE_WAY, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER].includes(order.status as any)) {
         throw new ForbiddenException('Location is allowed only for your active assigned delivery');
@@ -226,7 +232,7 @@ export class RiderService {
   async arrivedAtShop(userId: string, orderId: string, location?: { latitude?: number; longitude?: number }) {
     const { rider, order } = await this.ownedActiveOrder(userId, orderId, [OrderStatus.RIDER_ASSIGNED]);
     const changed = await serializable(this.prisma, async (tx) => {
-      const claim = await tx.rider.updateMany({ where: { id: rider.id, currentOrderId: order.id }, data: { currentStatus: RiderStatus.PICKING_UP } });
+      const claim = await tx.rider.updateMany({ where: { id: rider.id, currentOrderId: order.id, isActive: true, approvalStatus: 'APPROVED' }, data: { currentStatus: RiderStatus.PICKING_UP } });
       if (claim.count !== 1) throw new ConflictException('Delivery assignment changed');
       return this.statusService.applyInTransaction(tx, order.id, OrderStatus.RIDER_ARRIVED_AT_SHOP, {
         userId, role: 'RIDER', latitude: location?.latitude, longitude: location?.longitude,
@@ -242,7 +248,7 @@ export class RiderService {
       OrderStatus.RIDER_ARRIVED_AT_SHOP,
     ]);
     const changed = await serializable(this.prisma, async (tx) => {
-      const claim = await tx.rider.updateMany({ where: { id: rider.id, currentOrderId: order.id }, data: { currentStatus: RiderStatus.DELIVERING } });
+      const claim = await tx.rider.updateMany({ where: { id: rider.id, currentOrderId: order.id, isActive: true, approvalStatus: 'APPROVED' }, data: { currentStatus: RiderStatus.DELIVERING } });
       if (claim.count !== 1) throw new ConflictException('Delivery assignment changed');
       await this.statusService.appendTimeline(order.id, OrderStatus.PICKED_UP, {
         userId, role: 'RIDER', latitude: location?.latitude, longitude: location?.longitude,
@@ -255,6 +261,7 @@ export class RiderService {
 
     await this.afterCommit(() => this.notifications.notify({
       userId: order.customer.userId,
+      audience: 'CUSTOMER', scopeId: order.customer.userId,
       title: 'Order picked up',
       body: `Your order ${order.orderNumber} is on the way. Share the delivery code with the rider on arrival.`,
       type: NotificationType.ORDER_PICKED_UP,
@@ -264,15 +271,21 @@ export class RiderService {
   }
 
   async arrivedAtCustomer(userId: string, orderId: string, location?: { latitude?: number; longitude?: number }) {
-    const { order } = await this.ownedActiveOrder(userId, orderId, [OrderStatus.ON_THE_WAY]);
-    await this.statusService.apply(order.id, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER, {
+    const { rider, order } = await this.ownedActiveOrder(userId, orderId, [OrderStatus.ON_THE_WAY]);
+    const changed = await serializable(this.prisma, async (tx) => {
+      const eligible = await tx.rider.findFirst({ where: { id: rider.id, currentOrderId: order.id, isActive: true, approvalStatus: 'APPROVED' }, select: { id: true } });
+      if (!eligible) throw new ConflictException('Delivery assignment or rider approval changed');
+      return this.statusService.applyInTransaction(tx, order.id, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER, {
       userId,
       role: 'RIDER',
       latitude: location?.latitude,
       longitude: location?.longitude,
+      }, {}, [OrderStatus.ON_THE_WAY]);
     });
+    this.statusService.broadcastStatus(changed);
     await this.afterCommit(() => this.notifications.notify({
       userId: order.customer.userId,
+      audience: 'CUSTOMER', scopeId: order.customer.userId,
       title: 'Rider has arrived',
       body: `Your rider is at your door with order ${order.orderNumber}.`,
       type: NotificationType.RIDER_NEARBY,
@@ -299,7 +312,7 @@ export class RiderService {
 
     const changed = await serializable(this.prisma, async (tx) => {
       const claimedRider = await tx.rider.updateMany({
-        where: { id: rider.id, currentOrderId: order.id },
+        where: { id: rider.id, currentOrderId: order.id, isActive: true, approvalStatus: 'APPROVED' },
         data: { currentStatus: RiderStatus.IDLE, currentOrderId: null },
       });
       if (claimedRider.count !== 1) throw new ConflictException('Delivery assignment changed');
@@ -330,6 +343,7 @@ export class RiderService {
     await this.afterCommit(async () => {
       await this.notifications.notify({
         userId: order.customer.userId,
+        audience: 'CUSTOMER', scopeId: order.customer.userId,
         title: 'Order delivered',
         body: `Order ${order.orderNumber} was delivered. Enjoy! You can rate your experience in the app.`,
         type: NotificationType.ORDER_DELIVERED,
@@ -337,6 +351,7 @@ export class RiderService {
       });
       const merchantUserIds = await this.access.merchantUserIds(order.merchantId!);
       await this.notifications.notifyMany(merchantUserIds, {
+        audience: 'MERCHANT', scopeId: order.merchantId!,
         title: 'Order delivered',
         body: `Order ${order.orderNumber} was delivered by ${rider.fullName}.`,
         type: NotificationType.ORDER_DELIVERED,
@@ -369,6 +384,7 @@ export class RiderService {
     this.realtime.emitToAdmins('support:new', { ticketId: ticket.id, orderId: order.id });
     const merchantUserIds = await this.access.merchantUserIds(rider.merchantId);
     await this.notifications.notifyMany(merchantUserIds, {
+      audience: 'MERCHANT', scopeId: rider.merchantId,
       title: 'Rider reported an issue',
       body: `${rider.fullName}: ${description.slice(0, 120)} (order ${order.orderNumber})`,
       type: NotificationType.SYSTEM,

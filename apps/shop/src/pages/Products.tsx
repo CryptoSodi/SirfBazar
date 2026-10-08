@@ -62,9 +62,17 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   const [categories, setCategories] = useState<CatalogCategory[]>(() => readMemory<CatalogCategory[]>('catalog:categories') ?? []);
   const [categoryError, setCategoryError] = useState('');
   const [page, setPage] = useState(1);
-  const [result, setResult] = useState<CatalogResult | null>(() => readMemory<CatalogResult>('catalog:1::') ?? null);
-  const [loading, setLoading] = useState(!result);
-  const [error, setError] = useState('');
+  const filterKey = JSON.stringify([query.toLowerCase(), categoryId]);
+  const [resultKey, setResultKey] = useState(filterKey);
+  const [storedResult, setResult] = useState<CatalogResult | null>(() => readMemory<CatalogResult>('catalog:1::') ?? null);
+  // Never render the previous category's cards under the new heading, even
+  // before the request effect runs. Selection is independent of this result.
+  const result = resultKey === filterKey ? storedResult : null;
+  const [requestLoading, setLoading] = useState(!storedResult);
+  const loading = requestLoading || resultKey !== filterKey;
+  const [requestError, setError] = useState('');
+  const error = resultKey === filterKey ? requestError : '';
+  const [addedCount, setAddedCount] = useState<number | null>(null);
   const [selected, setSelected] = useState<Record<string, Selection>>({});
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState('');
@@ -74,6 +82,9 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [sort, setSort] = useState('az');
   const reviewRef = useRef<HTMLElement>(null);
+  const loadedSummaryRef = useRef<HTMLSpanElement>(null);
+  const loadMoreRef = useRef<HTMLButtonElement>(null);
+  const appendRequested = useRef(false);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const selectedCount = Object.keys(selected).length;
   const activePath = categoryPath(categories, categoryId);
@@ -82,7 +93,7 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   const allVisibleSelected = eligibleItems.length > 0 && eligibleItems.every((item) => !!selected[item.productId]);
   const visibleItems = [...(result?.items ?? [])].sort((a, b) => sort === 'az' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
   useEffect(() => { if (selectAllRef.current) selectAllRef.current.indeterminate = !allVisibleSelected && eligibleItems.some((item) => !!selected[item.productId]); }, [selected, result, allVisibleSelected]);
-  const chooseCategory = (id: string) => { setCategoryId(id); setPage(1); };
+  const chooseCategory = (id: string) => { appendRequested.current = false; setCategoryId(id); setPage(1); setAddedCount(null); };
   const reviewSelection = () => {
     reviewRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
     reviewRef.current?.focus({ preventScroll: true });
@@ -133,7 +144,7 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => { setPage(1); setQuery(search.trim()); }, 250);
+    const timer = setTimeout(() => { appendRequested.current = false; setPage(1); setAddedCount(null); setQuery(search.trim()); }, 250);
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -154,8 +165,11 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
     let active = true;
     const cacheKey = `catalog:${page}:${query.toLowerCase()}:${categoryId}`;
     const cached = readMemory<CatalogResult>(cacheKey);
-    setResult(cached ?? null);
-    setLoading(!cached);
+    const append = page > 1;
+    if (!append) appendRequested.current = false;
+    if (!append) setResult(cached ?? null);
+    setResultKey(filterKey);
+    setLoading(true);
     setError('');
     const params = new URLSearchParams({ page: String(page), pageSize: '24' });
     if (query) params.set('q', query);
@@ -164,11 +178,20 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
       .then((response: CatalogResult) => {
         if (!active) return;
         const next = { items: response.items ?? [], total: response.total ?? 0, totalPages: response.totalPages ?? 1 };
-        setResult(next);
+        if (append) {
+          const previousIds = new Set((result?.items ?? []).map((item) => item.productId));
+          setAddedCount(next.items.filter((item) => !previousIds.has(item.productId)).length);
+        }
+        setResult((previous) => {
+          if (!append || !previous) return next;
+          const seen = new Set(previous.items.map((item) => item.productId));
+          return { ...next, items: [...previous.items, ...next.items.filter((item) => !seen.has(item.productId))] };
+        });
+        if (append && page >= next.totalPages && document.activeElement === loadMoreRef.current) requestAnimationFrame(() => loadedSummaryRef.current?.focus());
         writeMemory(cacheKey, next);
       })
       .catch((cause: Error) => { if (active) setError(cause.message || 'The catalog could not be loaded.'); })
-      .finally(() => { if (active) setLoading(false); });
+      .finally(() => { if (active) { appendRequested.current = false; setLoading(false); } });
     return () => { active = false; };
   }, [page, query, categoryId, revision, refreshKey]);
 
@@ -188,16 +211,16 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
     <section className="catalog-results" aria-labelledby="catalog-section-title">
       <div className="catalog-path">{activePath.length > 1 ? activePath.slice(0, -1).map((category) => category.name).join(' / ') : 'Shared catalogue'}<ReferenceIcon name="right" size="sm" /></div>
       <div className="catalog-results-heading"><h2 id="catalog-section-title" className="catalog-section-title">{activeCategory?.name || 'All products'}</h2><div className="catalog-summary" role="status">{result ? `${result.total.toLocaleString()} products${activeCategory?.children?.length ? ' including subsections' : ''}` : 'Loading…'}{loading && result && <span> · Refreshing…</span>}</div></div>
-      <div className="catalog-tools"><label className="catalog-search"><span className="sr-only">Search catalog</span><ReferenceIcon name="search" size="sm" /><input className={inputCls} type="search" placeholder="Search this category…" value={search} onChange={(event) => setSearch(event.target.value)} /></label><label className="catalog-sort"><span className="sr-only">Sort products on this page</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="az">A–Z · this page</option><option value="za">Z–A · this page</option></select></label></div>
-      <div className="catalog-selection-tools"><label className="catalog-select-visible"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} disabled={loading || !!error || !eligibleItems.length || !!bulkRequest} onChange={selectVisible} />{allVisibleSelected ? 'Deselect visible' : 'Select visible'}</label><span>Already listed products can’t be selected</span></div>
-    {error && <div className="panel catalog-error" role="alert"><p>{error}</p><button type="button" className="btn" onClick={() => setRevision((value) => value + 1)}>Retry</button></div>}
+      <div className="catalog-tools"><label className="catalog-search"><span className="sr-only">Search catalog</span><ReferenceIcon name="search" size="sm" /><input className={inputCls} type="search" placeholder="Search this category…" value={search} onChange={(event) => setSearch(event.target.value)} /></label><label className="catalog-sort"><span className="sr-only">Sort loaded products</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="az">A–Z · loaded</option><option value="za">Z–A · loaded</option></select></label></div>
+      <div className="catalog-selection-tools"><label className="catalog-select-visible"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} disabled={(loading && !result) || !eligibleItems.length || !!bulkRequest} onChange={selectVisible} />{allVisibleSelected ? 'Deselect loaded' : 'Select loaded'}</label><span>Already listed products can’t be selected</span></div>
+    {error && <div className="panel catalog-error" role="alert"><p>{page > 1 ? 'More products could not load. Earlier products and your selection are still here.' : 'The catalogue could not load.'} {error}</p><button type="button" className="btn" onClick={() => setRevision((value) => value + 1)}>{page > 1 ? 'Retry loading products' : 'Retry catalogue'}</button></div>}
     {loading && !result ? <LoadingFrame label="Loading catalog products"><div className="catalog-grid">{Array.from({ length: 8 }, (_, index) => <CardSkeleton key={index} />)}</div></LoadingFrame> : null}
     {result && result.items.length > 0 && <div className="catalog-grid">{visibleItems.map((item) => <article className={`catalog-card ${selected[item.productId] ? 'is-selected' : ''} ${item.alreadyListed ? 'is-listed' : ''}`} key={item.productId}>
-      <input id={`catalog-pick-${item.productId}`} className="catalog-card-checkbox" type="checkbox" aria-label={item.alreadyListed ? `Already in my shop: ${item.name}` : `Select product: ${item.name}`} disabled={item.alreadyListed || !!bulkRequest || loading || !!error} checked={!!selected[item.productId]} onChange={() => toggleSelected(item)} />
+      <input id={`catalog-pick-${item.productId}`} className="catalog-card-checkbox" type="checkbox" aria-label={item.alreadyListed ? `Already in my shop: ${item.name}` : `Select product: ${item.name}`} disabled={item.alreadyListed || !!bulkRequest || (loading && !result)} checked={!!selected[item.productId]} onChange={() => toggleSelected(item)} />
       <label htmlFor={`catalog-pick-${item.productId}`} className="catalog-card-label"><span className="catalog-image"><CatalogPicture item={item} /></span><span className="catalog-card-body"><span className="catalog-product-name">{item.name}</span><span className="catalog-product-meta">{[item.brand, item.size ?? item.unit].filter(Boolean).join(' · ') || item.category?.name || 'Catalog item'}</span><span className="catalog-product-status">{(item.alreadyListed || selected[item.productId]) && <ReferenceIcon name="check" size="sm" />}{item.alreadyListed ? 'In your shop' : selected[item.productId] ? 'Selected' : 'Select product'}</span></span></label>
     </article>)}</div>}
     {!loading && result?.items.length === 0 && !error && <div className="panel catalog-empty"><p>{query ? `No catalog products match “${query}”${activeCategory ? ` in ${activeCategory.name}` : ''}.` : `No products are available${activeCategory ? ` in ${activeCategory.name}` : ''}.`}</p><button type="button" className="btn" onClick={() => { setSearch(''); setQuery(''); setCategoryId(''); setPage(1); }}>Show all products</button></div>}
-    {result && result.totalPages > 1 && <nav className="catalog-pagination" aria-label="Catalog pages"><button type="button" className="btn" disabled={page <= 1} onClick={() => setPage(page - 1)}><UiIcon name="back" /> Previous</button><span>Page {page} of {result.totalPages}</span><button type="button" className="btn" disabled={page >= result.totalPages} onClick={() => setPage(page + 1)}>Next <UiIcon name="arrow" /></button></nav>}
+    {result && <div className="catalog-pagination" role="status" aria-live="polite"><span ref={loadedSummaryRef} tabIndex={-1}>Showing {result.items.length} of {result.total.toLocaleString()} products{addedCount !== null && !loading ? ` · ${addedCount} more loaded` : ''}{page >= result.totalPages ? ' · All available products loaded' : ''}</span>{!error && page < result.totalPages && <button ref={loadMoreRef} type="button" className="btn" disabled={loading} onClick={() => { if (loading || appendRequested.current) return; appendRequested.current = true; setPage((current) => current + 1); }}>{loading ? 'Loading products…' : 'Load more products'} <UiIcon name="arrow" /></button>}</div>}
     </section>
     <aside ref={reviewRef} tabIndex={-1} className="catalog-review" aria-label="Selected products">
       <div className="catalog-review-heading"><h2>Ready for your shop <span>{selectedCount}</span></h2><p>Set the selling price and stock for each product.</p></div>

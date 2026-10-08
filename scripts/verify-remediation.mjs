@@ -30,11 +30,8 @@ function run(label, command, args, timeout = 120000, env = process.env) {
 function requireLocalDatabase() {
   const raw = process.env.REMEDIATION_DATABASE_URL;
   if (!raw) throw new Error('--database requires REMEDIATION_DATABASE_URL for a disposable database');
-  const url = new URL(raw);
-  if (!/^postgres(ql)?:$/.test(url.protocol) || !['localhost', '127.0.0.1', '::1'].includes(url.hostname))
-    throw new Error('--database only accepts local disposable PostgreSQL');
-  if (!/remediation[_-]test/i.test(url.pathname) || ['5432', '5433', '3001'].includes(url.port))
-    throw new Error('--database requires a remediation_test database on a unique non-live port');
+  const requireApi = createRequire(resolve(root, 'apps/api/package.json'));
+  requireApi('./test/disposable-database.cjs').disposableUrl(raw);
   return raw;
 }
 async function confirmDatabaseIdentity(database) {

@@ -1,9 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { PricingService } from '../common/pricing.service';
 import { haversineKm } from '../common/utils/geo';
 import { MerchantApprovalStatus } from '../common/constants';
+import { lockOwners } from '../common/owner-lock';
+import { serializable } from '../common/transaction';
 
 export interface CartOwner {
   customerId?: string;
@@ -38,12 +41,28 @@ export class CartService {
   // ── Cart CRUD ──────────────────────────────────────────────────────────────
 
   async getOrCreateActiveCart(owner: CartOwner) {
+    return serializable(this.prisma, async (tx) => {
+      await this.lockOwner(tx, owner);
+      return this.getOrCreateActiveCartInTransaction(tx, owner);
+    });
+  }
+
+  private async lockOwner(tx: Prisma.TransactionClient, owner: CartOwner) {
+    if (!owner.customerId && !owner.guestSessionId) throw new UnauthorizedException('Basket owner required');
+    await lockOwners(tx, { customerIds: owner.customerId ? [owner.customerId] : [], guestSessionIds: owner.guestSessionId ? [owner.guestSessionId] : [] });
+  }
+
+  private async getOrCreateActiveCartInTransaction(tx: Prisma.TransactionClient, owner: CartOwner) {
+    if (owner.guestSessionId) {
+      const merged = await tx.cart.findFirst({ where: { guestSessionId: owner.guestSessionId, status: 'MERGED' }, select: { id: true } });
+      if (merged) throw new ConflictException('This guest basket was already merged. Start a new guest session to shop again.');
+    }
     const where = owner.customerId
       ? { customerId: owner.customerId, status: 'ACTIVE' }
       : { guestSessionId: owner.guestSessionId, status: 'ACTIVE' };
-    const existing = await this.prisma.cart.findFirst({ where, orderBy: { createdAt: 'desc' } });
+    const existing = await tx.cart.findFirst({ where, orderBy: { createdAt: 'desc' } });
     if (existing) return existing;
-    return this.prisma.cart.create({
+    return tx.cart.create({
       data: {
         customerId: owner.customerId ?? null,
         guestSessionId: owner.guestSessionId ?? null,
@@ -53,10 +72,12 @@ export class CartService {
 
   async addItem(owner: CartOwner, merchantProductId: string, quantity: number) {
     if (quantity < 1) throw new BadRequestException('Quantity must be at least 1');
-    const mp = await this.loadSellableMerchantProduct(merchantProductId);
+    return serializable(this.prisma, async (tx) => {
+    await this.lockOwner(tx, owner);
+    const mp = await this.loadSellableMerchantProduct(merchantProductId, tx);
 
-    const cart = await this.getOrCreateActiveCart(owner);
-    const existing = await this.prisma.cartItem.findUnique({
+    const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
+    const existing = await tx.cartItem.findUnique({
       where: { cartId_merchantProductId: { cartId: cart.id, merchantProductId } },
     });
 
@@ -67,12 +88,12 @@ export class CartService {
 
     const unitPricePaisa = mp.discountPricePaisa ?? mp.pricePaisa;
     if (existing) {
-      await this.prisma.cartItem.update({
+      await tx.cartItem.update({
         where: { id: existing.id },
         data: { quantity: newQty, unitPricePaisa },
       });
     } else {
-      await this.prisma.cartItem.create({
+      await tx.cartItem.create({
         data: {
           cartId: cart.id,
           merchantId: mp.merchantId,
@@ -83,46 +104,58 @@ export class CartService {
         },
       });
     }
-    await this.prisma.cart.update({ where: { id: cart.id }, data: { updatedAt: new Date() } });
-    return this.view(owner);
+    await tx.cart.update({ where: { id: cart.id }, data: { updatedAt: new Date() } });
+    return this.viewInTransaction(tx, owner, cart);
+    });
   }
 
   async updateItem(owner: CartOwner, itemId: string, quantity: number) {
-    const cart = await this.getOrCreateActiveCart(owner);
-    const item = await this.prisma.cartItem.findFirst({ where: { id: itemId, cartId: cart.id } });
+    return serializable(this.prisma, async (tx) => {
+    await this.lockOwner(tx, owner);
+    const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
+    const item = await tx.cartItem.findFirst({ where: { id: itemId, cartId: cart.id } });
     if (!item) throw new NotFoundException('Cart item not found');
 
     if (quantity <= 0) {
-      await this.prisma.cartItem.delete({ where: { id: item.id } });
+      await tx.cartItem.delete({ where: { id: item.id } });
     } else {
-      const mp = await this.loadSellableMerchantProduct(item.merchantProductId);
+      const mp = await this.loadSellableMerchantProduct(item.merchantProductId, tx);
       if (quantity > mp.stockQuantity) {
         throw new BadRequestException(`Only ${mp.stockQuantity} in stock at this shop`);
       }
-      await this.prisma.cartItem.update({
+      await tx.cartItem.update({
         where: { id: item.id },
         data: { quantity, unitPricePaisa: mp.discountPricePaisa ?? mp.pricePaisa },
       });
     }
-    return this.view(owner);
+    return this.viewInTransaction(tx, owner, cart);
+    });
   }
 
   async removeItem(owner: CartOwner, itemId: string) {
-    const cart = await this.getOrCreateActiveCart(owner);
-    await this.prisma.cartItem.deleteMany({ where: { id: itemId, cartId: cart.id } });
-    return this.view(owner);
+    return serializable(this.prisma, async (tx) => {
+      await this.lockOwner(tx, owner);
+      const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
+      await tx.cartItem.deleteMany({ where: { id: itemId, cartId: cart.id } });
+      return this.viewInTransaction(tx, owner, cart);
+    });
   }
 
   async clear(owner: CartOwner) {
-    const cart = await this.getOrCreateActiveCart(owner);
-    await this.prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
-    await this.prisma.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
-    return this.view(owner);
+    return serializable(this.prisma, async (tx) => {
+      await this.lockOwner(tx, owner);
+      const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
+      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+      const updated = await tx.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
+      return this.viewInTransaction(tx, owner, updated);
+    });
   }
 
   async applyCoupon(owner: CartOwner, code: string) {
-    const cart = await this.getOrCreateActiveCart(owner);
-    const items = await this.prisma.cartItem.findMany({ where: { cartId: cart.id } });
+    return serializable(this.prisma, async (tx) => {
+    await this.lockOwner(tx, owner);
+    const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
+    const items = await tx.cartItem.findMany({ where: { cartId: cart.id } });
     if (items.length === 0) throw new BadRequestException('Cart is empty');
 
     const subtotal = items.reduce((sum, i) => sum + i.unitPricePaisa * i.quantity, 0);
@@ -131,18 +164,22 @@ export class CartService {
       customerId: owner.customerId,
       subtotalPaisa: subtotal,
       merchantIds: [...new Set(items.map((i) => i.merchantId))],
-    });
-    await this.prisma.cart.update({
+    }, tx);
+    const updated = await tx.cart.update({
       where: { id: cart.id },
       data: { couponCode: code.trim().toUpperCase() },
     });
-    return this.view(owner);
+    return this.viewInTransaction(tx, owner, updated);
+    });
   }
 
   async removeCoupon(owner: CartOwner) {
-    const cart = await this.getOrCreateActiveCart(owner);
-    await this.prisma.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
-    return this.view(owner);
+    return serializable(this.prisma, async (tx) => {
+      await this.lockOwner(tx, owner);
+      const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
+      const updated = await tx.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
+      return this.viewInTransaction(tx, owner, updated);
+    });
   }
 
   /** Merge a guest cart into the customer's cart after login-at-checkout. */
@@ -150,25 +187,34 @@ export class CartService {
     const guestOwner = await this.ownerFromGuestToken(guestToken);
     const customerOwner = await this.ownerFromCustomerUser(customerUserId);
 
-    const guestCart = await this.prisma.cart.findFirst({
-      where: { guestSessionId: guestOwner.guestSessionId, status: 'ACTIVE' },
-      include: { items: true },
-    });
-    if (guestCart && guestCart.items.length > 0) {
-      await this.prisma.$transaction(async (tx) => {
+    return serializable(this.prisma, async (tx) => {
+        await lockOwners(tx, { customerIds: [customerOwner.customerId!], guestSessionIds: [guestOwner.guestSessionId!] });
+        const guestCart = await tx.cart.findFirst({
+          where: { guestSessionId: guestOwner.guestSessionId, status: 'ACTIVE' },
+          include: { items: true },
+        });
+        if (!guestCart || guestCart.items.length === 0) {
+          const customerCart = await this.getOrCreateActiveCartInTransaction(tx, customerOwner);
+          return this.viewInTransaction(tx, customerOwner, customerCart);
+        }
         // Claim and copy atomically. A lost response or concurrent retry must not
         // add the same guest quantities twice; failed copies roll back the claim.
         const claimed = await tx.cart.updateMany({
           where: { id: guestCart.id, status: 'ACTIVE' },
           data: { status: 'MERGED' },
         });
-        if (!claimed.count) return;
+        if (!claimed.count) throw new ConflictException('Guest basket changed. Check your basket before continuing.');
         const customerCart =
           (await tx.cart.findFirst({
             where: { customerId: customerOwner.customerId, status: 'ACTIVE' },
             orderBy: { createdAt: 'desc' },
           })) ?? (await tx.cart.create({ data: { customerId: customerOwner.customerId } }));
         for (const item of guestCart.items) {
+          const listing = await this.loadSellableMerchantProduct(item.merchantProductId, tx);
+          const existing = await tx.cartItem.findUnique({ where: { cartId_merchantProductId: { cartId: customerCart.id, merchantProductId: item.merchantProductId } }, select: { quantity: true } });
+          if ((existing?.quantity ?? 0) + item.quantity > listing.stockQuantity) {
+            throw new BadRequestException(`Only ${listing.stockQuantity} in stock at this shop. Check your basket before continuing.`);
+          }
           await tx.cartItem.upsert({
             where: {
               cartId_merchantProductId: {
@@ -193,22 +239,29 @@ export class CartService {
             data: { couponCode: guestCart.couponCode },
           });
         }
-      });
-    }
-    return this.view(customerOwner);
+        const committed = await tx.cart.findUniqueOrThrow({ where: { id: customerCart.id } });
+        return this.viewInTransaction(tx, customerOwner, committed);
+    });
   }
 
   // ── Cart view with price breakdown ─────────────────────────────────────────
 
   async view(owner: CartOwner, location?: { latitude: number; longitude: number }) {
-    const cart = await this.getOrCreateActiveCart(owner);
-    const items = await this.prisma.cartItem.findMany({
+    return serializable(this.prisma, async (tx) => {
+      await this.lockOwner(tx, owner);
+      const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
+      return this.viewInTransaction(tx, owner, cart, location);
+    });
+  }
+
+  private async viewInTransaction(tx: Prisma.TransactionClient, owner: CartOwner, cart: Awaited<ReturnType<CartService['getOrCreateActiveCartInTransaction']>>, location?: { latitude: number; longitude: number }) {
+    const items = await tx.cartItem.findMany({
       where: { cartId: cart.id },
       orderBy: { createdAt: 'asc' },
     });
 
     const mpIds = items.map((i) => i.merchantProductId);
-    const merchantProducts = await this.prisma.merchantProduct.findMany({
+    const merchantProducts = await tx.merchantProduct.findMany({
       where: { id: { in: mpIds } },
       include: { product: true, merchant: true },
     });
@@ -283,7 +336,7 @@ export class CartService {
           customerId: owner.customerId,
           subtotalPaisa,
           merchantIds: [...groupsByMerchant.keys()],
-        });
+        }, tx);
         discountPaisa = quote.discountPaisa;
         if (quote.freeDelivery) deliveryFeePaisa = 0;
       } catch (err: any) {
@@ -309,8 +362,8 @@ export class CartService {
     };
   }
 
-  private async loadSellableMerchantProduct(merchantProductId: string) {
-    const mp = await this.prisma.merchantProduct.findUnique({
+  private async loadSellableMerchantProduct(merchantProductId: string, tx: Prisma.TransactionClient = this.prisma) {
+    const mp = await tx.merchantProduct.findUnique({
       where: { id: merchantProductId },
       include: { merchant: true, product: true },
     });

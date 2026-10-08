@@ -186,3 +186,14 @@
   .signup-map-actions button { font-size: 13px; }
   .signup-prefix { padding-inline: 10px; }
 }
+
+.information-dialog{width:min(100% - 32px,480px);max-height:calc(100dvh - 32px);margin:auto;padding:22px;border:1px solid #bdc9c0;border-radius:14px;background:#fff;color:#071f18;box-shadow:0 24px 70px #071f1840;overflow:auto;overscroll-behavior:contain}
+.information-dialog::backdrop{background:#071f18a8}
+.information-dialog .dialog-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.information-dialog h2{font-size:20px;line-height:1.25;margin:0}
+.information-dialog p{font-size:14px;line-height:1.5;margin:14px 0 22px;color:#495550}
+.information-dialog .icon-button,.information-dialog .primary-action{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px}
+.information-dialog .icon-button{background:#f0f4ef;color:#071f18}
+.information-dialog .primary-action{width:100%;background:#007a52;color:#fff;font-weight:700}
+.information-dialog :focus-visible{outline:3px solid #4762cc;outline-offset:2px}
+@media(prefers-color-scheme:dark){.information-dialog{background:#19221e;color:#f0f6f1;border-color:#3b5245}.information-dialog p{color:#b0c2b7}.information-dialog .icon-button{background:#223027;color:#f0f6f1}}

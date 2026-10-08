@@ -2,6 +2,7 @@ import { friendlyError } from './friendly-error';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { readCredential, writeCredential, removeCredential } from './credentials';
 import { publishCustomerEvent } from './customer-events';
+import { invalidateSessionToasts } from './toast-session';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { resolveApiUrl } from './customer-flow';
@@ -68,14 +69,25 @@ export async function clearLocation() {
 }
 
 export async function getUser(): Promise<any | null> {
-  const raw = await AsyncStorage.getItem(KEYS.user);
-  return raw ? JSON.parse(raw) : null;
+  const version = authVersion;
+  return serializeAuth(async () => {
+    if (version !== authVersion) return null;
+    const raw = await AsyncStorage.getItem(KEYS.user);
+    return version === authVersion && raw ? JSON.parse(raw) : null;
+  });
 }
 
 export async function isLoggedIn(): Promise<boolean> {
   return !!(await getAccessToken());
 }
-export const getAccessToken = () => readCredential(KEYS.access);
+export const getAccessToken = () => {
+  const version = authVersion;
+  return serializeAuth(async () => {
+    if (version !== authVersion) return null;
+    const token = await readCredential(KEYS.access);
+    return version === authVersion ? token : null;
+  });
+};
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -114,54 +126,78 @@ async function persistAuth(
     await writeCredential(KEYS.refresh, data.refreshToken);
     await writeCredential(KEYS.access, data.accessToken);
     await AsyncStorage.setItem(KEYS.user, JSON.stringify(data.user));
+    if (version !== authVersion) throw new ApiError('Your session changed. Sign in again.', 401);
   });
 }
 
 export async function storeAuth(data: { accessToken: string; refreshToken: string; user: any }) {
-  authVersion++;
-  await persistAuth(data);
+  const version = ++authVersion;
+  invalidateSessionToasts();
+  await persistAuth(data, version);
+  if (version !== authVersion) throw new ApiError('Your session changed. Sign in again.', 401);
   publishCustomerEvent('auth');
   // Register this device for order alerts (dynamic import avoids an api↔push cycle).
-  void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
+  if (version === authVersion) void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
 }
 
 export async function clearAuth() {
   const version = ++authVersion;
-  // Stop alerts to this device while the token is still valid.
-  await import('./push').then((m) => m.unregisterPush()).catch(() => undefined);
-  const refreshToken = await readCredential(KEYS.refresh);
-  if (refreshToken) await request('POST', '/auth/logout', { refreshToken }, false).catch(() => undefined);
-  await serializeAuth(async () => {
-    if (version !== authVersion) return;
+  invalidateSessionToasts();
+  const captured = await serializeAuth(async () => {
+    if (version !== authVersion) return null;
+    const [access, refresh] = await Promise.all([readCredential(KEYS.access), readCredential(KEYS.refresh)]);
+    if (version !== authVersion) return null;
     await Promise.all([removeCredential(KEYS.access), removeCredential(KEYS.refresh)]);
-    await AsyncStorage.removeItem(KEYS.user);
+    await AsyncStorage.multiRemove([KEYS.user, KEYS.mergePending]);
+    return { access, refresh };
   });
   publishCustomerEvent('auth');
+  if (!captured) return;
+  await import('./push').then((m) => m.unregisterPush(captured.access, version - 1)).catch(() => undefined);
+  if (captured.refresh) await timedFetch(`${API_URL}/auth/logout`, {
+    method: 'POST', headers: { 'content-type': 'application/json', ...(captured.access ? { authorization: `Bearer ${captured.access}` } : {}) },
+    body: JSON.stringify({ refreshToken: captured.refresh }),
+  }).catch(() => undefined);
 }
 
 let authVersion = 0;
 export const getAuthVersion = () => authVersion;
-let refreshing: Promise<void> | null = null;
+let refreshing: { version: number; promise: Promise<void> } | null = null;
 export async function renewSession() {
-  if (!refreshing) {
-    const version = authVersion;
-    refreshing = (async () => {
-      const refreshToken = await readCredential(KEYS.refresh);
+  const version = authVersion;
+  if (!refreshing || refreshing.version !== version) {
+    const promise = (async () => {
+      const { refreshToken, user } = await serializeAuth(async () => {
+        if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
+        const [token, rawUser] = await Promise.all([
+          readCredential(KEYS.refresh),
+          AsyncStorage.getItem(KEYS.user),
+        ]);
+        if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
+        return { refreshToken: token, user: rawUser ? JSON.parse(rawUser) : null };
+      });
       if (!refreshToken) throw new ApiError('Sign in again to renew your session.', 401);
       const res = await timedFetch(`${API_URL}/auth/refresh-token`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
+      if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
       if (!res.ok) throw new ApiError('Sign in again to renew your session.', res.status);
       const auth = await res.json();
-      if (version !== authVersion) throw new ApiError('Your session changed. Sign in again.', 401);
+      if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
+      if (user?.id && auth.user?.id !== user.id) throw new ApiError('Sign in again to renew your session.', 401);
       await persistAuth(auth, version);
-    })().finally(() => {
-      refreshing = null;
-    });
+      if (version === authVersion) publishCustomerEvent('auth');
+    })();
+    const entry = { version, promise };
+    refreshing = entry;
+    const clearRefresh = () => {
+      if (refreshing === entry) refreshing = null;
+    };
+    void promise.then(clearRefresh, clearRefresh);
   }
-  return refreshing;
+  return refreshing.promise;
 }
 
 let creatingGuest: Promise<string> | null = null;
@@ -189,24 +225,30 @@ async function ensureGuestToken(): Promise<string> {
 }
 
 async function request(method: string, path: string, body?: unknown, retry = true): Promise<any> {
+  const version = authVersion;
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   const publicRead = method === 'GET' && /^\/(products|merchants|location|coupons)(\/|\?|$)/.test(path);
   const access = publicRead ? null : await getAccessToken();
+  if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
   if (access) headers.authorization = `Bearer ${access}`;
   if (path.startsWith('/guest')) headers['x-guest-session'] = await ensureGuestToken();
+  if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
 
   const res = await timedFetch(`${API_URL}${path}`, {
     method,
     headers,
     body: body != null ? JSON.stringify(body) : undefined,
   });
+  if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
 
   if (res.status === 401 && access && retry) {
     try {
       // Another request may already have rotated this token.
       if ((await getAccessToken()) === access) await renewSession();
+      if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
       return request(method, path, body, false);
     } catch (cause) {
+      if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
       if (cause instanceof ApiError && [401, 403].includes(cause.status)) await clearAuth();
       throw cause;
     }
@@ -218,6 +260,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   } catch {
     /* empty body */
   }
+  if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
   if (!res.ok) {
     const msg = friendlyError(data?.message, res.status, path, data?.code);
     throw new ApiError(msg, res.status, data?.code, data);
@@ -242,10 +285,15 @@ export async function fetchCart(location?: { latitude: number; longitude: number
 }
 
 export async function afterLogin(auth: { accessToken: string; refreshToken: string; user: any }) {
-  authVersion++;
-  if (await AsyncStorage.getItem(KEYS.guest)) await AsyncStorage.setItem(KEYS.mergePending, auth.user.id);
+  const before = authVersion;
+  const guest = await AsyncStorage.getItem(KEYS.guest);
+  if (before !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
+  if (guest) await AsyncStorage.setItem(KEYS.mergePending, auth.user.id);
   await storeAuth(auth);
+  const version = authVersion;
+  if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
   await retryBasketMerge();
+  if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
 }
 
 export async function hasPendingBasketMerge() {
@@ -256,8 +304,14 @@ let merging: Promise<void> | null = null;
 export async function retryBasketMerge() {
   if (merging) return merging;
   merging = (async () => {
+    const version = authVersion;
+    const user = await getUser();
+    const guest = await AsyncStorage.getItem(KEYS.guest);
+    if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
     if (!(await hasPendingBasketMerge())) return;
     await request('POST', '/guest/cart/merge-after-login');
+    if (version !== authVersion || (await getUser())?.id !== user?.id || (await AsyncStorage.getItem(KEYS.guest)) !== guest)
+      throw new ApiError('Your session changed. Check your basket.', 409);
     await AsyncStorage.multiRemove([KEYS.mergePending, KEYS.guest]);
   })().finally(() => {
     merging = null;

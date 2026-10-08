@@ -10,6 +10,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { ADMIN_ROLES, StaffPermission, UserRole } from '../common/constants';
+import { audienceAllowed, NotificationAudience } from '../notifications/notification-audience';
 
 /**
  * Socket.IO rooms:
@@ -43,13 +44,13 @@ export class RealtimeGateway implements OnGatewayConnection {
     if (typeof token === 'string' && token) {
       try {
         const payload = await this.jwtService.verifyAsync(token);
-        const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { role: true, status: true, customer: { select: { id: true } }, merchant: { select: { id: true } }, staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, isActive: true } } } });
+        const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { role: true, status: true, customer: { select: { id: true } }, merchant: { select: { id: true } }, staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, isActive: true, approvalStatus: true } } } });
         if (!user || user.status !== 'ACTIVE') return;
         const role = payload.role as UserRole;
         const member = role === UserRole.CUSTOMER ? !!user.customer
           : role === UserRole.MERCHANT_OWNER ? !!user.merchant
           : role === UserRole.MERCHANT_STAFF ? user.staffOf.length > 0
-          : role === UserRole.RIDER ? !!user.rider?.isActive
+          : role === UserRole.RIDER ? !!user.rider?.isActive && user.rider.approvalStatus === 'APPROVED'
           : ADMIN_ROLES.includes(role) && user.role === role;
         if (!member) return;
         if (payload.sid) {
@@ -72,12 +73,12 @@ export class RealtimeGateway implements OnGatewayConnection {
     if (!userId) return false;
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: {
       role: true, status: true, customer: { select: { id: true } }, merchant: { select: { id: true } },
-      staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, isActive: true } },
+      staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, isActive: true, approvalStatus: true } },
     } });
     const member = role === UserRole.CUSTOMER ? !!user?.customer
       : role === UserRole.MERCHANT_OWNER ? !!user?.merchant
       : role === UserRole.MERCHANT_STAFF ? !!user?.staffOf.length
-      : role === UserRole.RIDER ? !!user?.rider?.isActive
+      : role === UserRole.RIDER ? !!user?.rider?.isActive && user.rider.approvalStatus === 'APPROVED'
       : ADMIN_ROLES.includes(role) && user?.role === role;
     if (user?.status !== 'ACTIVE' || !member) {
       client.disconnect(true);
@@ -106,6 +107,10 @@ export class RealtimeGateway implements OnGatewayConnection {
             client.leave(room);
             return;
           }
+          if (event === 'notification') {
+            const item = data as { audience?: NotificationAudience; scopeId?: string; type?: string };
+            if (!item?.audience || !item.scopeId || !item.type || !(await audienceAllowed(this.prisma, { userId: client.data.userId, role: client.data.role, sessionId: client.data.sessionId }, { audience: item.audience, scopeId: item.scopeId, baseType: item.type }))) return;
+          }
           this.server.to(client.id).emit(event, data);
         } catch {
           // A failed authorization query must never turn into a broadcast.
@@ -127,7 +132,7 @@ export class RealtimeGateway implements OnGatewayConnection {
     }
     if (room.startsWith('rider:')) {
       if (ADMIN_ROLES.includes(role)) return true;
-      return role === UserRole.RIDER && !!(await this.prisma.rider.findFirst({ where: { id: room.slice(6), userId, isActive: true }, select: { id: true } }));
+      return role === UserRole.RIDER && !!(await this.prisma.rider.findFirst({ where: { id: room.slice(6), userId, isActive: true, approvalStatus: 'APPROVED' }, select: { id: true } }));
     }
     if (room.startsWith('order:')) {
       if (ADMIN_ROLES.includes(role)) return true;

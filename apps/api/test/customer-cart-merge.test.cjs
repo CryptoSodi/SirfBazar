@@ -17,16 +17,19 @@ function fixture() {
       const result = queue.then(async () => {
         const before = { ...state };
         try { return await operation({
+          $queryRaw: async () => [{ id: 'locked-owner' }],
           cart: {
             updateMany: async ({ where, data }) => {
               assert.equal(where.id, 'guest-cart'); assert.equal(where.status, 'ACTIVE');
               if (state.status !== 'ACTIVE') return { count: 0 };
               state.status = data.status; return { count: 1 };
             },
-            findFirst: async ({ where }) => { assert.equal(where.customerId, 'customer'); return { id: 'customer-cart' }; },
+            findFirst: async ({ where }) => where.guestSessionId ? (state.status === 'ACTIVE' ? guest() : null) : { id: 'customer-cart' },
+            findUniqueOrThrow: async () => ({ id: 'customer-cart', couponCode: state.couponCode }),
             update: async ({ data }) => { state.couponCode = data.couponCode; },
           },
-          cartItem: { upsert: async ({ where, update }) => {
+          merchantProduct: { findUnique: async () => ({ id: 'mp', stockQuantity: 20, isAvailable: true, merchant: { approvalStatus: 'APPROVED' }, product: { approvalStatus: 'APPROVED' } }) },
+          cartItem: { findUnique: async () => ({ quantity: state.quantity }), upsert: async ({ where, update }) => {
             assert.equal(where.cartId_merchantProductId.cartId, 'customer-cart');
             state.quantity += update.quantity.increment;
             if (fail) throw Error('Injected copy failure');
@@ -38,7 +41,7 @@ function fixture() {
     },
   };
   const service = new CartService(prisma, {}, {});
-  service.view = async () => ({ ...state });
+  service.viewInTransaction = async () => ({ ...state });
   return { service, state: () => state, fail: (value) => fail = value };
 }
 test('concurrent same-guest merges copy quantities exactly once', async () => {

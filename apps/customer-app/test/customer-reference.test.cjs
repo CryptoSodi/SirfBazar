@@ -19,6 +19,7 @@ function harness() {
     '@react-native-async-storage/async-storage': { default: storage },
     './credentials': { readCredential: storage.getItem, writeCredential: storage.setItem, removeCredential: storage.removeItem },
     './customer-events': { publishCustomerEvent: name => events.push(name) },
+    './toast-session': load('toast-session', {}),
     './customer-flow': load('customer-flow', {}), 'react-native': { Platform: { OS: 'web' } },
     'expo-constants': { default: { expoConfig: {} } },
   }, { fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, status: 200, json: async () => ({ sessionToken: 'guest', groups: [], itemCount: 0 }) }; } });

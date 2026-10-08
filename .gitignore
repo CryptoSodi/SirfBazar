@@ -29,6 +29,7 @@ test-results/
 
 # Local previews, verification artifacts and personal agent configuration
 dist-local/
+dist-remediation/
 /output/
 /.agenteam/
 /.codex/

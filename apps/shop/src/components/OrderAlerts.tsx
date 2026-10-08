@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bell, Volume2, VolumeX } from 'lucide-react';
 import { io } from 'socket.io-client';
-import { api, API_URL, getAccessToken } from '../lib/api';
+import { api, API_URL, captureSession, getAccessToken, sessionIsCurrent } from '../lib/api';
 import { readOrders } from '../lib/merchant-contracts';
 import { applyOrderEvent, claimSoundLease, readOrderEvent, realtimeOrigin, type PendingOrder } from '../lib/order-alerts';
 
@@ -18,6 +18,7 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
   const [desktop, setDesktop] = useState<NotificationPermission | 'unsupported'>(
     () => 'Notification' in window ? Notification.permission : 'unsupported');
   const [desktopError, setDesktopError] = useState('');
+  const [sessionRevision, setSessionRevision] = useState(0);
   const audio = useRef<AudioContext | null>(null);
   const pendingRef = useRef(pending);
   const tabId = useRef('');
@@ -26,6 +27,8 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
   pendingRef.current = pending;
 
   useEffect(() => {
+    const captured = captureSession();
+    const current = () => sessionIsCurrent(captured);
     let active = true;
     let joined = false;
     let syncing = false;
@@ -37,13 +40,14 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
     let joinTimer: number | undefined;
     const socket = io(realtimeOrigin(API_URL), {
       autoConnect: false,
-      auth: callback => callback({ token: getAccessToken() }),
+      auth: callback => callback({ token: current() ? getAccessToken() : '' }),
       reconnectionDelay: 500,
       reconnectionDelayMax: 5_000,
       timeout: 8_000,
     });
     const changed = () => window.dispatchEvent(new Event('sb:orders-changed'));
     const announce = (orders: PendingOrder[]) => {
+      if (!current()) return;
       for (const order of orders) {
         if (notices.has(order.id)) continue;
         notices.add(order.id);
@@ -53,19 +57,19 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
               body: `Order ${order.orderNumber} is waiting for your decision.`,
               tag: `sirfbazar-order-${order.id}`, silent: true,
             });
-            notice.onclick = () => { window.focus(); window.location.assign(`/orders?order=${encodeURIComponent(order.id)}`); notice.close(); };
+            notice.onclick = () => { if (current()) { window.focus(); window.location.assign(`/orders?order=${encodeURIComponent(order.id)}`); } notice.close(); };
           } catch { /* In-app alerts remain available if OS notifications fail. */ }
         }
       }
     };
     const sync = async () => {
-      if (!active) return;
+      if (!active || !current()) return;
       if (syncing) { syncAgain = true; return; }
       syncing = true;
       const before = revision;
       try {
         const orders = readOrders(await api.get('/merchant/orders?status=SENT_TO_MERCHANT'));
-        if (!active) return;
+        if (!active || !current()) return;
         // A late snapshot must not undo a new order/acceptance received live.
         if (revision !== before) { syncAgain = true; return; }
         const next = orders.map(({ id, orderNumber }) => ({ id, orderNumber }));
@@ -75,16 +79,16 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
         lastSync = Date.now();
         changed();
       } catch {
-        if (active) setSyncError(true); // Keep known orders on a transient failure.
+        if (active && current()) setSyncError(true); // Keep known orders on a transient failure.
       } finally {
         syncing = false;
         if (active && syncAgain) { syncAgain = false; void sync(); }
       }
     };
     const join = () => {
-      if (!active || !socket.connected) return;
+      if (!active || !current() || !socket.connected) return;
       socket.timeout(5_000).emit('join:merchant', { merchantId }, (error: Error | null, reply: { ok?: boolean } | undefined) => {
-        if (!active || !socket.connected) return;
+        if (!active || !current() || !socket.connected) return;
         if (error || reply?.ok !== true) {
           joined = false;
           setConnection('fallback');
@@ -99,7 +103,7 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
       });
     };
     const orderEvent = (value: unknown) => {
-      if (!joined) return;
+      if (!joined || !current()) return;
       const event = readOrderEvent(value);
       if (!event) return;
       revision++;
@@ -116,9 +120,10 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
     socket.on('notification', (value: { type?: string }) => {
       // Personal notifications can refer to another staff shop: reconcile via
       // the tenant-scoped endpoint instead of trusting their referenceId.
-      if (value?.type === 'NEW_ORDER') void sync();
+      if (current() && value?.type === 'NEW_ORDER') void sync();
     });
     const disconnected = () => {
+      if (!current()) return;
       joined = false;
       window.clearTimeout(joinTimer);
       setConnection(navigator.onLine ? 'fallback' : 'offline');
@@ -126,6 +131,7 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
     socket.on('disconnect', disconnected);
     socket.on('connect_error', disconnected);
     const session = () => {
+      if (!current()) { setPending([]); setSessionRevision((value) => value + 1); return; }
       const token = getAccessToken();
       if (token === lastToken) return;
       lastToken = token;
@@ -134,7 +140,7 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
       socket.disconnect();
       if (token) { setConnection('connecting'); socket.connect(); }
     };
-    const online = () => { if (!socket.connected) socket.connect(); void sync(); };
+    const online = () => { if (!current()) return; if (!socket.connected) socket.connect(); void sync(); };
     const visible = () => {
       if (!document.hidden) {
         setDesktop('Notification' in window ? Notification.permission : 'unsupported');
@@ -166,7 +172,7 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
       document.removeEventListener('visibilitychange', visible);
       notices.clear();
     };
-  }, [merchantId]);
+  }, [merchantId, sessionRevision]);
 
   const playTone = () => {
     const context = audio.current;

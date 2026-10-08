@@ -11,10 +11,12 @@ import {
   NotificationType,
   OrderStatus,
   ProductApprovalStatus,
+  PaymentStatus,
   RefundStatus,
 } from '../common/constants';
 import { parsePage, paged, PageQuery } from '../common/utils/pagination';
 import { randomBytes } from 'crypto';
+import { serializable } from '../common/transaction';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -112,6 +114,7 @@ export class AdminMarketplaceService {
     if (note) {
       await this.notifications.notify({
         userId: merchant.user.id,
+        audience: 'MERCHANT', scopeId: merchantId,
         title: note[0],
         body: note[1],
         type: NotificationType.SYSTEM,
@@ -238,32 +241,46 @@ export class AdminMarketplaceService {
   }
 
   async overrideOrderStatus(adminUserId: string, orderId: string, status: string, reason: string) {
-    if (!Object.values(OrderStatus).includes(status as any)) {
-      throw new BadRequestException(`Unknown order status ${status}`);
-    }
-    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
-    if (!order) throw new NotFoundException('Order not found');
-
-    if ([OrderStatus.DELIVERED, ...CANCELLED_ORDER_STATUSES].includes(order.status as any)) {
-      throw new BadRequestException('Completed or cancelled orders cannot be reactivated');
-    }
-    if ([OrderStatus.DELIVERED, ...CANCELLED_ORDER_STATUSES].includes(status as any)) {
-      throw new BadRequestException('Use the dedicated delivery or cancellation action for terminal status changes');
-    }
-
-    await this.statusService.apply(orderId, status as OrderStatus, {
-      userId: adminUserId,
-      role: 'ADMIN',
-      notes: `Manual override: ${reason}`,
-    }, {}, [order.status]);
-    await this.audit.log({
-      userId: adminUserId,
-      action: 'ORDER_STATUS_OVERRIDE',
-      entityType: 'Order',
-      entityId: orderId,
-      oldValue: { status: order.status },
-      newValue: { status, reason },
+    if (!reason?.trim() || reason.trim().length > 500) throw new BadRequestException('Give a short reason for this status repair');
+    const allowed: Record<string, string[]> = {
+      [OrderStatus.SENT_TO_MERCHANT]: [OrderStatus.MERCHANT_ACCEPTED],
+      [OrderStatus.MERCHANT_ACCEPTED]: [OrderStatus.PREPARING, OrderStatus.READY_FOR_PICKUP],
+      [OrderStatus.PREPARING]: [OrderStatus.READY_FOR_PICKUP],
+    };
+    const result = await serializable(this.prisma, async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: orderId } });
+      if (!order) throw new NotFoundException('Order not found');
+      if (!allowed[order.status]?.includes(status) || order.channel !== 'ONLINE' || order.isParent || !!order.riderId || !!order.pickedUpAt) {
+        throw new BadRequestException('Use the dedicated order action for this status change');
+      }
+      const assignedRider = await tx.rider.findFirst({ where: { currentOrderId: order.id }, select: { id: true } });
+      if (assignedRider) throw new BadRequestException('Release the existing rider assignment before changing status');
+      const collectedLegacy = order.paymentMethod !== 'COD' && order.paymentStatus === PaymentStatus.PAID
+        ? await tx.payment.findFirst({ where: { orderId: order.parentOrderId ?? order.id, status: PaymentStatus.PAID, providerTransactionId: { not: null } }, select: { id: true } })
+        : null;
+      const validPayment = order.paymentMethod === 'COD'
+        ? order.paymentStatus === PaymentStatus.CASH_PENDING
+        : !!collectedLegacy;
+      if (!validPayment) throw new BadRequestException('Payment is not ready for this status change');
+      const pickupEvidence = await tx.orderTimelineEntry.findFirst({ where: { orderId, status: { in: [OrderStatus.PICKED_UP, OrderStatus.ON_THE_WAY, OrderStatus.RIDER_ARRIVED_AT_CUSTOMER] } }, select: { id: true } });
+      if (pickupEvidence) throw new BadRequestException('A picked-up order cannot be moved backward');
+      if (status === OrderStatus.READY_FOR_PICKUP) {
+        const unresolved = await tx.orderItem.findFirst({ where: { orderId, itemStatus: 'REPLACEMENT_SUGGESTED' }, select: { id: true } });
+        if (unresolved) throw new BadRequestException('Resolve suggested replacements before pickup');
+      }
+      const changed = await this.statusService.applyInTransaction(tx, orderId, status as OrderStatus, {
+        userId: adminUserId, role: 'ADMIN', notes: `Manual override: ${reason.trim()}`,
+      }, {
+        ...(status === OrderStatus.MERCHANT_ACCEPTED ? { acceptedAt: new Date() } : {}),
+        ...(status === OrderStatus.READY_FOR_PICKUP ? { readyForPickupAt: new Date() } : {}),
+      }, [order.status]);
+      await tx.auditLog.create({ data: {
+        userId: adminUserId, role: 'ADMIN', action: 'ORDER_STATUS_OVERRIDE', entityType: 'Order', entityId: orderId,
+        oldValue: JSON.stringify({ status: order.status }), newValue: JSON.stringify({ status, reason: reason.trim() }),
+      } });
+      return changed;
     });
+    this.statusService.broadcastStatus(result);
     return { ok: true, status };
   }
 
@@ -362,6 +379,7 @@ export class AdminMarketplaceService {
       if (merchant) {
         await this.notifications.notify({
           userId: merchant.userId,
+          audience: 'MERCHANT', scopeId: product.createdByMerchantId,
           title: status === 'APPROVED' ? 'Product approved' : 'Product rejected',
           body:
             status === 'APPROVED'

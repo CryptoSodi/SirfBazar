@@ -40,7 +40,7 @@ export default function OrdersPage() {
           <h1 className="mt-2 text-lg font-bold">Login to see your orders</h1>
           <button className="btn-primary mt-4" onClick={() => setNeedLogin(true)}>Login</button>
         </div>
-        <LoginSheet title="Login to view your orders" onClose={() => history.back()} onSuccess={load} />
+        <LoginSheet title="Sign in or create an account" description="Continue to your order history after verifying your phone or using Google." onClose={() => history.back()} onSuccess={load} />
       </>
     );
   }

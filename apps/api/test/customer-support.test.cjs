@@ -10,7 +10,7 @@ function fixture() {
     supportTicket: { create: async ({ data }) => { creates++; return { id: 'ticket', ...data }; },
       findUnique: async () => ({ id: 'ticket', createdByUserId: 'other-user', messages: [] }) },
     supportTicketMessage: { create: async () => { messages++; return {}; } },
-  }, {}, { emitToAdmins: () => {} });
+  }, {}, { notify: async () => null }, { emitToAdmins: () => {} });
   return { service, count: () => ({ creates, messages }) };
 }
 const input = { issueCategory: 'OTHER', title: 'Help', description: 'Please check' };

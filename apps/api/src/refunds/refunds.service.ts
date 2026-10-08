@@ -184,7 +184,7 @@ export class RefundsService {
   }
 
   async notifyCompleted(refund: { customer: { userId: string }; order: { orderNumber: string }; amountPaisa: number; orderId: string }) {
-    await this.notifications.notify({ userId: refund.customer.userId, title: 'Refund completed', body: `Rs ${(refund.amountPaisa / 100).toFixed(0)} for order ${refund.order.orderNumber} was credited to your SirfBazar wallet.`, type: NotificationType.REFUND_UPDATE, referenceId: refund.orderId })
+    await this.notifications.notify({ userId: refund.customer.userId, audience: 'CUSTOMER', scopeId: refund.customer.userId, title: 'Refund completed', body: `Rs ${(refund.amountPaisa / 100).toFixed(0)} for order ${refund.order.orderNumber} was credited to your SirfBazar wallet.`, type: NotificationType.REFUND_UPDATE, referenceId: refund.orderId })
       .catch((error) => this.logger.warn(`Post-commit refund notification failed: ${error}`));
   }
 }

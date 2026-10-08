@@ -2,7 +2,7 @@ import { ToastMessage } from '../components/Toast';
 import { useCallback, useRef, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { Linking, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { api, isLoggedIn } from '../lib/api';
+import { api, getAuthVersion, getUser, isLoggedIn } from '../lib/api';
 import { notificationDestination } from '../lib/customer-flow';
 import { useLiveRefresh } from '../lib/useLiveRefresh';
 import { useTheme } from '../lib/theme';
@@ -22,30 +22,37 @@ export default function NotificationsScreen() {
   const [unread, setUnread] = useState(false);
   const [options, setOptions] = useState(false);
   const [pushMessage, setPushMessage] = useState('');
+  const [scope, setScope] = useState<'current' | 'legacy'>('current');
   const lock = useRef(false);
   const generation = useRef(0);
   const load = useCallback(() => {
     const current = ++generation.current;
+    const version = getAuthVersion();
     void (async () => {
       const ok = await isLoggedIn();
-      if (current !== generation.current) return;
+      if (current !== generation.current || version !== getAuthVersion()) return;
       setGuest(!ok);
       if (!ok) { setItems(null); return; }
-      const result = await api.get('/notifications');
-      if (current === generation.current) { setItems(result); setError(''); }
-    })().catch((cause) => { if (current === generation.current) setError(`${cause.message} Refresh your updates to retry.`); });
-  }, []);
+      const result = await api.get(`/notifications${scope === 'legacy' ? '?scope=legacy' : ''}`);
+      if (current === generation.current && version === getAuthVersion()) { setItems(result); setError(''); }
+    })().catch((cause) => { if (current === generation.current && version === getAuthVersion()) setError(`${cause.message} Refresh your updates to retry.`); });
+  }, [scope]);
   useLiveRefresh('notifications', load);
   const open = async (item: any) => {
     if (lock.current) return;
+    const version = getAuthVersion();
+    const user = await getUser();
+    if (version !== getAuthVersion() || !user?.id) return;
+    if (scope === 'current' && item.audience && !(item.scopeId === user.id && ['CUSTOMER', 'ACCOUNT'].includes(item.audience))) return;
     lock.current = true; setBusy(true); setError('');
     try {
-      await api.post(`/notifications/${item.id}/read`);
+      await api.post(`/notifications/${item.id}/read${scope === 'legacy' ? '?scope=legacy' : ''}`);
+      if (version !== getAuthVersion()) return;
       load();
       const destination = notificationDestination(item);
       if (destination?.screen === 'OrderDetail') goTab(navigation, 'OrdersTab', { screen: 'OrderDetail', params: { orderId: destination.orderId } });
       else if (destination?.screen === 'SupportDetail') goTab(navigation, 'ProfileTab', { screen: 'SupportDetail', params: { ticketId: destination.ticketId } });
-    } catch (cause: any) { setError(`${cause.message} Try opening the update again.`); }
+    } catch (cause: any) { if (version === getAuthVersion()) setError(`${cause.message} Try opening the update again.`); }
     finally { lock.current = false; setBusy(false); }
   };
   const visible = unread ? items?.filter((item) => !item.isRead) : items;
@@ -53,7 +60,8 @@ export default function NotificationsScreen() {
   return <View style={s.screen}>
     {guest ? <StatePanel title="Your updates, in one place" message="Sign in to view order and support updates." icon="bell" action="Sign in" onPress={() => setLogin(true)} /> :
       <ScrollView contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}>
-        <Text accessibilityRole="header" style={s.h1}>Your updates</Text><Text style={[s.muted, { marginTop: 8 }]}>Only updates for your customer account.</Text>
+        <Text accessibilityRole="header" style={s.h1}>Your updates</Text><Text style={[s.muted, { marginTop: 8 }]}>{scope === 'current' ? 'Only updates for your customer account.' : 'Earlier account history is separate from your current alerts.'}</Text>
+        <View style={[s.row, { gap: 8, marginTop: 12 }]}><TouchableOpacity accessibilityRole="button" accessibilityState={{ selected: scope === 'current' }} style={s.btnGhost} onPress={() => { generation.current++; setItems(null); setScope('current'); }}><Text style={s.btnGhostText}>Current</Text></TouchableOpacity><TouchableOpacity accessibilityRole="button" accessibilityState={{ selected: scope === 'legacy' }} style={s.btnGhost} onPress={() => { generation.current++; setItems(null); setScope('legacy'); }}><Text style={s.btnGhostText}>Earlier history</Text></TouchableOpacity></View>
         {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error}</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh updates</Text></TouchableOpacity></View>}
         {!items && !error && <StatePanel loading title="Loading updates…" />}
         {items && !visible?.length && <StatePanel icon="bell" title={unread ? 'No unread updates' : 'No updates yet'} message="Order and support updates appear here. Your orders always show their latest saved status." action="View orders" onPress={() => goTab(navigation, 'OrdersTab')} />}
@@ -66,8 +74,9 @@ export default function NotificationsScreen() {
           <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: unread }} style={s.btnGhost} onPress={() => setUnread(!unread)}><Text style={s.btnGhostText}>{unread ? 'Show all updates' : 'Show unread only'}</Text></TouchableOpacity>
           <TouchableOpacity accessibilityRole="button" style={s.btnGhost} disabled={busy} onPress={async () => {
             if (lock.current) return; lock.current = true; setBusy(true);
-            try { await api.post('/notifications/read-all'); load(); }
-            catch (cause: any) { setError(`${cause.message} Try marking your updates as read again.`); }
+            const version = getAuthVersion();
+            try { await api.post(`/notifications/read-all${scope === 'legacy' ? '?scope=legacy' : ''}`); if (version === getAuthVersion()) load(); }
+            catch (cause: any) { if (version === getAuthVersion()) setError(`${cause.message} Try marking your updates as read again.`); }
             finally { lock.current = false; setBusy(false); }
           }}><Text style={s.btnGhostText}>Mark all as read</Text></TouchableOpacity>
           <TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={load}><Text style={s.btnGhostText}>Refresh updates</Text></TouchableOpacity>

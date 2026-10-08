@@ -1,6 +1,7 @@
 import { ToastMessage } from '../components/Toast';
 import { useEffect, useRef, useState } from 'react';
-import { api, pkr } from '../lib/api';
+import { api, captureSession, pkr, sessionIsCurrent } from '../lib/api';
+import { AvailabilitySwitch } from '../components/AvailabilitySwitch';
 import { Badge, Modal, Stat, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
 import { useThemeStudio, type ThemeMode } from '../components/ThemeStudio';
 import { ReferenceIcon } from '../components/ReferenceIcon';
@@ -82,6 +83,7 @@ export default function Profile() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [stateBusy, setStateBusy] = useState(false);
+  const stateBusyRef = useRef(false);
   const [mapOpen, setMapOpen] = useState(false);
   const mapTrigger = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState(false);
@@ -165,6 +167,24 @@ export default function Profile() {
     }
   };
 
+  const toggleAvailability = async () => {
+    if (!canEdit || stateBusyRef.current) return;
+    stateBusyRef.current = true; setStateBusy(true);
+    const captured = captureSession();
+    try {
+      const saved = await api.post(`/merchant/${merchant.isOnline ? 'offline' : 'online'}`);
+      if (!sessionIsCurrent(captured)) return;
+      if (typeof saved?.isOnline !== 'boolean') throw new Error('The saved shop availability could not be confirmed.');
+      setMerchant((current: any) => ({ ...current, isOnline: saved.isOnline }));
+      toast(`Shop availability saved: ${saved.isOnline ? 'Online' : 'Offline'}.`);
+      window.dispatchEvent(new Event('sb:shop-status'));
+    } catch {
+      if (!sessionIsCurrent(captured)) return;
+      await load();
+      toast('Availability could not be saved. Try again.', false);
+    } finally { stateBusyRef.current = false; if (sessionIsCurrent(captured)) setStateBusy(false); }
+  };
+
   const addDocument = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!documentFile) return;
@@ -229,7 +249,7 @@ export default function Profile() {
         </section>
         <section className="panel panel-pad"><h2>Storefront controls</h2><p className="small muted" style={{ marginTop: 5 }}>Separate settings. Separate API actions.</p>
           <div className="setting-line"><div><b>Shop open</b><p>{isOpen ? 'Open' : 'Closed'} for new orders.</p></div><button type="button" className="btn tiny" disabled={!canEdit || stateBusy} onClick={() => toggleState(isOpen ? 'close' : 'open', isOpen ? 'Shop closed' : 'Shop opened')}>{isOpen ? 'Close shop' : 'Open shop'}</button></div>
-          <div className="setting-line"><div><b>Shop online</b><p>{isOnline ? 'Online' : 'Offline'} in customer-facing availability.</p></div><button type="button" className="btn tiny" disabled={!canEdit || stateBusy} onClick={() => toggleState(isOnline ? 'offline' : 'online', isOnline ? 'Shop is now offline' : 'Shop is now online')}>{isOnline ? 'Go offline' : 'Go online'}</button></div>
+          <div className="setting-line"><div><b>Shop availability</b><p>{isOnline ? 'Online' : 'Offline'} in customer-facing availability.</p>{!canEdit && <p>You need shop settings permission to change availability.</p>}</div><AvailabilitySwitch online={isOnline} disabled={!canEdit} busy={stateBusy} onToggle={() => void toggleAvailability()} /></div>
           <p className="small muted" style={{ marginTop: 18 }}>Changing these flags does not record a delivery, cancel an order or prove storefront availability.</p>
           <div className="section-divider" /><h3>Approval status</h3><p className="small muted" style={{ marginTop: 7 }}>This status is supplied by the backend.</p><div style={{ marginTop: 12 }}><Badge value={merchant.approvalStatus} /></div>
           <div className="section-divider" /><div className="definition"><span>Rating</span><b>{(merchant.ratingAverage ?? 0).toFixed(1)} / 5 · {merchant.ratingCount ?? 0} reviews</b></div><div className="definition"><span>Commission</span><b>{merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}</b></div><div className="definition"><span>Shop type</span><b>{String(merchant.shopType ?? '—').replace(/_/g, ' ')}</b></div>

@@ -1,4 +1,4 @@
-import { toast, ToastHost } from '../components/Toast';
+import { useToast, ToastHost } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
@@ -8,6 +8,7 @@ import { api, pkr, statusLabel } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 export default function OrderDetailScreen() {
+  const toast = useToast();
   const route = useRoute<RouteProp<RootStackParamList, 'OrderDetail'>>();
   const [order, setOrder] = useState<any>(null);
   const [riderPicker, setRiderPicker] = useState(false);

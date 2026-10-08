@@ -169,6 +169,7 @@ export const NotificationType = {
   PRODUCT_APPROVED: 'PRODUCT_APPROVED',
   PRODUCT_REJECTED: 'PRODUCT_REJECTED',
   SYSTEM: 'SYSTEM',
+  RIDER_REQUEST: 'RIDER_REQUEST',
 } as const;
 
 export const ProductApprovalStatus = {

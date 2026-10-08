@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, errorMessage, pkr } from '../lib/api';
-import { readDashboard, readListingsPage, readOrdersPage, readProfile, readRiders, type DashboardSummary, type MerchantOrder, type MerchantProfile, type MerchantRider } from '../lib/merchant-contracts';
+import { api, captureSession, errorMessage, pkr, sessionIsCurrent } from '../lib/api';
+import { can, readDashboard, readListingsPage, readOrdersPage, readProfile, readRiders, type DashboardSummary, type MerchantOrder, type MerchantProfile, type MerchantRider } from '../lib/merchant-contracts';
+import { AvailabilitySwitch } from '../components/AvailabilitySwitch';
+import { useToast } from '../components/Toast';
 import { ReferenceIcon, type ReferenceIconName } from '../components/ReferenceIcon';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { readMemory, writeMemory } from '../lib/memoryCache';
@@ -17,6 +19,7 @@ const time = (value: string) => new Intl.DateTimeFormat('en-PK', { hour: '2-digi
 const statusMeta = (status: string) => status === 'SENT_TO_MERCHANT' ? ['New order', 'amber'] : status === 'READY_FOR_PICKUP' ? ['Ready for pickup', 'green'] : [status.replaceAll('_', ' ').toLowerCase(), 'blue'];
 
 export default function Dashboard() {
+  const { toast } = useToast();
   const cached = readMemory<DashboardCache>('dashboard');
   const [stats, setStats] = useState<DashboardSummary | null>(cached?.stats ?? null);
   const [profile, setProfile] = useState<MerchantProfile | null>(cached?.profile ?? null);
@@ -26,16 +29,20 @@ export default function Dashboard() {
   const [earnings, setEarnings] = useState<Earnings | null>(cached?.earnings ?? null);
   const [loading, setLoading] = useState(!cached);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState('');
   const [partialError, setPartialError] = useState('');
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
+    const captured = captureSession();
     setLoading(true); setError(''); setPartialError('');
     try {
       const [nextStats, nextProfile] = await Promise.all([api.getParsed('/merchant/dashboard', readDashboard), api.getParsed('/merchant/profile', readProfile)]);
+      if (!sessionIsCurrent(captured)) return;
       setStats(nextStats); setProfile(nextProfile);
       const results = await Promise.allSettled([api.getParsed('/merchant/orders?page=1&pageSize=5&attention=true', readOrdersPage), api.getParsed('/merchant/riders', readRiders), api.getParsed('/merchant/products?page=1&pageSize=3&lowStock=true', readListingsPage), api.get('/merchant/earnings')]);
+      if (!sessionIsCurrent(captured)) return;
       const previous = readMemory<DashboardCache>('dashboard');
       const nextOrders = results[0].status === 'fulfilled' ? results[0].value.items : previous?.orders ?? [];
       const nextRiders = results[1].status === 'fulfilled' ? results[1].value : previous?.riders ?? [];
@@ -46,10 +53,11 @@ export default function Dashboard() {
       setUpdatedAt(new Date());
       if (results.some((result) => result.status === 'rejected')) setPartialError('Some workspace sections could not be loaded. Refresh to try them again.');
     } catch (cause) {
+      if (!sessionIsCurrent(captured)) return;
       if (readMemory('dashboard')) setPartialError(`Could not refresh the workspace. Showing the last loaded values. ${errorMessage(cause)}`);
       else { setStats(null); setProfile(null); setError(errorMessage(cause)); }
     }
-    finally { setLoading(false); }
+    finally { if (sessionIsCurrent(captured)) setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -69,10 +77,21 @@ export default function Dashboard() {
   const isOnline = stats?.isOnline ?? false;
 
   async function toggleOnline() {
-    setBusy(true);
-    try { await api.post(isOnline ? '/merchant/offline' : '/merchant/online'); await load(); window.dispatchEvent(new Event('sb:shop-status')); }
-    catch (cause) { setPartialError(errorMessage(cause)); }
-    finally { setBusy(false); }
+    if (busyRef.current || !can(profile, 'STORE')) return;
+    busyRef.current = true; setBusy(true);
+    const captured = captureSession();
+    try {
+      const saved = await api.post(isOnline ? '/merchant/offline' : '/merchant/online');
+      if (!sessionIsCurrent(captured)) return;
+      if (typeof saved?.isOnline !== 'boolean') throw new Error('The saved shop availability could not be confirmed.');
+      setStats((current) => current ? { ...current, isOnline: saved.isOnline } : current);
+      toast(`Shop availability saved: ${saved.isOnline ? 'Online' : 'Offline'}.`);
+      window.dispatchEvent(new Event('sb:shop-status'));
+    } catch (cause) {
+      if (!sessionIsCurrent(captured)) return;
+      await load(); // An ambiguous response requires the server's saved value.
+      toast(`Availability could not be saved. Try again. ${errorMessage(cause)}`, false);
+    } finally { busyRef.current = false; if (sessionIsCurrent(captured)) setBusy(false); }
   }
 
   if (loading && !stats) return <DashboardSkeleton />;
@@ -85,7 +104,7 @@ export default function Dashboard() {
     ['Delivering', stats.activeDeliveries, 'Assigned and on the way', 'rider', ''],
   ];
   return <>
-    <div className="page-heading"><div><div className="kicker">{new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Karachi' }).format(new Date()).toUpperCase()}</div><h1>Your shop, in focus.</h1><p>Orders to prepare. Riders to assign. Everything in one place.</p></div><div className="heading-actions"><button className="status-control" type="button" disabled={busy} onClick={toggleOnline}><span className="dot" />{busy ? 'Saving…' : isOnline ? 'Shop online' : 'Shop offline'}<ReferenceIcon name="down" size="sm" /></button><Link className="btn primary" to="/products"><ReferenceIcon name="plus" /> Add product</Link></div></div>
+    <div className="page-heading"><div><div className="kicker">{new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Karachi' }).format(new Date()).toUpperCase()}</div><h1>Your shop, in focus.</h1><p>Orders to prepare. Riders to assign. Everything in one place.</p></div><div className="heading-actions"><div><AvailabilitySwitch online={isOnline} disabled={!can(profile, 'STORE')} busy={busy} onToggle={() => void toggleOnline()} />{!can(profile, 'STORE') && <small className="small muted" style={{ display: 'block' }}>You need shop settings permission to change availability.</small>}</div><Link className="btn primary" to="/products"><ReferenceIcon name="plus" /> Add product</Link></div></div>
     {partialError && <div className="state-banner warn" role="alert"><ReferenceIcon name="alert" /><span>{partialError}</span><button className="btn tiny" onClick={() => void load()}>Refresh</button></div>}
     {stats.todayOrders === 0 && <div className="state-banner"><ReferenceIcon name="store" /><span><b>Your workspace is ready. Make it your own.</b><small>Add products, review your shop details and check the returned approval status.</small></span><Link className="btn tiny" to="/profile">Shop setup <ReferenceIcon name="arrow" size="sm" /></Link></div>}
     <section className="metrics" aria-label="Today’s shop summary">

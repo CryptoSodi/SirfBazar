@@ -17,6 +17,8 @@ import { GOOGLE_AUTH_SERVICE, IGoogleAuthService } from './google/google-auth.se
 import { MerchantRegistrationStartDto } from './auth.dto';
 import { Prisma } from '@prisma/client';
 import { WhatsAppError, validateWhatsAppPhone } from '../whatsapp/whatsapp.service';
+import { serializable } from '../common/transaction';
+import { revokeSessionRegistrations, transferRegistrations } from '../notifications/notification-registration';
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 const positiveSetting = (name: string, fallback: number) => {
@@ -146,7 +148,7 @@ export class AuthService {
     const code = generateNumericCode(6);
     const attempt = await this.createOtp(phoneNumber, purpose, code);
     const status = await this.deliverOtp(attempt.id, phoneNumber, code, purpose);
-    return { sent: status !== 'unconfirmed', status, expiresInSeconds: this.otpTtlSeconds,
+    return { sent: status !== 'unconfirmed', status, expiresInSeconds: this.otpTtlSeconds, resendAfterSeconds: this.otpResendCooldownSeconds,
       ...(status === 'unconfirmed' ? { message: 'Submission is unconfirmed. If a code arrives, use it; wait before resending.' } : {}) };
   }
 
@@ -430,10 +432,14 @@ export class AuthService {
   // ── Tokens ────────────────────────────────────────────────────────────────
 
   async issueTokens(userId: string, role: UserRole) {
+    return serializable(this.prisma, (tx) => this.issueTokensInTransaction(tx, userId, role));
+  }
+
+  private async issueTokensInTransaction(tx: Prisma.TransactionClient, userId: string, role: UserRole, previousSessionId?: string) {
     const refreshToken = generateToken(32);
     const refreshTtlDays = Number(process.env.JWT_REFRESH_TTL_DAYS || 30);
 
-    const session = await this.prisma.refreshToken.create({
+    const session = await tx.refreshToken.create({
       data: {
         userId,
         tokenHash: sha256(refreshToken),
@@ -442,27 +448,31 @@ export class AuthService {
       },
     });
     const accessToken = await this.jwtService.signAsync({ sub: userId, role, sid: session.id });
-    await this.prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
+    if (previousSessionId) await transferRegistrations(tx, userId, previousSessionId, session.id);
+    await tx.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
 
-    const user = await this.getMe(userId);
+    const user = await this.getMe(userId, tx);
     return { accessToken, refreshToken, user };
   }
 
   async refreshTokens(refreshToken: string) {
-    const stored = await this.prisma.refreshToken.findUnique({
+    return serializable(this.prisma, async (tx) => {
+    const stored = await tx.refreshToken.findUnique({
       where: { tokenHash: sha256(refreshToken) },
     });
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
       throw new UnauthorizedException('Invalid refresh token');
     }
-    const user = await this.prisma.user.findUnique({ where: { id: stored.userId } });
+    const user = await tx.user.findUnique({ where: { id: stored.userId } });
     if (!user || user.status !== 'ACTIVE') throw new UnauthorizedException('Invalid refresh token');
 
-    // Rotate: revoke the old token, issue a fresh pair.
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
+    // Claim only the still-live row. A competing transaction can commit only
+    // one replacement; any signing or insert failure rolls this claim back.
+    const claimed = await tx.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null, expiresAt: { gt: new Date() } },
       data: { revokedAt: new Date() },
     });
+    if (claimed.count !== 1) throw new UnauthorizedException('Invalid refresh token');
     // A user can be a customer and merchant/rider at once. Rotating a refresh
     // token must retain the role selected at login, not the user's base role.
     // Tokens issued before the role column existed keep the legacy fallback;
@@ -470,35 +480,38 @@ export class AuthService {
     const requestedRole = (stored.role ?? user.role) as UserRole;
     let activeRole: UserRole;
     if (requestedRole === UserRole.CUSTOMER) {
-      activeRole = await this.resolveContextRole(user.id, 'customer');
+      activeRole = await this.resolveContextRole(user.id, 'customer', tx);
     } else if (requestedRole === UserRole.MERCHANT_OWNER || requestedRole === UserRole.MERCHANT_STAFF) {
-      activeRole = await this.resolveContextRole(user.id, 'merchant');
+      activeRole = await this.resolveContextRole(user.id, 'merchant', tx);
     } else if (requestedRole === UserRole.RIDER) {
-      activeRole = await this.resolveContextRole(user.id, 'rider');
+      activeRole = await this.resolveContextRole(user.id, 'rider', tx);
       if (activeRole !== UserRole.RIDER) throw new UnauthorizedException('Rider access is no longer available');
     } else if (ADMIN_ROLES.includes(requestedRole)) {
-      activeRole = await this.resolveContextRole(user.id, 'admin');
+      activeRole = await this.resolveContextRole(user.id, 'admin', tx);
     } else {
       throw new UnauthorizedException('Invalid session role');
     }
-    return this.issueTokens(user.id, activeRole);
+    return this.issueTokensInTransaction(tx, user.id, activeRole, stored.id);
+    });
   }
 
   async logout(refreshToken: string) {
-    await this.prisma.refreshToken.updateMany({
-      where: { tokenHash: sha256(refreshToken), revokedAt: null },
-      data: { revokedAt: new Date() },
+    await serializable(this.prisma, async (tx) => {
+      const session = await tx.refreshToken.findUnique({ where: { tokenHash: sha256(refreshToken) }, select: { id: true, userId: true, revokedAt: true } });
+      if (!session || session.revokedAt) return;
+      await tx.refreshToken.updateMany({ where: { id: session.id, revokedAt: null }, data: { revokedAt: new Date() } });
+      await revokeSessionRegistrations(tx, session.userId, session.id);
     });
     return { loggedOut: true };
   }
 
-  async getMe(userId: string) {
-    const user = await this.prisma.user.findUnique({
+  async getMe(userId: string, db: Prisma.TransactionClient = this.prisma) {
+    const user = await db.user.findUnique({
       where: { id: userId },
       include: {
         customer: true,
         merchant: { select: { id: true, shopName: true, approvalStatus: true, isOnline: true } },
-        rider: { select: { id: true, merchantId: true, isActive: true, isOnline: true } },
+        rider: { select: { id: true, merchantId: true, isActive: true, isOnline: true, approvalStatus: true } },
         staffOf: { select: { merchantId: true, roleName: true, permissions: true, status: true } },
       },
     });
@@ -537,8 +550,8 @@ export class AuthService {
       throw new UnauthorizedException('This account is not a merchant — onboard your shop first.');
     }
     if (context === 'rider') {
-      const rider = await db.rider.findUnique({ where: { userId }, select: { id: true } });
-      if (rider) return UserRole.RIDER;
+      const rider = await db.rider.findUnique({ where: { userId }, select: { id: true, approvalStatus: true } });
+      if (rider && rider.approvalStatus !== 'REJECTED') return UserRole.RIDER;
       // Not a rider yet — hand back a base customer identity so the account can
       // self-onboard (browse shops + apply); /rider/apply then mints a RIDER token.
       await this.ensureCustomerRecord(userId, db);

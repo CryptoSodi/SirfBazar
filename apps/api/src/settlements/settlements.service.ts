@@ -87,7 +87,7 @@ export class SettlementsService {
       await tx.auditLog.create({ data: { userId: adminUserId, role: 'ADMIN', action: 'SETTLEMENT_PAID', entityType: 'Settlement', entityId: settlementId, newValue: JSON.stringify({ paymentReference, amountPaisa: payable }) } });
       return { settlement, updated: await tx.settlement.findUniqueOrThrow({ where: { id: settlementId } }) };
     });
-    await this.notifications.notify({ userId: result.settlement.merchant.userId, title: 'Settlement paid', body: `Rs ${(result.updated.amountPaisa / 100).toFixed(0)} has been paid out to ${result.settlement.merchant.shopName} (ref ${paymentReference}).`, type: NotificationType.SETTLEMENT_UPDATE, referenceId: settlementId })
+    await this.notifications.notify({ userId: result.settlement.merchant.userId, audience: 'MERCHANT', scopeId: result.settlement.merchantId, title: 'Settlement paid', body: `Rs ${(result.updated.amountPaisa / 100).toFixed(0)} has been paid out to ${result.settlement.merchant.shopName} (ref ${paymentReference}).`, type: NotificationType.SETTLEMENT_UPDATE, referenceId: settlementId })
       .catch((error) => this.logger.warn(`Post-commit settlement notification failed: ${error}`));
     return result.updated;
   }

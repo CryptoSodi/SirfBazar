@@ -6,6 +6,7 @@ import { SettlementsService } from '../settlements/settlements.service';
 import { SupportService } from '../support/support.service';
 import { AuthUser, CurrentUser, Roles } from '../common/decorators';
 import { MerchantApprovalStatus, UserRole } from '../common/constants';
+import { OverrideOrderStatusDto } from './admin.dto';
 
 @ApiTags('admin')
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
@@ -151,9 +152,9 @@ export class AdminController {
   overrideStatus(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
-    @Body() body: { status: string; reason: string },
+    @Body() body: OverrideOrderStatusDto,
   ) {
-    return this.marketplace.overrideOrderStatus(user.userId, id, body.status, body?.reason ?? '');
+    return this.marketplace.overrideOrderStatus(user.userId, id, body.status, body.reason);
   }
 
   // ── Products & categories ─────────────────────────────────────────────────

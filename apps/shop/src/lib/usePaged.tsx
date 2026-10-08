@@ -1,7 +1,7 @@
 import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
-import { readMemory, writeMemory } from './memoryCache';
+import { memoryScope, readMemory, writeMemory } from './memoryCache';
 
 type PagedCache = { items: any[]; total: number; totalPages: number };
 
@@ -15,12 +15,14 @@ export function usePaged(path: string, filters: Record<string, string | undefine
   const [totalPages, setTotalPages] = useState(initial?.totalPages ?? 1);
   const [loading, setLoading] = useState(!initial);
   const [error, setError] = useState('');
+  const [sessionRevision, setSessionRevision] = useState(0);
 
   const filterKey = JSON.stringify(filters);
 
   const load = useCallback(async () => {
+    const scope = memoryScope();
     const cacheKey = `paged:${path}:${page}:${filterKey}`;
-    const cached = readMemory<PagedCache>(cacheKey);
+    const cached = readMemory<PagedCache>(cacheKey, scope);
     if (cached) { setItems(cached.items); setTotal(cached.total); setTotalPages(cached.totalPages); }
     setLoading(!cached);
     setError('');
@@ -28,25 +30,35 @@ export function usePaged(path: string, filters: Record<string, string | undefine
       const qs = new URLSearchParams({ page: String(page), pageSize: '20' });
       for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v);
       const res = await api.get(`${path}?${qs.toString()}`);
+      if (scope !== memoryScope()) return;
       if (Array.isArray(res)) {
         setItems(res);
         setTotal(res.length);
         setTotalPages(1);
-        writeMemory<PagedCache>(cacheKey, { items: res, total: res.length, totalPages: 1 });
+        writeMemory<PagedCache>(cacheKey, { items: res, total: res.length, totalPages: 1 }, scope);
       } else {
         const next = { items: res.items ?? [], total: res.total ?? 0, totalPages: res.totalPages ?? 1 };
         setItems(next.items);
         setTotal(next.total);
         setTotalPages(next.totalPages);
-        writeMemory<PagedCache>(cacheKey, next);
+        writeMemory<PagedCache>(cacheKey, next, scope);
       }
     } catch (e: any) {
-      setError(e.message);
+      if (scope === memoryScope()) setError(e.message);
     } finally {
-      setLoading(false);
+      if (scope === memoryScope()) setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, page, filterKey]);
+  }, [path, page, filterKey, sessionRevision]);
+
+  useEffect(() => {
+    const changed = () => {
+      setItems([]); setTotal(0); setTotalPages(1); setLoading(true); setError('');
+      setSessionRevision((value) => value + 1);
+    };
+    window.addEventListener('sb:session', changed);
+    return () => window.removeEventListener('sb:session', changed);
+  }, []);
 
   useEffect(() => {
     load();

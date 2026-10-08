@@ -56,6 +56,7 @@ function apiHarness(fetcher) {
     '@react-native-async-storage/async-storage': { default: storage },
     './credentials': { readCredential: storage.getItem, writeCredential: storage.setItem, removeCredential: storage.removeItem },
     './customer-events': { publishCustomerEvent: () => {} },
+    './toast-session': load('toast-session'),
     './customer-flow': flow, 'react-native': { Platform: { OS: 'web' } },
     'expo-constants': { default: { expoConfig: {} } },
     './push': { registerForPush: async () => true, unregisterPush: async () => {} },

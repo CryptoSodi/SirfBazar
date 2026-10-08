@@ -1,7 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { ACTIVE_ORDER_STATUSES } from '../common/constants';
+import { lockOwners } from '../common/owner-lock';
+import { serializable } from '../common/transaction';
 
 @Injectable()
 export class CustomersService {
@@ -63,10 +66,12 @@ export class CustomersService {
 
   async createAddress(userId: string, input: any) {
     const customerId = await this.access.customerId(userId);
-    const count = await this.prisma.customerAddress.count({ where: { customerId } });
+    return serializable(this.prisma, async (tx) => {
+    await lockOwners(tx, { customerIds: [customerId] });
+    const count = await tx.customerAddress.count({ where: { customerId } });
     const makeDefault = input.isDefault === true || count === 0;
 
-    const address = await this.prisma.customerAddress.create({
+    const address = await tx.customerAddress.create({
       data: {
         customerId,
         label: input.label ?? 'Home',
@@ -83,18 +88,25 @@ export class CustomersService {
         isDefault: makeDefault,
       },
     });
-    if (makeDefault) await this.setDefaultInternal(customerId, address.id);
+    if (makeDefault) await this.setDefaultInternal(tx, customerId, address.id);
     return address;
+    });
   }
 
   async updateAddress(userId: string, addressId: string, input: any) {
     const customerId = await this.access.customerId(userId);
-    const existing = await this.prisma.customerAddress.findFirst({
+    return serializable(this.prisma, async (tx) => {
+    await lockOwners(tx, { customerIds: [customerId] });
+    const existing = await tx.customerAddress.findFirst({
       where: { id: addressId, customerId },
     });
     if (!existing) throw new NotFoundException('Address not found');
 
-    const address = await this.prisma.customerAddress.update({
+    const deliveryFields = ['fullAddress', 'street', 'area', 'city', 'province', 'latitude', 'longitude', 'contactName', 'contactPhone', 'instructions'] as const;
+    const changingDelivery = deliveryFields.some((field) => input[field] !== undefined && input[field] !== existing[field]);
+    if (changingDelivery) await this.assertAddressUnused(tx, addressId);
+
+    const address = await tx.customerAddress.update({
       where: { id: addressId },
       data: {
         label: input.label ?? undefined,
@@ -110,70 +122,74 @@ export class CustomersService {
         instructions: input.instructions ?? undefined,
       },
     });
-    if (input.isDefault === true) await this.setDefaultInternal(customerId, addressId);
+    if (input.isDefault === true) await this.setDefaultInternal(tx, customerId, addressId);
     return address;
+    });
   }
 
   async deleteAddress(userId: string, addressId: string) {
     const customerId = await this.access.customerId(userId);
-    const existing = await this.prisma.customerAddress.findFirst({
+    return serializable(this.prisma, async (tx) => {
+    await lockOwners(tx, { customerIds: [customerId] });
+    const existing = await tx.customerAddress.findFirst({
       where: { id: addressId, customerId },
     });
     if (!existing) throw new NotFoundException('Address not found');
     // The Order→address FK is optional (nulls on delete), so deleting an address
     // tied to an in-progress order would silently strip the rider's drop-off.
-    const activeOrder = await this.prisma.order.findFirst({
-      where: { deliveryAddressId: addressId, status: { in: ACTIVE_ORDER_STATUSES } },
-      select: { id: true },
-    });
-    if (activeOrder) {
-      throw new BadRequestException('This address is being used by an active order and cannot be deleted right now.');
-    }
-    await this.prisma.customerAddress.delete({ where: { id: addressId } });
+    await this.assertAddressUnused(tx, addressId);
+    await tx.customerAddress.delete({ where: { id: addressId } });
     if (existing.isDefault) {
-      const next = await this.prisma.customerAddress.findFirst({
+      const next = await tx.customerAddress.findFirst({
         where: { customerId },
         orderBy: { createdAt: 'desc' },
       });
-      await this.prisma.customer.update({
+      await tx.customer.update({
         where: { id: customerId },
         data: { defaultAddressId: next?.id ?? null },
       });
       if (next) {
-        await this.prisma.customerAddress.update({
+        await tx.customerAddress.update({
           where: { id: next.id },
           data: { isDefault: true },
         });
       }
     }
     return { ok: true };
+    });
   }
 
   async setDefault(userId: string, addressId: string) {
     const customerId = await this.access.customerId(userId);
-    const existing = await this.prisma.customerAddress.findFirst({
+    return serializable(this.prisma, async (tx) => {
+    await lockOwners(tx, { customerIds: [customerId] });
+    const existing = await tx.customerAddress.findFirst({
       where: { id: addressId, customerId },
     });
     if (!existing) throw new NotFoundException('Address not found');
-    await this.setDefaultInternal(customerId, addressId);
+    await this.setDefaultInternal(tx, customerId, addressId);
     return { ok: true };
+    });
   }
 
-  private async setDefaultInternal(customerId: string, addressId: string) {
-    await this.prisma.$transaction([
-      this.prisma.customerAddress.updateMany({
+  private async assertAddressUnused(tx: Prisma.TransactionClient, addressId: string) {
+    const activeOrder = await tx.order.findFirst({ where: { deliveryAddressId: addressId, status: { in: ACTIVE_ORDER_STATUSES } }, select: { id: true } });
+    if (activeOrder) throw new ConflictException({ code: 'ADDRESS_IN_USE', message: 'This address is used by an active order. Add a new address instead.' });
+  }
+
+  private async setDefaultInternal(tx: Prisma.TransactionClient, customerId: string, addressId: string) {
+    await tx.customerAddress.updateMany({
         where: { customerId, id: { not: addressId } },
         data: { isDefault: false },
-      }),
-      this.prisma.customerAddress.update({
+      });
+    await tx.customerAddress.update({
         where: { id: addressId },
         data: { isDefault: true },
-      }),
-      this.prisma.customer.update({
+      });
+    await tx.customer.update({
         where: { id: customerId },
         data: { defaultAddressId: addressId },
-      }),
-    ]);
+      });
   }
 
   /** Soft delete per spec 10.13 — account becomes unusable, history retained. */
