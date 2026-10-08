@@ -4,9 +4,10 @@ Date: 2026-10-08. Branch: `codex/google-login-completion`.
 Base: `codex/server-api-deployment` at
 `6c316b065a5cda72b0fad509d1b76a5d70a4bf9b`.
 
-**Overall status: PARTIAL. Local implementation and approved OAuth registrations
-are configured; consent publishing and end-to-end/native release verification
-remain incomplete. Nothing was committed, pushed or deployed by this task.**
+**Overall status: PARTIAL. Code and approved OAuth registrations are configured;
+the API is deployed with real Google verification. Consent publishing and
+end-to-end/native release verification remain incomplete.** The owner subsequently
+approved pushing and activating API deployment; see [activation evidence](API_DEPLOYMENT_ACTIVATION.md).
 
 This is a follow-up to the historical Phase 0 [audit](AUDIT.md), not a replacement
 for that evidence or approval to implement all of its findings. Only Google-login
@@ -31,7 +32,7 @@ Paths below are relative to the repository root.
 
 | App/control | Status | Implementation evidence | Remaining evidence |
 | --- | --- | --- | --- |
-| API Google proof | VERIFIED in isolated tests | `apps/api/src/auth/google/google-auth.service.ts`: official SDK, mandatory audience, issuer/signature/expiry/verified-email checks, cached public keys with 5s fetch deadline, generic errors, production mock rejection | Real Google token against an isolated running API; production env not inspected |
+| API Google proof | VERIFIED in isolated tests; production code/config verified; customer-web login owner-confirmed | `apps/api/src/auth/google/google-auth.service.ts`: official SDK, mandatory audience, issuer/signature/expiry/verified-email checks, cached public keys with 5s fetch deadline, generic errors, production mock rejection; activation record verifies running provider/audience | Other roles, linking and device journeys still need end-to-end evidence |
 | API account association | VERIFIED in isolated tests; PARTIAL integration | `apps/api/src/auth/auth.service.ts`: subject-first identity, safe email-link conditions, active status, app-role checks, conditional writes, sorted advisory locks, private `google-link` | Actual PostgreSQL concurrent requests/rollback and cross-flow races not exercised |
 | Customer website | PARTIAL | `apps/web/components/LoginSheet.tsx`, `GoogleAccountLink.tsx`, `app/profile/page.tsx`: existing login, pending guard, profile linking, guest flow retained | Real Google callback, guest merge and full responsive/profile E2E |
 | Merchant website | PARTIAL | `apps/shop/src/auth/GoogleSignIn.tsx`, `SignInPage.tsx`, `SignupFlowPage.tsx`, `lib/api.ts`: active-route Google login, active staff sessions, optional post-OTP link, resumable verified setup | Real registration/linking and role-denial E2E |
@@ -135,8 +136,9 @@ project/Web ID; do not create duplicate infrastructure to bypass access controls
   clients; do not restore an unsafe mock-capable production release as rollback.
 - API local changes affect only Google variables. Native public build variables,
   env examples and ignored local envs now match approved provider settings.
-  Database/JWT/WhatsApp values, live server configuration, Cloudflare and deployment
-  secrets were not changed. The auto-deployment activation guard remains disabled.
+  Database/JWT/WhatsApp values and Cloudflare remain unchanged. The later approved
+  activation changed only the two live Google variables, created dedicated
+  deployment credentials and enabled the CI-gated API workflow.
 
 ## Next Verification Batch
 
@@ -147,7 +149,7 @@ apps, including role denial, duplicate taps, account conflicts, cancellation,
 offline recovery, logout/account switching and the actual native signing builds.
 Record provider settings and results without tokens/secrets.
 
-Before any production release, separately close F01, validate the live env,
-resolve/reproduce the default website build failure on its deployment runner,
-and approve rollout/rollback. No broader audit remediation, deployment activation
-or live database mutation is implied by this report.
+Production API activation was separately approved and verified; default website
+builds passed on Linux CI. F01, consent completion and real client/device journeys
+remain requirements for a full production-readiness sign-off. This release does
+not certify or remediate the other audit findings.

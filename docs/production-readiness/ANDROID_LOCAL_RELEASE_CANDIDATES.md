@@ -81,7 +81,9 @@ move that secret to a password manager rather than relying on plaintext storage.
   publishing/branding is not completed by adding Android client registrations.
 - Live Google-link API deployment, real login/linking, guest checkout/rider
   journeys, Maps certificate restrictions and separate audit F01 remain gates.
-  No production API authentication/data mutations, migrations or deployments ran.
+  No production API authentication/data mutations, migrations or deployments ran
+  during APK creation. The API was subsequently deployed under separate approval;
+  see [the activation record](API_DEPLOYMENT_ACTIVATION.md). Device journeys remain unverified.
 - Prior Expo Doctor dependency/config warnings were not repaired by this signing
   change. Refer to [the original candidates](ANDROID_APK_CANDIDATES.md).
 

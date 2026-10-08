@@ -135,12 +135,15 @@ Branding is completed. No policy text, legal acceptance or publishing was invent
   release note for downloads, checksums and Expo compatibility warnings.
 - Remaining: approved consent completion/public publishing, Play certificates
   where applicable, and real login/linking in an isolated API/DB and on devices.
-  The live public API schema still lacks the new Google-link endpoint. No
-  production auth mutation or live service restart ran.
+  The later approved API deployment now exposes the Google-link endpoint and
+  uses real Google verification. The owner confirmed successful customer-web
+  Google login; other client/role/linking journeys remain unverified. See
+  [activation evidence](API_DEPLOYMENT_ACTIVATION.md).
 - The separate P0 registration finding F01 remains a release gate. See the
   [implementation report](GOOGLE_LOGIN_IMPLEMENTATION.md) for other limitations.
 
 Provider changes are additive. Any rollback should target only the newly added
 origins/registrations with separate approval; preserve original Web/release
 clients, signing keys and user links. Client rollback guidance remains in the
-[setup guide](../google-login.md). Nothing was committed, pushed or deployed.
+[setup guide](../google-login.md). The code and API deployment were subsequently
+pushed under separate owner approval; provider publishing remains incomplete.

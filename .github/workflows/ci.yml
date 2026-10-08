@@ -240,8 +240,8 @@ jobs:
         run: psql "$REMEDIATION_DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/remediation-disposable-fixture.sql
       - run: node scripts/verify-remediation.mjs --database
 
-  # Prepared only: the repository activation variable is deliberately unset.
-  # Environment secrets and the restricted server account require separate approval.
+  # Production activation and verified first run are recorded in docs/API-AUTO-DEPLOYMENT.md.
+  # Keep the explicit branch, repository-variable, environment and full-CI gates.
   deploy-api:
     if: >-
       github.event_name == 'push' &&

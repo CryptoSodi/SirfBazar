@@ -1,12 +1,12 @@
 # SirfBazar API push deployment
 
-## Status: prepared, not activated
+## Status: active and verified
 
-On 8 October 2026 the owner selected `codex/server-api-deployment` as the production API branch, then declined creation of a deployment account and GitHub credentials. This change prepares the workflow only. It does not create an account, install server scripts, create a GitHub environment, add secrets, enable a variable, restart the API, or replace production code.
+On 8 October 2026 the owner initially requested preparation only, then explicitly requested automatic deployment and approved the Google configuration correction and isolated database restore test. Activation is now complete. The first successful push deployment was [CI run 37781032321](https://github.com/CryptoSodi/SirfBazar/actions/runs/37781032321), deploying `24b8763a930a0ae5d8d041c7a5259873a3ae41e4` from `codex/server-api-deployment`. See the [activation evidence](production-readiness/API_DEPLOYMENT_ACTIVATION.md).
 
 The API already runs on `129.153.16.84`. Production uses the dedicated `sirfbazar-api.service`, existing native PostgreSQL database `sirfbazar`, and the direct Cloudflare A record plus Caddy route to `127.0.0.1:3002`. It does not require a tunnel or a running Windows API.
 
-## What a future enabled push will do
+## What Each Production Push Does
 
 1. Run the existing API, web, admin, POS/shop/mobile, browser-fixture and disposable-database CI checks, plus deployment helper tests. Production is not contacted during those checks.
 2. Build the exact pushed commit with Node 22 on Ubuntu 24.04. Install production dependencies from the lockfile in a separate runner-temporary directory and include the Linux-generated Prisma client.
@@ -19,9 +19,9 @@ The API already runs on `129.153.16.84`. Production uses the dedicated `sirfbaza
 
 The deployment job requires **all** CI dependencies to pass. It accepts only a `push` to `refs/heads/codex/server-api-deployment` with the **repository-level** variable `SIRFBAZAR_API_DEPLOY_ENABLED` equal to `true`. Missing or false means skipped. Pull requests, other branches, `master`, tags and manual CI dispatch cannot deploy. Deployment concurrency does not cancel an in-flight promotion; a server lock also prevents overlapping promotions.
 
-## Activation requires new owner approval
+## Activation Procedure
 
-Do not run the steps below under the current "prepare only" authorization.
+These steps were completed under explicit owner approval. They document the installation procedure, not an instruction to reinstall the existing account or replace its key. Future credential or infrastructure changes need their own authorization.
 
 1. Approve the restricted account and GitHub environment secrets separately. Review this runbook, the helper source, `docs/API-UPDATE.md`, and the exact branch diff. Coordinate incompatible API/client releases and the maintenance/checkout pause procedure. Mobile source alone does not update installed APKs.
 2. Verify a recoverable database/configuration/storage backup. The automated `pg_restore --list` check validates an archive, not a full restore; verify recovery in an explicitly approved, isolated scratch database before activation. Never restore over the live database as a test.
@@ -75,4 +75,6 @@ rtk proxy node --test deploy/api/healthcheck.test.cjs
 rtk proxy node --check scripts/build-api-release.cjs
 ```
 
-Linux CI additionally checks installer syntax, API typecheck/build and the real Linux production package. Its HTTP smoke journey starts the extracted package against a freshly seeded, disposable CI database, exercising the packaged production dependencies and generated client. Helper tests use temporary files and mocked HTTP only; they do not contact production. Server installation, forced-key login, database backup/recovery and real promotion remain unverified until activation is approved.
+Linux CI additionally checks installer syntax, API typecheck/build and the real Linux production package. Its HTTP smoke journey starts the extracted package against a freshly seeded, disposable CI database, exercising the packaged production dependencies and generated client. Helper tests use temporary files and mocked HTTP only; they do not contact production. Activation also verified all 20 helper tests on the Linux server in disposable directories, forced-key status/denials, backup recovery and a real GitHub promotion. A privileged metadata-only `status` operation avoids granting the deploy account access to the private runtime directory or environment.
+
+For operator archive transfers from Windows, disable checkout conversion explicitly: `git -c core.autocrlf=false archive`. A plain Windows archive converted the staged installer to CRLF; it failed before installation. The LF-preserving archive installed successfully. Do not relax the runtime directory permissions to work around deployment status access.

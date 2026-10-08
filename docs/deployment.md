@@ -4,7 +4,7 @@
 > behind the direct Cloudflare A record and Caddy, with existing native PostgreSQL.
 > The Windows/tunnel steps below are legacy and must not be used to reconfigure
 > the current production API. See [API auto-deployment](API-AUTO-DEPLOYMENT.md)
-> for the prepared, disabled push workflow and activation requirements.
+> for the active, CI-gated push workflow and verified activation evidence.
 
 Hybrid topology: frontends on Vercel (no cold starts on the free tier),
 backend + database on your own machine.

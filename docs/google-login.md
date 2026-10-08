@@ -193,7 +193,8 @@ passed. The build script itself was not changed.
    existing live configuration, PostgreSQL and WhatsApp OTP integration. Release
    API support before clients that expose linking. No schema migration is needed.
 5. Smoke-test only approved test accounts, preserving role and tenant boundaries.
-   Auto-deployment activation remains disabled and requires separate approval.
+   API auto-deployment was subsequently approved and activated; see
+   [the deployment record](production-readiness/API_DEPLOYMENT_ACTIVATION.md).
 
 Compatibility: `/auth/google-login` keeps its request/response shape. Linking is
 additive. Strict provider/startup validation can expose previously invalid env
