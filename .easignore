@@ -1,0 +1,32 @@
+# EAS builds only the three standalone native apps in this repository.
+/*
+!/apps
+/apps/*
+!/apps/customer-app
+!/apps/merchant-app
+!/apps/rider-app
+
+# .easignore replaces nested .gitignore rules for EAS uploads.
+node_modules/
+.expo/
+dist/
+build/
+web-build/
+coverage/
+.env
+.env.*
+*.log
+*.tsbuildinfo
+*.orig.*
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+credentials.json
+*.apk
+*.aab
+.DS_Store
+Thumbs.db

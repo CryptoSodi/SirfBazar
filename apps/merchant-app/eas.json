@@ -6,15 +6,31 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "453311658725-s55gcpidi4h6kf38hgqhmrku11ha02ts.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "453311658725-6h8ucua4jvfopqrb6utj1ail4vaphki4.apps.googleusercontent.com"
+      }
     },
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.sirfbazar.com/api" }
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.sirfbazar.com/api",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "453311658725-s55gcpidi4h6kf38hgqhmrku11ha02ts.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "453311658725-6h8ucua4jvfopqrb6utj1ail4vaphki4.apps.googleusercontent.com"
+      }
+    },
+    "release-keystore": {
+      "extends": "preview",
+      "android": { "credentialsSource": "local" }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "453311658725-s55gcpidi4h6kf38hgqhmrku11ha02ts.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "453311658725-6h8ucua4jvfopqrb6utj1ail4vaphki4.apps.googleusercontent.com"
+      }
     }
   },
   "submit": {

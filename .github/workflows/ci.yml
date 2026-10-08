@@ -2,13 +2,27 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, codex/server-api-deployment]
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  deployment-tools:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: python3 -B -m unittest discover -s deploy/api -p 'test_*.py' -v
+      - run: node --test deploy/api/healthcheck.test.cjs
+      - run: bash -n deploy/api/install.sh
+
   api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: apps/api
@@ -42,17 +56,26 @@ jobs:
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run test:bind
       - run: npm run test:pos
       - run: node -r ts-node/register/transpile-only --test test/category-sections.test.cjs
       - run: npm run test:waha
       - run: npm run test:whatsapp
+      - run: npm run test:google
+      - run: node ../../scripts/test-google-native.cjs
+      - run: node ../../scripts/test-google-clients.cjs
+      - name: Verify Linux production packaging without connecting to production
+        run: |
+          node ../../scripts/build-api-release.cjs "$RUNNER_TEMP/ci-api-release"
+          tar --hard-dereference -czf "$RUNNER_TEMP/ci-api-release.tar.gz" -C "$RUNNER_TEMP/ci-api-release" .
+          python3 -B ../../deploy/api/validate-release.py "$RUNNER_TEMP/ci-api-release.tar.gz" "$RUNNER_TEMP/ci-verified-release" "$GITHUB_SHA"
       - name: Initialize disposable smoke database
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f prisma/remediation-disposable-fixture.sql
       - run: npm run seed
-      - name: Run seeded HTTP smoke journey
+      - name: Run packaged release against the disposable smoke database
         shell: bash
         run: |
-          npm run start:prod > "$RUNNER_TEMP/api-smoke.log" 2>&1 &
+          node "$RUNNER_TEMP/ci-verified-release/dist/main.js" > "$RUNNER_TEMP/api-smoke.log" 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 40); do
@@ -134,6 +157,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_API_URL: http://127.0.0.1:3001/api
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:3001/api
+      # These fixtures exercise the key-free map, not the production Google SDK.
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ''
       BROWSER_WEB_URL: http://127.0.0.1:3000
       BROWSER_POS_URL: http://127.0.0.1:4173
       BROWSER_SHOP_URL: http://127.0.0.1:4174
@@ -213,3 +239,69 @@ jobs:
       - name: Initialize disposable schema from checked-in fixture
         run: psql "$REMEDIATION_DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/remediation-disposable-fixture.sql
       - run: node scripts/verify-remediation.mjs --database
+
+  # Production activation and verified first run are recorded in docs/API-AUTO-DEPLOYMENT.md.
+  # Keep the explicit branch, repository-variable, environment and full-CI gates.
+  deploy-api:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/codex/server-api-deployment' &&
+      vars.SIRFBAZAR_API_DEPLOY_ENABLED == 'true'
+    needs: [deployment-tools, api, web, admin, remaining-clients, browser-journeys, database-regressions]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: sirfbazar-api-production
+    concurrency:
+      group: sirfbazar-api-production
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: postgresql://unused:unused@127.0.0.1:5432/build_only
+      OTP_PROVIDER: mock
+      GOOGLE_AUTH_PROVIDER: mock
+      JWT_SECRET: build-only-not-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+      - run: npm ci
+        working-directory: apps/api
+      - run: npx prisma generate
+        working-directory: apps/api
+      - run: npm run build
+        working-directory: apps/api
+      - name: Package exact Linux production dependencies and generated Prisma client
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/build-api-release.cjs "$RUNNER_TEMP/api-release"
+          tar --hard-dereference -czf "$RUNNER_TEMP/api-release.tar.gz" -C "$RUNNER_TEMP/api-release" .
+          python3 -B deploy/api/validate-release.py "$RUNNER_TEMP/api-release.tar.gz" "$RUNNER_TEMP/verified-release" "$GITHUB_SHA"
+      - name: Upload and promote through the restricted SSH command
+        shell: bash
+        env:
+          DEPLOY_PRIVATE_KEY: ${{ secrets.API_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.API_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_PRIVATE_KEY"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          umask 077
+          key="$RUNNER_TEMP/sirfbazar-deploy-key"
+          hosts="$RUNNER_TEMP/sirfbazar-known-hosts"
+          trap 'rm -f -- "$key" "$hosts"' EXIT
+          printf '%s\n' "$DEPLOY_PRIVATE_KEY" > "$key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$hosts"
+          unset DEPLOY_PRIVATE_KEY DEPLOY_KNOWN_HOSTS
+          release_id="$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          checksum=$(sha256sum "$RUNNER_TEMP/api-release.tar.gz" | cut -d ' ' -f 1)
+          ssh_options=(-i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$hosts" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=12)
+          ssh "${ssh_options[@]}" sirfbazar-deploy@129.153.16.84 "upload $release_id $checksum" < "$RUNNER_TEMP/api-release.tar.gz"
+          ssh "${ssh_options[@]}" sirfbazar-deploy@129.153.16.84 "deploy $release_id $checksum"
+          status=$(ssh "${ssh_options[@]}" sirfbazar-deploy@129.153.16.84 status)
+          STATUS="$status" EXPECTED_RELEASE="$release_id" python3 -c 'import json, os; s=json.loads(os.environ["STATUS"]); assert s["release"] == os.environ["EXPECTED_RELEASE"] and s["service"] == "active"'

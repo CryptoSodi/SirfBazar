@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { AdminLoginDto, GoogleLoginDto, MerchantLoginDto, MerchantPasswordRequestDto, MerchantPasswordResetDto, MerchantRegistrationStartDto, MerchantRegistrationVerifyDto, RefreshTokenDto, SendOtpDto, VerifyOtpDto } from './auth.dto';
+import { AdminLoginDto, GoogleLinkDto, GoogleLoginDto, MerchantLoginDto, MerchantPasswordRequestDto, MerchantPasswordResetDto, MerchantRegistrationStartDto, MerchantRegistrationVerifyDto, RefreshTokenDto, SendOtpDto, VerifyOtpDto } from './auth.dto';
 import { CurrentUser, Public, AuthUser } from '../common/decorators';
 
 @ApiTags('auth')
@@ -25,6 +25,11 @@ export class AuthController {
   @Post('google-login')
   googleLogin(@Body() dto: GoogleLoginDto) {
     return this.authService.googleLogin(dto.idToken, dto.context);
+  }
+
+  @Post('google-link')
+  googleLink(@CurrentUser() user: AuthUser, @Body() dto: GoogleLinkDto) {
+    return this.authService.linkGoogle(user.userId, dto.idToken);
   }
 
   @Public()

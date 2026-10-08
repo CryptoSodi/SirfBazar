@@ -8,6 +8,7 @@ import { ApiError, merchantApi } from './lib/api'
 import { getSession, saveSession } from './lib/session'
 import { AuthFooter, AuthHeader } from './AuthChrome'
 import GooglePinMap from './GooglePinMap'
+import GoogleSignIn from './GoogleSignIn'
 import './signup-flow.css'
 
 const ownerSchema = z.object({
@@ -34,9 +35,8 @@ const shopSchema = z.object({
 })
 type ShopValues = z.infer<typeof shopSchema>
 
-type Notice = 'google' | 'help' | 'map'
+type Notice = 'help' | 'map'
 const notices: Record<Notice, { title: string; body: string }> = {
-  google: { title: 'Google sign-up is not available yet', body: 'Use your mobile number or email address to create a merchant account. Google registration will be added later.' },
   help: { title: 'Merchant help', body: 'Complete both steps to create a merchant account and shop. If you already have an account, sign in and return to onboarding to finish an interrupted shop setup.' },
   map: { title: 'Set your shop entrance pin', body: 'When Google Maps is configured, click the map or drag its marker. You can also enter coordinates below or use your device location while standing at the entrance.' },
 }
@@ -60,7 +60,9 @@ function SignupProgress({ step }: { step: 1 | 2 }) {
 
 export default function SignupFlowPage() {
   const navigate = useNavigate()
-  const [step, setStep] = useState<1 | 2>(() => getSession()?.role === 1 ? 2 : 1)
+  const [step, setStep] = useState<1 | 2>(() => getSession() ? 2 : 1)
+  const [googleToken, setGoogleToken] = useState<string | null>(null)
+  const [googleLinked, setGoogleLinked] = useState(false)
   const [reveal, setReveal] = useState(false)
   const [notice, setNotice] = useState<Notice>('help')
   const [photo, setPhoto] = useState<File | null>(null)
@@ -157,6 +159,11 @@ export default function SignupFlowPage() {
     })
   }
   async function createShop(token: string) {
+    if (googleToken) {
+      await merchantApi.linkGoogle(googleToken, token)
+      setGoogleToken(null)
+      setGoogleLinked(true)
+    }
     const values = shopForm.getValues()
     await merchantApi.createShop({
       shopName: values.shopName,
@@ -179,7 +186,7 @@ export default function SignupFlowPage() {
     setBusy(true)
     try {
       const session = getSession()
-      if (session?.role === 1) { await createShop(session.token); return }
+      if (session) { await createShop(session.token); return }
       const { firstName, lastName, channel, contact, cnic, password } = ownerForm.getValues()
       const attempt = await merchantApi.startRegistration({ firstName, lastName, channel, contact, cnic, password })
       setAttemptId(attempt.attemptId)
@@ -251,8 +258,9 @@ export default function SignupFlowPage() {
           <div className="signup-terms"><label><input type="checkbox" aria-invalid={Boolean(ownerForm.formState.errors.authorized)} aria-describedby={ownerForm.formState.errors.authorized ? 'owner-authorization-error' : undefined} {...ownerForm.register('authorized')} /><span>I confirm that I am authorized to register this shop.</span></label>{ownerForm.formState.errors.authorized && <small className="signup-field-error" id="owner-authorization-error">{ownerForm.formState.errors.authorized.message}</small>}{import.meta.env.DEV && <p className="signup-terms-note">Merchant terms and privacy policy are not yet published. Use test details only.</p>}</div>
           <div className="signup-actions"><Link to="/sign-in"><ArrowLeft size={18} />Already have an account? Sign In</Link><button className="signup-primary" type="submit">Continue to Shop Details (Step 2)<ArrowRight size={20} /></button></div>
           <div className="signup-google-divider"><span>or continue with</span></div>
-          <button className="signup-google" type="button" onClick={() => showNotice('google')}><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" /><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" /><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" /></svg>Sign up with Google</button>
-          <p className="signup-google-note">Google sign-up is not connected yet. Mobile and CNIC details will still be needed for merchant registration.</p>
+          <GoogleSignIn signup disabled={busy} onCredential={async token => { setGoogleToken(token); setGoogleLinked(false); setRequestError('') }} />
+          {googleToken && <p className="signup-google-note" role="status">Google selected. Complete your owner details and mobile verification to link it.</p>}
+          {googleToken && <button type="button" className="signup-back" onClick={() => setGoogleToken(null)}>Remove selected Google account</button>}
         </form> : <form className="signup-section-stack" onSubmit={event => { void shopForm.handleSubmit(submitShop)(event) }} noValidate>
           <section className="signup-block">
             <div className="signup-label-row"><label htmlFor="shop-name">Shop Name (Storefront Display) <em>*</em></label><span>Public identity for customer orders</span></div>
@@ -282,7 +290,10 @@ export default function SignupFlowPage() {
           </section>
 
           <div className="signup-actions signup-shop-actions">{getSession()?.role !== 1 && <button type="button" className="signup-back" onClick={() => setStep(1)}><ArrowLeft size={18} />Back to Owner Details (Step 1)</button>}<div><button type="submit" className="signup-primary" disabled={busy || Boolean(attemptId)}>{busy ? 'Working…' : 'Create Shop & Open Workspace'}<ArrowRight size={20} /></button></div></div>
-          {!attemptId && <p className="signup-end-note"><CircleHelp size={16} />After you submit, enter the verification code provided by the merchant service. Google sign-up remains unavailable.</p>}
+          {!attemptId && <p className="signup-end-note"><CircleHelp size={16} />{getSession() ? 'Your account is verified. Continue to save your shop.' : 'After you submit, verify your registered mobile number to finish setting up your shop.'}</p>}
+          {getSession() && <GoogleSignIn signup disabled={busy} onCredential={async token => { setGoogleToken(token); setGoogleLinked(false); setRequestError('') }} />}
+          {googleLinked && <p role="status">Google is linked to your account.</p>}
+          {googleToken && <button type="button" className="signup-back" disabled={busy} onClick={() => { setGoogleToken(null); setRequestError('') }}>Continue without linking Google</button>}
           {attemptId && <div className="signup-verification" role="group" aria-label="Verify merchant contact"><strong>Verify your {ownerForm.getValues('channel') === 'email' ? 'email' : 'mobile number'}</strong><p>{verificationDeliveryMessage} Enter the code to create your owner account, then we will save your shop.</p><label htmlFor="registration-code">Verification code</label><input id="registration-code" className="field-control" type="text" name="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" disabled={busy} aria-invalid={!!codeError} aria-describedby={codeError ? 'registration-code-error' : undefined} value={code} onChange={event => { setCode(event.target.value.replace(/\D/g, '')); setCodeError('') }} />{codeError && <small className="signup-field-error" id="registration-code-error">{codeError}</small>}<button type="button" className="signup-primary" disabled={busy} onClick={verifyAndCreate}>{busy ? 'Verifying…' : 'Verify & Create Shop'}</button></div>}
           {requestError && <ToastMessage>{requestError}</ToastMessage>}
         </form>}

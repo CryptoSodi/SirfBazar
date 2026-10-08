@@ -4,6 +4,7 @@ import { getUser, isLoggedIn, logout } from './lib/api';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Sales from './pages/Sales';
+import { GoogleAccountLink } from './components/GoogleAccountLink';
 
 const NAV = [
   ['/', 'Register', 'receipt'],
@@ -17,7 +18,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-5 py-3">
+      <header className="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-white px-5 py-3">
         <div className="flex items-center gap-2">
           <img src="/brand/sirfbazar-horizontal-no-slogan.svg" alt="SirfBazar" className="h-9 w-auto" />
           <div className="leading-tight">
@@ -40,6 +41,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
           <span className="hidden sm:inline">{user?.fullName ?? user?.phoneNumber ?? user?.email}</span>
+          <details><summary className="cursor-pointer">Account</summary><GoogleAccountLink /></details>
           <button className="underline hover:text-slate-800" onClick={logout}>
             Sign out
           </button>

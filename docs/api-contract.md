@@ -7,13 +7,17 @@ Realtime: Socket.IO on port 3001, handshake `auth: { token }`; rooms joined via 
 
 Dev conveniences:
 - OTP: any phone, code is printed to API console; master code **123456** always works in dev. Delivery OTP also accepts 123456 in dev.
-- Google login (dev): `idToken = "mock:<email>:<name>"`.
+- Google login fixtures require explicit `GOOGLE_AUTH_PROVIDER=mock` and a non-production environment: `idToken = "mock:<email>:<name>"`. Real login requires `GOOGLE_AUTH_PROVIDER=google` and `GOOGLE_CLIENT_ID`; production rejects mock providers and missing audiences.
 - Admin seed login: `admin@sirfbazar.pk` / `Admin@12345` (see prisma/seed.ts).
 
-## Auth (public)
+## Auth
+Routes below are public unless explicitly marked as requiring a bearer session.
 - `POST /auth/send-otp` `{phoneNumber}` → `{sent, expiresInSeconds}` (429 on resend cooldown)
 - `POST /auth/verify-otp` `{phoneNumber, code, fullName?, context?: customer|admin|merchant|rider}` → `{accessToken, refreshToken, user}`; default context is customer
 - `POST /auth/google-login` `{idToken, context?: customer|admin|merchant|rider}` → same shape; default context is customer
+- `POST /auth/google-link` `{idToken}` requires an existing valid bearer session and verified Google ID token; returns `{linked: true, email}`. Links only the authenticated user, never changes their email, phone, role or memberships, and refuses another account's Google subject/email. It does not issue tokens or merge accounts.
+
+Google login verifies signature, audience, issuer, expiry and verified email using Google's SDK. Existing links are resolved by Google `sub`, never overwritten by email. Automatic first-time email linking is restricted to Gmail/Google Workspace identities; other existing accounts must use their original sign-in method and explicitly link Google. New identities are created only in customer context; admin/merchant/rider privileges still require the existing role/membership checks. Invalid login proof returns 401. Invalid Google proof during authenticated linking returns 400 without invalidating the app session; missing/invalid app sessions still return 401. Certificate-service outages return 503 without exposing tokens. See [Google login setup](google-login.md).
 - `POST /auth/admin-login` `{email, password}` → same shape
 - `POST /auth/refresh-token` `{refreshToken}` → rotated pair retaining the app-scoped role selected at login; pre-migration tokens without a stored role use the account's base role and may require a fresh sign-in
 - `POST /auth/logout` `{refreshToken}`

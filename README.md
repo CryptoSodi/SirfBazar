@@ -4,6 +4,26 @@
 
 Unlike dark-store models, SirfBazar **owns no inventory and no warehouses** — every order is fulfilled by a real local shop using the shop's own riders.
 
+## Android APK downloads
+
+Release-signed **testing builds**, version 1.0.0 (build 1), built on 8 October 2026.
+These connect to the live SirfBazar API; they are not a Google Play release.
+
+| App | Package | Download |
+|---|---|---|
+| Customer | `pk.sirfbazar.customer` | [Download customer APK](https://expo.dev/artifacts/eas/23-oJtE8MVYwfXaGyV2JzrTV8pEW5tKBxaeXeasrs2Q.apk) |
+| Merchant | `pk.sirfbazar.merchant` | [Download merchant APK](https://expo.dev/artifacts/eas/LNk5RrAQQLC_Udql-OASxzP3DVZRMbyUuWMnPIb34mo.apk) |
+| Rider | `pk.sirfbazar.rider` | [Download rider APK](https://expo.dev/artifacts/eas/KQTRfta8lHsQTf0_tpKvsyxJkkoLOYtOQjERCw7H9Xg.apk) |
+
+**Download links expire on 22 October 2026.** Package names, release signatures,
+and file hashes were verified; see the [APK verification report](docs/production-readiness/ANDROID_LOCAL_RELEASE_CANDIDATES.md)
+for checksums, build IDs, and retained local copies. Native-device login and
+checkout checks remain pending, and Google consent is still in Testing.
+
+These APKs use the new per-app SirfBazar release keys. They cannot update an
+older APK signed with a different key in place. Do not uninstall an existing app
+without first considering loss of its local data.
+
 ## Repository layout
 
 | App | Path | Stack | Port |

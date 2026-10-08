@@ -1,5 +1,5 @@
 import { ToastMessage } from '../components/Toast';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleLogin, GoogleOAuthProvider } from '@react-oauth/google';
 import { api, storeAuth } from '../lib/api';
@@ -13,9 +13,12 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const pending = useRef(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError('');
     try {
@@ -25,12 +28,14 @@ export default function Login() {
     } catch (err: any) {
       setError(err.message);
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
 
   const onGoogle = async (credential?: string) => {
-    if (!credential) return;
+    if (!credential || pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError('');
     try {
@@ -40,6 +45,7 @@ export default function Login() {
     } catch (err: any) {
       setError(err.message);
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -71,8 +77,8 @@ export default function Login() {
         {GOOGLE_CLIENT_ID && (
           <>
             <div className="my-4 text-center text-[11px] uppercase tracking-wide text-slate-500">or</div>
-            <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-              <div className="flex justify-center">
+            <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID} onScriptLoadError={() => setError('Google could not load. Use your other sign-in method.')}>
+              <div className={busy ? 'hidden' : 'flex justify-center'}>
                 <GoogleLogin onSuccess={(cr) => onGoogle(cr.credential)} onError={() => setError('Google sign-in failed. Try again or use your email and password.')} />
               </div>
             </GoogleOAuthProvider>

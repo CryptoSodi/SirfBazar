@@ -109,10 +109,11 @@ export function LoginSheet({ visible, onClose, onSuccess, reason = 'account', on
             context: 'customer',
         })));
     };
-    const google = () => void run(async () => finish(await api.post('/auth/google-login', {
-        idToken: await googleSignInIdToken(),
-        context: 'customer',
-    })));
+    const google = () => void run(async () => {
+        const idToken = await googleSignInIdToken();
+        if (!idToken) return;
+        await finish(await api.post('/auth/google-login', { idToken, context: 'customer' }));
+    });
     return (<Modal visible={visible} animationType="none" transparent onShow={() => { if (step === 'phone') phoneInput.current?.focus(); }} onRequestClose={() => {
             if (!busy)
                 onClose();

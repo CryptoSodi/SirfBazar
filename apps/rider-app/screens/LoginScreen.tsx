@@ -50,6 +50,7 @@ export default function LoginScreen() {
     setError('');
     try {
       const idToken = await googleSignInIdToken();
+      if (!idToken) return;
       try {
         const auth = await api.post('/auth/google-login', { idToken, context: 'rider' });
         await storeAuth(auth);
