@@ -73,4 +73,3 @@ let pass=0;const ok=label=>{pass++;console.log('PASS',label)};
  }
  clearTimeout(deadline);console.log('RESULT',pass,'passed, 0 failed');
 })().catch(e=>{clearTimeout(deadline);console.error(e);process.exitCode=1});
-

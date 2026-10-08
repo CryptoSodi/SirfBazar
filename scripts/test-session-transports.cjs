@@ -31,7 +31,7 @@ for(const app of ["web","shop","admin","pos"]){
   const old=f.api.api.get("/profile");const checked=assert.rejects(old);await started.promise;f.api.storeAuth(f.auth("B"));pending.resolve(response(status,f.auth("A",2)));await checked;assert.equal(f.api.captureSession().user.id,"B");assert.ok(!calls.includes("Bearer "+f.auth("B").accessToken));passed++;
  }
  {const f=fixture(app);f.api.storeAuth(f.auth("A"));let rotations=0;f.setFetch(async(url,init)=>{if(url.endsWith("/auth/refresh-token")){rotations++;await new Promise(r=>setTimeout(r,0));return response(200,f.auth("A",2))}return init.headers.authorization==="Bearer "+f.auth("A",2).accessToken?response(200,{ok:true}):response(401,{})});const values=await Promise.all([f.api.api.get("/profile"),f.api.api.get("/addresses")]);assert.equal(rotations,1);assert.ok(values.every(v=>v.ok));passed++;}
- 
+
 for(const method of ["get","post"]){const f=fixture(app);f.api.storeAuth(f.auth("A"));const bodyGate=gate(),started=gate();f.setFetch(async()=>({ok:true,status:200,json:async()=>{started.resolve();await bodyGate.promise;return{owner:"A"}}}));const old=f.api.api[method]("/profile",{name:"A"}),checked=assert.rejects(old,/session changed/i);await started.promise;f.api.storeAuth(f.auth("B"));bodyGate.resolve();await checked;assert.equal(f.api.captureSession().user.id,"B");passed++;}
 {const f=fixture(app);f.api.storeAuth(f.auth("A"));f.setFetch(async url=>{if(url.endsWith("/auth/refresh-token"))throw Error("offline");return response(401,{})});await assert.rejects(f.api.api.get("/profile"));assert.equal(f.api.captureSession().user.id,"A");assert.equal(f.api.captureSession().refresh,"refresh-A-1");passed++;}
 console.log(app+": 14 actual transport session cases passed");
