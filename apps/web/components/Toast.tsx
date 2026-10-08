@@ -16,6 +16,11 @@ export function toast(text: string, ok = true) {
   emit();
 }
 function dismiss(id: number) { queue = queue.filter(item => item.id !== id); emit(); }
+export function dismissToast(text: string, ok = true) {
+  const safe = ok ? text : friendlyError(text);
+  queue = queue.filter(item => item.text !== safe || item.ok !== ok);
+  emit();
+}
 function sessionMarker() {
   if (typeof localStorage === 'undefined') return 'server';
   try {
@@ -34,7 +39,10 @@ export function useToast() {
   const scopedToast = useCallback((text: string, ok = true) => {
     if (sessionMarker() === owner) toast(text, ok);
   }, [owner]);
-  return { toast: scopedToast, node: null };
+  const scopedDismiss = useCallback((text: string, ok = true) => {
+    if (sessionMarker() === owner) dismissToast(text, ok);
+  }, [owner]);
+  return { toast: scopedToast, dismiss: scopedDismiss, node: null };
 }
 function textOf(node: ReactNode): string {
   return Children.toArray(node).map(item => typeof item === 'string' || typeof item === 'number' ? String(item) : isValidElement<{ children?: ReactNode }>(item) ? textOf(item.props.children) : '').join('');
@@ -48,6 +56,7 @@ export function ToastMessage({ message, children, ok = false }: { message?: stri
 export function ToastHost() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [target, setTarget] = useState<HTMLElement | null>(null);
+  const [bottom, setBottom] = useState<string | number>('max(24px, env(safe-area-inset-bottom))');
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     const sync = () => setMessages([...queue]);
@@ -66,13 +75,18 @@ export function ToastHost() {
     const locate = () => {
       const dialogs = Array.from(document.querySelectorAll<HTMLElement>('dialog[open], [role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]'))
         .filter((dialog) => dialog.getClientRects().length > 0 && getComputedStyle(dialog).visibility !== 'hidden');
-      setTarget(dialogs.at(-1) ?? document.fullscreenElement as HTMLElement ?? document.body);
+      const dialog = dialogs.at(-1);
+      setTarget(dialog ?? document.fullscreenElement as HTMLElement ?? document.body);
+      // Opted-in modal action bars must remain usable while an error is visible.
+      const actions = dialog?.querySelector<HTMLElement>('[data-toast-clearance]');
+      setBottom(actions ? Math.max(24, window.innerHeight - actions.getBoundingClientRect().top + 12) : 'max(24px, env(safe-area-inset-bottom))');
     };
     locate();
     const observer = new MutationObserver(locate);
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'hidden', 'style', 'class', 'aria-modal'] });
     document.addEventListener('fullscreenchange', locate);
-    return () => { listeners.delete(sync); observer.disconnect(); document.removeEventListener('fullscreenchange', locate); window.removeEventListener('sb:session', sessionChanged); window.removeEventListener('storage', stored); };
+    window.addEventListener('resize', locate);
+    return () => { listeners.delete(sync); observer.disconnect(); document.removeEventListener('fullscreenchange', locate); window.removeEventListener('resize', locate); window.removeEventListener('sb:session', sessionChanged); window.removeEventListener('storage', stored); };
   }, []);
   const current = messages[0];
   useEffect(() => {
@@ -81,7 +95,7 @@ export function ToastHost() {
     return () => clearTimeout(timer);
   }, [current?.id, current?.ok, paused]);
   if (!target) return null;
-  return createPortal(<div data-toast-host style={{ position: 'fixed', insetInline: 16, bottom: 'max(24px, env(safe-area-inset-bottom))', zIndex: 2147483647, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+  return createPortal(<div data-toast-host style={{ position: 'fixed', insetInline: 16, bottom, zIndex: 2147483647, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
     <div role="status" aria-live="polite" aria-atomic="true">{current?.ok && <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)' }}>{current.text}</span>}</div>
     {current && <div role={current.ok ? undefined : 'alert'} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)} style={{ pointerEvents: 'auto', width: 'min(100%, 480px)', maxHeight: '40dvh', overflowY: 'auto', padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'center', borderRadius: 12, background: '#19221e', color: '#ffffff', border: '1px solid #82978c', boxShadow: '0 8px 28px #0003', fontSize: 14, lineHeight: 1.5, textAlign: 'start', overflowWrap: 'anywhere' }}>
       <div style={{ flex: 1, minWidth: 0 }}><strong style={{ display: 'block', color: current.ok ? '#75ddb0' : '#ffd08b', marginBottom: 3 }}>{current.ok ? 'Done' : 'Please check'}</strong>{current.text}{messages.length > 1 && <small style={{ display: 'block', marginTop: 6 }}>{messages.length - 1} more notifications</small>}</div>

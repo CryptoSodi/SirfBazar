@@ -32,6 +32,7 @@ The implemented interaction is: choose a pin/current GPS -> inspect exact coordi
 - The location fixture uses mobile/touch emulation in the existing CI browser runner as well.
 - Web production build and TypeScript pass; web unit regressions 11/11 pass. Existing React-18 deprecation warning remains.
 - Confirm success uses the existing floating toast; no technical error or status is appended to the page body.
+- Late automated review identified stale failed-save feedback after a successful retry. The retry now dismisses only that recovered error (session-scoped), preserving unrelated notifications. The fixture retries without manually dismissing the error and requires visible success and no stale error. Toast placement respects the location action bar so the retry button is not covered. Four actual-source cases cover targeted dismissal and session ownership.
 
 Not verified: the user's physical phone after release, actual device GPS accuracy, assistive-technology announcements or 200% zoom. The API is not a reverse geocoder: this change deliberately avoids inventing a neighbourhood name. No new geocoding provider, backend contract, schema, OTP or deployment configuration changes.
 

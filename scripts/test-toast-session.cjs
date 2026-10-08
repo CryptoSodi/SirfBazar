@@ -95,6 +95,24 @@ for (const [app, path, key] of [
   assert.equal(size(), 2, `${app}: old API catch cannot enqueue under B`); checks++;
   exports.useToast().toast('B request completed');
   assert.equal(size(), 3, `${app}: new API feedback appears`); checks++;
+  if (app === 'web') {
+    const before = size();
+    const feedback = exports.useToast();
+    feedback.toast('Location save failed', false);
+    feedback.toast('Unrelated operation failed', false);
+    feedback.dismiss('Location save failed', false);
+    assert.equal(size(), before + 1, 'targeted dismissal preserves unrelated notifications'); checks++;
+    feedback.toast('Location updated');
+    assert.equal(vm.runInContext('queue.some(item => item.text === "Location save failed")', context), false, 'retry feedback removes only the recovered error'); checks++;
+    current('D', 'D:CUSTOMER:');
+    const nextOwner = exports.useToast();
+    nextOwner.toast('Location save failed', false);
+    const nextSize = size();
+    feedback.dismiss('Location save failed', false);
+    assert.equal(size(), nextSize, 'old session cannot dismiss new-owner feedback'); checks++;
+    nextOwner.dismiss('Location save failed', false);
+    assert.equal(size(), nextSize - 1, 'current session can dismiss its recovered error'); checks++;
+  }
 }
 for (const app of ['customer-app', 'merchant-app', 'rider-app']) {
   const signalExports = {};
