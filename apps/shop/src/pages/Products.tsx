@@ -532,6 +532,7 @@ function EditModal({
     </Modal>
   );
 }
+import { ToastMessage } from '../components/Toast';
 
 /** Browse the shared catalog of unlisted products and add them to the shop. */
 function CatalogModal({
