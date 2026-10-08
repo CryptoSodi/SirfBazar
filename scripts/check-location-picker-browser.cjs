@@ -14,7 +14,7 @@ module.exports = async (page, baseUrl) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/location/detect')) {
       lookups.push(route.request().postDataJSON());
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ serviceable: false }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ serviceable: true, area: 'Merchant district', city: 'Fixture city' }) });
     }
     if (url.pathname.endsWith('/merchants/nearby')) nearby.push(Object.fromEntries(url.searchParams));
     if (route.request().method() !== 'GET') throw Error('Unexpected mutation in location fixture');
@@ -56,10 +56,13 @@ module.exports = async (page, baseUrl) => {
   assert.equal(await picker.locator('.sb-area-picker-coordinates').textContent(), pinText, 'late GPS must not replace a newer manually selected pin');
   await picker.getByRole('button', { name: 'Confirm this location', exact: true }).click();
   await picker.waitFor({ state: 'hidden' });
+  await page.locator('[data-toast-host] > div').last().getByText('Location updated. Nearby shops will refresh for this pin.').waitFor();
+  await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sb.location')));
   assert.equal(saved.latitude.toFixed(5), match[1]);
   assert.equal(saved.longitude.toFixed(5), match[2]);
-  assert.deepEqual(lookups.at(-1), { latitude: saved.latitude, longitude: saved.longitude });
+  assert.equal(lookups.length, 0, 'confirming an exact pin must not wait for a merchant-area lookup or use a shop area as the customer location');
+  assert.ok(nearby.some(query => Number(query.latitude) === saved.latitude && Number(query.longitude) === saved.longitude), 'nearby shops must refresh using the newly confirmed coordinates');
   await trigger.getByText(/Pinned location/).waitFor();
   await trigger.click();
   await map.waitFor();
@@ -72,12 +75,46 @@ module.exports = async (page, baseUrl) => {
   await picker.getByRole('button', { name: 'Confirm this location', exact: true }).click();
   await picker.waitFor({ state: 'hidden' });
   assert.equal(await trigger.evaluate(node => node === document.activeElement), true, 'picker restores its header trigger');
+  await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+  const beforeStorageFailure = await page.evaluate(() => localStorage.getItem('sb.location'));
+  await trigger.click(); await map.waitFor();
+  await picker.getByRole('button', { name: 'Use my current location', exact: true }).click();
+  await page.evaluate(() => window.__fixtureGps.success({ coords: { latitude: 31.62, longitude: 74.42 } }));
+  await picker.getByText('Selected: 31.62000, 74.42000', { exact: true }).waitFor();
+  await page.evaluate(() => {
+    window.__fixtureStorageSet = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === 'sb.location') throw new DOMException('Fixture storage failure', 'QuotaExceededError');
+      return window.__fixtureStorageSet.call(this, key, value);
+    };
+  });
+  await picker.getByRole('button', { name: 'Confirm this location', exact: true }).click();
+  await picker.getByText(/Unable to save this location/).waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem('sb.location')), beforeStorageFailure, 'failed saving must retain the prior confirmed location');
+  assert.equal(await picker.isVisible(), true);
+  await picker.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+  await page.evaluate(() => { Storage.prototype.setItem = window.__fixtureStorageSet; });
+  await picker.getByRole('button', { name: 'Confirm this location', exact: true }).click();
+  await picker.waitFor({ state: 'hidden' });
+  assert.equal((await page.evaluate(() => JSON.parse(localStorage.getItem('sb.location')))).latitude, 31.62);
+  await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 720 });
   await trigger.click(); await map.waitFor();
   await checkContrast();
   assert.equal(await picker.evaluate(node => node.scrollWidth <= node.clientWidth), true);
   await picker.getByRole('button', { name: 'Confirm this location', exact: true }).scrollIntoViewIfNeeded();
+  const confirmBounds = await picker.getByRole('button', { name: 'Confirm this location', exact: true }).boundingBox();
+  assert.ok(confirmBounds.y >= 0 && confirmBounds.y + confirmBounds.height <= 720, 'confirmation stays within the mobile viewport');
   await page.screenshot({ path: 'output/playwright/location-map-320.png', fullPage: true });
+  if (await page.evaluate(() => navigator.maxTouchPoints > 0)) {
+    const selectedOnMobile = await picker.locator('.sb-area-picker-coordinates').textContent();
+    await picker.getByRole('button', { name: 'Confirm this location', exact: true }).tap();
+    await picker.waitFor({ state: 'hidden' });
+    const savedOnMobile = await page.evaluate(() => JSON.parse(localStorage.getItem('sb.location')));
+    assert.equal(selectedOnMobile, `Selected: ${savedOnMobile.latitude.toFixed(5)}, ${savedOnMobile.longitude.toFixed(5)}`);
+    await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+    await trigger.tap(); await map.waitFor();
+  }
   await page.keyboard.press('Escape'); await picker.waitFor({ state: 'hidden' });
   assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
@@ -87,5 +124,5 @@ module.exports = async (page, baseUrl) => {
   await picker.evaluate(node => { node.scrollTop = 0; });
   await page.screenshot({ path: 'output/playwright/location-map-dark-320.png', fullPage: true });
   await page.keyboard.press('Escape'); await picker.waitFor({ state: 'hidden' });
-  return 'PASS inline area map: saved pin, click coordinates, fresh GPS, late-GPS fence, exact confirmation, keyboard pan, reopen, Escape/focus and 320px reflow';
+  return 'PASS inline area map: immediate exact confirmation, nearby refresh, no merchant-area relabelling, storage failure/retry, saved pin, fresh GPS, late-GPS fence, keyboard, focus and 320px reflow';
 };
