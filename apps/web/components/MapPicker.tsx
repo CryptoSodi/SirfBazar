@@ -49,7 +49,7 @@ export function MapPicker({
   // Keep `center` in sync with wherever the user panned the map to.
   const syncCenter = () => {
     const c = mapRef.current?.getCenter();
-    if (c) setCenter({ lat: c.lat(), lng: c.lng() });
+    if (c) setCenter((current) => current.lat === c.lat() && current.lng === c.lng() ? current : { lat: c.lat(), lng: c.lng() });
   };
 
   const recenterToGps = () => {
@@ -105,7 +105,8 @@ export function MapPicker({
                 onLoad={(map) => {
                   mapRef.current = map;
                 }}
-                onDragEnd={syncCenter}
+                onDragEnd={() => { syncCenter(); setChosen(true); }}
+                onClick={(event) => { if (event.latLng) { const next = { lat: event.latLng.lat(), lng: event.latLng.lng() }; mapRef.current?.setCenter(next); setCenter(next); setChosen(true); } }}
                 onIdle={syncCenter}
               />
               {/* Fixed centre pin — its tip points at the map centre. */}
@@ -135,8 +136,8 @@ export function MapPicker({
           <button type="button" className="btn-secondary mb-2 w-full" onClick={() => { syncCenter(); setChosen(true); }}>Select map center</button>
           <button
             className="btn-primary w-full"
-            disabled={!chosen}
-            onClick={() => onConfirm({ latitude: center.lat, longitude: center.lng })}
+            disabled={!chosen || locating}
+            onClick={() => { const current = mapRef.current?.getCenter(); onConfirm({ latitude: current?.lat() ?? center.lat, longitude: current?.lng() ?? center.lng }); }}
           >
             Confirm this location
           </button>

@@ -1,0 +1,67 @@
+const assert = require('node:assert/strict');
+
+module.exports = async (page, baseUrl) => {
+  const user = { id: 'scroll-owner', status: 'ACTIVE', merchant: { id: 'scroll-shop' } };
+  const requests = [];
+  let failLast = true;
+  let releaseSecond;
+  const secondGate = new Promise(resolve => { releaseSecond = resolve; });
+  await page.context().addInitScript(({ user }) => {
+    localStorage.setItem('sbs.accessToken', 'fixture.' + btoa(JSON.stringify({ role: 'MERCHANT_OWNER', exp: 4102444800 })) + '.fixture');
+    localStorage.setItem('sbs.user', JSON.stringify(user));
+  }, { user });
+  await page.context().route('**/api/**', async route => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    let data = [];
+    if (path.endsWith('/auth/me')) data = user;
+    else if (path.endsWith('/merchant/profile')) data = { id: 'scroll-shop', shopName: 'Scroll Fixture', isOwner: true, permissions: ['INVENTORY'], approvalStatus: 'APPROVED' };
+    else if (path.endsWith('/products/categories')) data = [];
+    else if (path.endsWith('/merchant/catalog')) {
+      const batch = Number(url.searchParams.get('page'));
+      requests.push(batch);
+      assert.equal(url.searchParams.get('pageSize'), '24');
+      if (batch === 2) await secondGate;
+      if (batch === 3 && failLast) return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Try loading products again.' }) });
+      const items = Array.from({ length: 24 }, (_, index) => {
+        const id = batch === 2 && index === 0 ? 1 : (batch - 1) * 24 + index + 1;
+        return { productId: 'item-' + id, name: 'Product ' + String(id).padStart(3, '0'), alreadyListed: false };
+      });
+      data = { items, total: 71, totalPages: 3 };
+    } else if (path.endsWith('/merchant/products')) data = { items: [], total: 0, totalPages: 1 };
+    else if (route.request().method() !== 'GET') throw Error('Unexpected mutation in scroll fixture');
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
+  });
+  await page.context().route('**/socket.io/**', route => route.abort());
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await page.goto(baseUrl + '/products');
+  await page.locator('article.catalog-card').nth(23).waitFor();
+  assert.deepEqual(requests, [1], 'must not eagerly download catalogue pages');
+  const selected = page.getByRole('checkbox', { name: 'Select product: Product 001', exact: true });
+  await selected.check();
+  await selected.focus();
+  await page.locator('.catalog-pagination').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.body.textContent.includes('Loading more products'));
+  await page.mouse.wheel(0, 1000); await page.mouse.wheel(0, 1000);
+  assert.deepEqual(requests, [1, 2], 'only one request may be pending for the same batch');
+  releaseSecond();
+  await page.locator('article.catalog-card').nth(46).waitFor();
+  assert.equal(await page.locator('article.catalog-card').count(), 47, 'overlapping products are deduplicated');
+  assert.equal(await selected.isChecked(), true, 'selection survives automatic append');
+  assert.equal(await selected.evaluate(node => node === document.activeElement), true, 'automatic append must not move keyboard focus');
+  await page.locator('.catalog-pagination').scrollIntoViewIfNeeded();
+  await page.getByRole('button', { name: 'Retry loading products', exact: true }).waitFor();
+  await page.mouse.wheel(0, 1000); await page.waitForTimeout(100);
+  assert.deepEqual(requests, [1, 2, 3], 'an error must pause automatic requests');
+  assert.equal(await selected.isChecked(), true);
+  failLast = false;
+  await page.getByRole('button', { name: 'Retry loading products', exact: true }).click();
+  await page.getByText(/Showing 71 of 71 products.*All available products loaded/).waitFor();
+  await page.mouse.wheel(0, 1000); await page.waitForTimeout(100);
+  assert.deepEqual(requests, [1, 2, 3, 3], 'retry must replay the failed page and stop at the end');
+  assert.equal(await page.getByRole('button', { name: 'Load more products', exact: true }).count(), 0);
+  await page.setViewportSize({ width: 320, height: 720 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: 'output/playwright/catalog-autoload-320.png', fullPage: true });
+  return 'PASS automatic catalogue scrolling: lazy 24-row requests, in-flight lock, dedupe, selection/focus, error pause, same-page retry, terminal stop and 320px reflow';
+};
