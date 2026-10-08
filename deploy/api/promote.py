@@ -123,6 +123,27 @@ def interrupted(*_):
     raise DeploymentError("Deployment interrupted")
 
 
+def status():
+    # The deploy account cannot traverse the private runtime directory or read its secrets.
+    release = CURRENT.resolve(strict=True)
+    if not CURRENT.is_symlink() or release.parent != RELEASES:
+        raise DeploymentError("Current API release is outside the approved release directory")
+    service = subprocess.run(["/usr/bin/systemctl", "is-active", SERVICE], capture_output=True, text=True, timeout=10)
+    print(json.dumps({"release": release.name, "service": service.stdout.strip()}))
+    return service.returncode
+
+
+def entrypoint(arguments):
+    if os.geteuid() != 0:
+        raise DeploymentError("The validating deployment helper must run through its restricted sudo rule")
+    if arguments == ["status"]:
+        return status()
+    if len(arguments) != 2:
+        raise DeploymentError("Exactly one release identity and checksum are required")
+    main(*arguments)
+    return 0
+
+
 def main(release_id, digest):
     if os.geteuid() != 0:
         raise DeploymentError("Root-owned promotion helper must run through its restricted sudo rule")
@@ -180,9 +201,7 @@ def main(release_id, digest):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 3:
-            raise DeploymentError("Exactly one release identity and checksum are required")
-        main(*sys.argv[1:])
+        sys.exit(entrypoint(sys.argv[1:]))
     except Exception as error:
         message = str(error) if isinstance(error, DeploymentError) else "Deployment refused; inspect the server before retrying"
         print(message, file=sys.stderr)

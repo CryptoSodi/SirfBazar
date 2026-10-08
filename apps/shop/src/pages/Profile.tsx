@@ -6,6 +6,7 @@ import { ReferenceIcon } from '../components/ReferenceIcon';
 import { PageSkeleton } from '../components/Skeleton';
 import { readMemory, writeMemory } from '../lib/memoryCache';
 import ShopMapPicker from '../components/ShopMapPicker';
+import { GoogleAccountLink } from '../components/GoogleAccountLink';
 
 /** Editable fields accepted by PUT /merchant/profile (UpdateMerchantProfileDto). */
 type Form = {
@@ -209,6 +210,7 @@ export default function Profile() {
   return (
     <div>
       <section className="page-heading"><div><div className="kicker">Store management</div><h1>Shop settings</h1><p>Your shop identity, storefront controls and workspace preferences.</p></div></section>
+      <GoogleAccountLink />
       {!canEdit && <div className="state-banner warning"><ReferenceIcon name="lock" /><div><b>Read-only settings</b><p>You do not have the Store permission to edit shop details or storefront controls.</p></div></div>}
       <div className="settings-grid">
         <section className="panel panel-pad">

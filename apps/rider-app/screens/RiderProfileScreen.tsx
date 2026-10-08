@@ -7,6 +7,7 @@ import { Badge, Body, Button, Card, Divider, H2, Icon, IconBox, Label, Note, Pag
 import type { TabName } from '../components/RiderUI';
 import { api, ApiError, clearAuth, getUser } from '../lib/api';
 import { useRiderTheme } from '../lib/appearance';
+import { GoogleAccountLink } from '../components/GoogleAccountLink';
 
 export default function RiderProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -41,6 +42,7 @@ export default function RiderProfileScreen() {
     <ProfileCell icon="pin" title="Location & alerts" description="Device permissions and tracking" onPress={() => navigation.navigate('Permissions')} />
     <ProfileCell icon="help" title="Help & support" description="Contact your shop or support" onPress={() => navigation.navigate('Help')} />
     <Note icon="lock" style={{ marginTop: 12 }}>Your shop manages rider details. Contact the owner for changes.</Note>
+    <GoogleAccountLink />
     <Button variant="secondary" onPress={() => setSignOutSheet(true)} style={{ marginTop: 22 }}>Sign out</Button>
     <Sheet visible={signOutSheet} title="Sign out?" onClose={() => setSignOutSheet(false)}><Body muted>You’ll need to sign in again to view private deliveries.</Body><Button onPress={() => void signOut()} style={{ marginTop: 16 }}>Sign out</Button><Button variant="secondary" onPress={() => setSignOutSheet(false)} style={{ marginTop: 10 }}>Stay signed in</Button></Sheet>
   </Page>;

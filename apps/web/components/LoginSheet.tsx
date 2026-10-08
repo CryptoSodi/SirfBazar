@@ -33,6 +33,7 @@ export function LoginSheet({
   const [error, setError] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
+  const pending = useRef(false);
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -50,6 +51,8 @@ export function LoginSheet({
   };
 
   const sendOtp = async () => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError('');
     try {
@@ -58,11 +61,14 @@ export function LoginSheet({
     } catch (e: any) {
       setError(e.message);
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
 
   const verify = async () => {
+    if (pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError('');
     try {
@@ -78,11 +84,14 @@ export function LoginSheet({
       if (e instanceof CartMergeUncertainError) setStep('merge-error');
       else setError(e.message);
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
 
   const loginWithIdToken = async (idToken: string) => {
+    if (!idToken || pending.current) return;
+    pending.current = true;
     setBusy(true);
     setError('');
     try {
@@ -93,6 +102,7 @@ export function LoginSheet({
       if (e instanceof CartMergeUncertainError) setStep('merge-error');
       else setError(e.message);
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   };
@@ -144,12 +154,14 @@ export function LoginSheet({
             </button>
             <div className="text-center text-xs uppercase tracking-wide text-stone-400">or</div>
             {GOOGLE_CLIENT_ID ? (
-              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-                <div className="flex justify-center">
+              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID} onScriptLoadError={() => setError('Google could not load. Use your mobile number or try again.')}>
+                <div className={busy ? 'hidden' : 'flex justify-center'}>
                   <GoogleLogin
                     onSuccess={(cr) => cr.credential && loginWithIdToken(cr.credential)}
                     onError={() => setError('Google sign-in failed — please try again.')}
-                    width="320"
+                    width="260"
+                    auto_select={false}
+                    useOneTap={false}
                   />
                 </div>
               </GoogleOAuthProvider>

@@ -206,38 +206,91 @@ export class AuthService {
 
   async googleLogin(idToken: string, context: AuthContext = 'customer') {
     const profile = await this.googleAuth.verifyIdToken(idToken);
-
-    let user = await this.prisma.user.findUnique({ where: { googleId: profile.googleId } });
-    if (!user) {
-      const byEmail = await this.prisma.user.findUnique({ where: { email: profile.email } });
-      if (byEmail) {
-        user = await this.prisma.user.update({
-          where: { id: byEmail.id },
-          data: { googleId: profile.googleId, isEmailVerified: true },
-        });
-      } else if (context === 'customer') {
-        // Consumers self-register on first Google sign-in; staff/merchants do not.
-        user = await this.prisma.user.create({
-          data: {
-            googleId: profile.googleId,
-            email: profile.email,
-            fullName: profile.name || null,
-            profileImageUrl: profile.picture || null,
-            role: UserRole.CUSTOMER,
-            isEmailVerified: true,
-          },
-        });
-      } else {
-        const what =
-          context === 'admin' ? 'an authorised admin' : context === 'rider' ? 'a registered rider' : 'a registered merchant';
-        throw new UnauthorizedException(`This Google account is not ${what}.`);
+    let user;
+    try {
+      user = await this.prisma.$transaction(async db => {
+        // Serialize first-time requests for both subject and email across API instances.
+        for (const key of [`google:email:${profile.email}`, `google:sub:${profile.googleId}`].sort()) {
+          await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+        }
+        const linked = await db.user.findUnique({ where: { googleId: profile.googleId } });
+        if (linked) return linked;
+        const matches = await db.user.findMany({ where: { email: { equals: profile.email, mode: 'insensitive' } }, take: 2 });
+        if (matches.length > 1) throw new UnauthorizedException('Account email is ambiguous. Contact support.');
+        const existing = matches[0];
+        if (existing) {
+          if (existing.status !== 'ACTIVE') throw new UnauthorizedException('Account is not active');
+          if (existing.googleId || !profile.emailAuthoritative) {
+            throw new UnauthorizedException('Sign in using your existing method and link Google from your account.');
+          }
+          // A denied staff/admin login must not attach a new identity.
+          await this.resolveContextRole(existing.id, context, db);
+          const changed = await db.user.updateMany({
+            where: { id: existing.id, googleId: null, status: 'ACTIVE', email: existing.email },
+            data: { googleId: profile.googleId, isEmailVerified: true },
+          });
+          if (changed.count !== 1) throw new UnauthorizedException('Account changed. Please sign in again.');
+          return existing;
+        }
+        if (context !== 'customer') {
+          const what = context === 'admin' ? 'an authorised admin' : context === 'rider' ? 'a registered rider' : 'a registered merchant';
+          throw new UnauthorizedException(`This Google account is not ${what}.`);
+        }
+        return db.user.create({ data: {
+          googleId: profile.googleId, email: profile.email,
+          fullName: profile.name || null, profileImageUrl: profile.picture || null,
+          role: UserRole.CUSTOMER, isEmailVerified: true,
+        } });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new UnauthorizedException('Account changed. Please sign in again using your existing method.');
       }
+      throw error;
     }
-
-    if (user.status === 'SUSPENDED') throw new UnauthorizedException('Account is suspended');
+    if (user.status !== 'ACTIVE') throw new UnauthorizedException('Account is not active');
 
     const role = await this.resolveContextRole(user.id, context);
     return this.issueTokens(user.id, role);
+  }
+
+  async linkGoogle(userId: string, idToken: string) {
+    let profile;
+    try { profile = await this.googleAuth.verifyIdToken(idToken); }
+    catch (error) {
+      // The app session was already authenticated; bad Google proof must not trigger session refresh/logout.
+      if (error instanceof UnauthorizedException) throw new BadRequestException(error.message);
+      throw error;
+    }
+    try {
+      return await this.prisma.$transaction(async db => {
+        for (const key of [`google:email:${profile.email}`, `google:sub:${profile.googleId}`].sort()) {
+          await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+        }
+        const user = await db.user.findUnique({ where: { id: userId } });
+        if (!user || user.status !== 'ACTIVE') throw new UnauthorizedException('Account is not active');
+        const linked = await db.user.findUnique({ where: { googleId: profile.googleId } });
+        if ((linked && linked.id !== userId) || (user.googleId && user.googleId !== profile.googleId)) {
+          throw new BadRequestException('Google is already linked to a different account. Contact support.');
+        }
+        const emailAccounts = await db.user.findMany({ where: { email: { equals: profile.email, mode: 'insensitive' } }, take: 2 });
+        if (emailAccounts.some(account => account.id !== userId)) {
+          throw new BadRequestException('This Google email belongs to another SirfBazar account. Contact support to combine accounts.');
+        }
+        const changed = await db.user.updateMany({
+          where: { id: userId, status: 'ACTIVE', OR: [{ googleId: null }, { googleId: profile.googleId }] },
+          // Linking proves ownership of both accounts. Keep phone, email and permissions unchanged.
+          data: { googleId: profile.googleId },
+        });
+        if (changed.count !== 1) throw new BadRequestException('Account changed. Please sign in again.');
+        return { linked: true, email: profile.email };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('Google is already linked to a different account. Contact support.');
+      }
+      throw error;
+    }
   }
 
   // ── Admin email/password ──────────────────────────────────────────────────
@@ -455,8 +508,8 @@ export class AuthService {
   }
 
   /** Customers are created lazily on first customer-context login. */
-  private async ensureCustomerRecord(userId: string) {
-    await this.prisma.customer.upsert({
+  private async ensureCustomerRecord(userId: string, db: Prisma.TransactionClient = this.prisma) {
+    await db.customer.upsert({
       where: { userId },
       update: {},
       create: { userId },
@@ -468,15 +521,15 @@ export class AuthService {
    * Capability = the linked record exists, so ONE account can be a customer, a
    * merchant, and a rider at once — the active role is chosen per app at login.
    */
-  private async resolveContextRole(userId: string, context: AuthContext): Promise<UserRole> {
+  private async resolveContextRole(userId: string, context: AuthContext, db: Prisma.TransactionClient = this.prisma): Promise<UserRole> {
     if (context === 'customer') {
-      await this.ensureCustomerRecord(userId);
+      await this.ensureCustomerRecord(userId, db);
       return UserRole.CUSTOMER;
     }
     if (context === 'merchant') {
-      const merchant = await this.prisma.merchant.findUnique({ where: { userId }, select: { id: true } });
+      const merchant = await db.merchant.findUnique({ where: { userId }, select: { id: true } });
       if (merchant) return UserRole.MERCHANT_OWNER;
-      const staff = await this.prisma.merchantStaff.findFirst({
+      const staff = await db.merchantStaff.findFirst({
         where: { userId, status: 'ACTIVE' },
         select: { id: true },
       });
@@ -484,15 +537,15 @@ export class AuthService {
       throw new UnauthorizedException('This account is not a merchant — onboard your shop first.');
     }
     if (context === 'rider') {
-      const rider = await this.prisma.rider.findUnique({ where: { userId }, select: { id: true } });
+      const rider = await db.rider.findUnique({ where: { userId }, select: { id: true } });
       if (rider) return UserRole.RIDER;
       // Not a rider yet — hand back a base customer identity so the account can
       // self-onboard (browse shops + apply); /rider/apply then mints a RIDER token.
-      await this.ensureCustomerRecord(userId);
+      await this.ensureCustomerRecord(userId, db);
       return UserRole.CUSTOMER;
     }
     // admin
-    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+    const u = await db.user.findUnique({ where: { id: userId }, select: { role: true } });
     if (u && ADMIN_ROLES.includes(u.role as UserRole)) return u.role as UserRole;
     throw new UnauthorizedException('This account does not have admin access.');
   }

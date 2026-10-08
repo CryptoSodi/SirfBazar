@@ -83,6 +83,39 @@ class DeployTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 safe_name(name)
 
+    def test_status_uses_only_privileged_metadata_helper(self):
+        with patch.dict(os.environ, {"SSH_ORIGINAL_COMMAND": "status"}), patch.object(ssh_command.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            self.assertEqual(ssh_command.main(), 0)
+        run.assert_called_once_with(["/usr/bin/sudo", "-n", "/usr/local/libexec/sirfbazar-deploy/promote.py", "status"])
+
+    def test_helper_dispatch_rejects_nonroot_and_extra_status_arguments(self):
+        with patch.object(os, "geteuid", return_value=1000, create=True), self.assertRaises(promote.DeploymentError):
+            promote.entrypoint(["status"])
+        with patch.object(os, "geteuid", return_value=0, create=True), patch.object(promote, "status", return_value=0) as status:
+            self.assertEqual(promote.entrypoint(["status"]), 0)
+            status.assert_called_once_with()
+            for arguments in ([], ["bash"], ["status", "extra", "argument"]):
+                with self.subTest(arguments=arguments), self.assertRaises(promote.DeploymentError):
+                    promote.entrypoint(arguments)
+            with self.assertRaises(ValueError):
+                promote.entrypoint(["status", "extra"])
+
+    def test_status_only_reports_release_and_service(self):
+        releases = self.root / "releases"
+        release = releases / RELEASE
+        release.mkdir(parents=True)
+        current = self.root / "current"
+        self.symlink(current, release)
+        output = io.StringIO()
+        with patch.object(promote, "CURRENT", current), patch.object(promote, "RELEASES", releases), \
+                patch.object(promote.subprocess, "run") as run, patch("sys.stdout", output):
+            run.return_value.returncode = 0
+            run.return_value.stdout = "active\n"
+            self.assertEqual(promote.status(), 0)
+        self.assertEqual(json.loads(output.getvalue()), {"release": RELEASE, "service": "active"})
+        run.assert_called_once_with(["/usr/bin/systemctl", "is-active", "sirfbazar-api.service"], capture_output=True, text=True, timeout=10)
+
     def test_valid_release(self):
         root = self.fixture()
         self.assertEqual(verify_tree(root, SHA)["sha"], SHA)

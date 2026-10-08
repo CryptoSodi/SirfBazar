@@ -61,6 +61,9 @@ jobs:
       - run: node -r ts-node/register/transpile-only --test test/category-sections.test.cjs
       - run: npm run test:waha
       - run: npm run test:whatsapp
+      - run: npm run test:google
+      - run: node ../../scripts/test-google-native.cjs
+      - run: node ../../scripts/test-google-clients.cjs
       - name: Verify Linux production packaging without connecting to production
         run: |
           node ../../scripts/build-api-release.cjs "$RUNNER_TEMP/ci-api-release"

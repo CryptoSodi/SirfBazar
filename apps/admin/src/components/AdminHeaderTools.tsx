@@ -1,6 +1,7 @@
 import { Search, Settings, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { GoogleAccountLink } from './GoogleAccountLink';
 
 const DESTINATIONS = [
   ['/', 'Overview'], ['/orders', 'All orders'], ['/merchants', 'Merchants'],
@@ -36,6 +37,7 @@ export default function AdminHeaderTools({ openTheme }: { openTheme: () => void 
       <button type="button" className="ops-button ops-icon-button" aria-label="Settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}><Settings size={17} /></button>
       {settingsOpen && <div className="ops-settings-menu" role="region" aria-label="Admin settings">
         <strong>Workspace settings</strong>
+        <GoogleAccountLink />
         <p>Platform preferences and permissions need a settings API; they are not editable here yet.</p>
         <button type="button" className="ops-button" onClick={() => { setSettingsOpen(false); openTheme(); }}>Open Theme Studio</button>
       </div>}

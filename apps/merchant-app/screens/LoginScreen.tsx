@@ -78,6 +78,7 @@ export default function LoginScreen() {
 
   const google = () => void run(async () => {
     const idToken = await googleSignInIdToken();
+    if (!idToken) return;
     // Explicit mode determines context. Network or account errors never trigger
     // a fallback registration request.
     await finish(await api.post('/auth/google-login', { idToken, context: authContextFor(mode) }));

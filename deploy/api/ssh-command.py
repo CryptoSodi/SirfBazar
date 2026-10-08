@@ -27,9 +27,7 @@ def parse_command(command):
 def main():
     action, release_id, digest = parse_command(os.environ.get("SSH_ORIGINAL_COMMAND", ""))
     if action == "status":
-        service = subprocess.run(["/usr/bin/systemctl", "is-active", "sirfbazar-api.service"], capture_output=True, text=True)
-        print(json.dumps({"release": Path("/opt/sirfbazar-api/current").resolve().name, "service": service.stdout.strip()}))
-        return service.returncode
+        return subprocess.run(["/usr/bin/sudo", "-n", "/usr/local/libexec/sirfbazar-deploy/promote.py", "status"]).returncode
     archive = HOME / "incoming" / (release_id + ".tar.gz")
     if action == "deploy":
         return subprocess.run(["/usr/bin/sudo", "-n", "/usr/local/libexec/sirfbazar-deploy/promote.py", release_id, digest]).returncode

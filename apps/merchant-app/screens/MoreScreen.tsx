@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, clearAuth, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import { GoogleAccountLink } from '../components/GoogleAccountLink';
 
 export default function MoreScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -60,6 +61,7 @@ export default function MoreScreen() {
           ))}
         </View>
 
+        <GoogleAccountLink />
         <TouchableOpacity
           style={[s.btnGhost, { marginTop: 16 }]}
           onPress={async () => {
