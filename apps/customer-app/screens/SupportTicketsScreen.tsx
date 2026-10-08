@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useCallback, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -52,7 +53,7 @@ export default function SupportTicketsScreen() {
           <TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={load}>
             <Text style={s.btnGhostText}>Refresh requests</Text>
           </TouchableOpacity>
-          {!!error && <Notice danger>{error}</Notice>}
+          {!!error && <ToastMessage>{error}</ToastMessage>}
           {!tickets?.length && (
             <StatePanel
               loading={!tickets && !error}

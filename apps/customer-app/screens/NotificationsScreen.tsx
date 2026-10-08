@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useCallback, useRef, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { Linking, Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -53,7 +54,7 @@ export default function NotificationsScreen() {
     {guest ? <StatePanel title="Your updates, in one place" message="Sign in to view order and support updates." icon="bell" action="Sign in" onPress={() => setLogin(true)} /> :
       <ScrollView contentContainerStyle={{ paddingHorizontal: inset, paddingTop: 12, paddingBottom: 26 }}>
         <Text accessibilityRole="header" style={s.h1}>Your updates</Text><Text style={[s.muted, { marginTop: 8 }]}>Only updates for your customer account.</Text>
-        {!!error && <View style={{ marginTop: 16 }}><Notice danger>{error}</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh updates</Text></TouchableOpacity></View>}
+        {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error}</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={load}><Text style={s.btnGhostText}>Refresh updates</Text></TouchableOpacity></View>}
         {!items && !error && <StatePanel loading title="Loading updates…" />}
         {items && !visible?.length && <StatePanel icon="bell" title={unread ? 'No unread updates' : 'No updates yet'} message="Order and support updates appear here. Your orders always show their latest saved status." action="View orders" onPress={() => goTab(navigation, 'OrdersTab')} />}
         {!!visible?.length && <View style={[s.card, { marginTop: 20, padding: 0, overflow: 'hidden' }]}>{visible.map((item, index) => <TouchableOpacity key={item.id} accessibilityRole="button" accessibilityLabel={`${item.title}. ${item.isRead ? 'Read' : 'Unread'}. ${item.body || ''}`} disabled={busy} onPress={() => void open(item)} style={[s.row, { minHeight: 61, gap: 12, paddingHorizontal: 14, paddingVertical: 15, borderBottomWidth: index < visible.length - 1 ? 1 : 0, borderColor: colors.border }]}>

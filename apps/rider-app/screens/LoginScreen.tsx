@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
@@ -127,7 +128,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </>
           )}
-          {!!error && <Text style={{ color: colors.danger, marginTop: 10, fontSize: 13 }}>{error}</Text>}
+          {!!error && <ToastMessage>{error}</ToastMessage>}
           <Text style={[s.faint, { textAlign: 'center', marginTop: 10 }]}>
             Demo rider: +923020000001 · code 123456
           </Text>

@@ -28,6 +28,7 @@ function harness(file, { imports = {}, globals = {}, post, googleToken = 'google
     '../lib/google': { googleSignInIdToken: async () => googleToken },
     '../lib/theme': { s: {}, useTheme: () => ({ s: {} }) },
     '../lib/appearance': { useRiderTheme: () => ({ palette: {} }) },
+    '../components/Toast': { ToastMessage: 'ToastMessage' },
   };
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS,
     target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {

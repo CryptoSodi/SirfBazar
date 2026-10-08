@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -55,7 +56,7 @@ export default function ProductScreen() {
       {!!selectedId && !offer && product.offers?.length > 0 && <View style={{ marginTop: 12 }}><Notice tone="warning">Your selected shop is no longer available for this product. Choose a shop before adding.</Notice></View>}
       <Text style={[s.muted, { marginTop: 12 }]}>Sold and delivered by the selected shop. Delivery charges are shown in your basket.</Text>
       {restricted && <View style={{ marginTop: 12 }}><Notice tone="warning">{product.requiresPrescription ? 'This product requires a prescription and cannot be added through this checkout.' : 'This restricted product cannot be added through this checkout.'}</Notice></View>}
-      {!!error && <View style={{ marginTop: 16 }}><Notice danger>{error} Refresh this product to check its latest price and stock before adding.</Notice><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12, justifyContent: 'center' }]} onPress={load}><Text style={s.btnGhostText}>Refresh product</Text></TouchableOpacity></View>}
+      {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error} Refresh this product to check its latest price and stock before adding.</ToastMessage><TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12, justifyContent: 'center' }]} onPress={load}><Text style={s.btnGhostText}>Refresh product</Text></TouchableOpacity></View>}
       {similar.length > 0 && <><SectionTitle title="You may also need" /><View style={{ flexDirection: 'row', gap: 12 }}>{similar.map((item) => <ProductCard key={item.productId ?? item.id} item={item} onPress={() => navigation.push('Product', { productId: item.productId ?? item.id, merchantProductId: item.merchantProductId })} />)}</View></>}
     </ScrollView>
     <ActionDock>{offer && available && !error ? <View style={{ flexDirection: 'row' }}><AddButton key={offer.merchantProductId} full productId={route.params.productId} merchantProductId={offer.merchantProductId} outOfStock={!available} label={`Add to basket · ${pkr(price)}`} /></View> : <TouchableOpacity disabled accessibilityRole="button" accessibilityState={{ disabled: true }} style={[s.btnGhost, { justifyContent: 'center', opacity: 0.8 }]}><Text style={[s.btnGhostText, { color: colors.muted }]}>{error ? 'Refresh product to continue' : restricted ? 'Unavailable for checkout' : offer ? 'Currently unavailable' : 'Choose an available shop'}</Text></TouchableOpacity>}</ActionDock>

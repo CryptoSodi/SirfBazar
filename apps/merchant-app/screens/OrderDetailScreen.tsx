@@ -1,3 +1,4 @@
+import { toast, ToastHost } from '../components/Toast';
 import { IconLabel } from '../components/IconLabel';
 import { RouteProp, useRoute } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
@@ -25,7 +26,7 @@ export default function OrderDetailScreen() {
       await api.post(`/merchant/orders/${route.params.orderId}/${action}`, body ?? {});
       load();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -37,7 +38,7 @@ export default function OrderDetailScreen() {
       setRiders((Array.isArray(list) ? list : list.items ?? []).filter((r: any) => r.isActive));
       setRiderPicker(true);
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     }
   };
 
@@ -148,7 +149,7 @@ export default function OrderDetailScreen() {
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      <ToastHost active={riderPicker} /></Modal>
     </ScrollView>
   );
 }

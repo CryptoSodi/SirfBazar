@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useState } from 'react';
@@ -90,7 +91,7 @@ export default function MapPickerScreen() {
         <TextInput accessibilityLabel="Longitude" keyboardType="decimal-pad" value={longitude} onChangeText={setLongitude} editable={!busy} style={s.input}/>
       </View>
 
-      {error ? <Notice danger>{error}</Notice> : null}
+      {error ? <ToastMessage>{error}</ToastMessage> : null}
 
       <TouchableOpacity accessibilityRole="button" onPress={preview} style={{ minHeight: 44, justifyContent: 'center' }}>
         <Text style={[s.body, { color: colors.primary, fontWeight: '600' }]}>Preview location on map</Text>

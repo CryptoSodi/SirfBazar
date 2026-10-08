@@ -6,6 +6,7 @@ Requested on 8 October 2026: maintain one release branch and one backend, preser
 
 - Master baseline: `fa84f3d7ef814b411aa3ac63f06b790660b9c9de`.
 - Oracle release source: `c376055fa1f9596a824680753db3f578bf696335`, shared by `codex/server-api-deployment` and `codex/google-login-completion`.
+- Additional developer UI source: `23a8570412a4b419125cb6a9b471450c44880ae8` on `codex/unified-icons-mobile-signup`. Its web work was already published to master; its native feedback work is also included, preserving newer Google authentication.
 - Integration branch: `codex/consolidate-master`.
 - The merge updates the existing `apps/api`. It creates no replacement app, second API service or database. Historical Git commits and branches are not deleted.
 
@@ -14,6 +15,7 @@ Requested on 8 October 2026: maintain one release branch and one backend, preser
 - `apps/api`, including its Prisma schema, is unchanged from the Oracle source above. No migration, schema push, seed, category move or production data mutation is part of consolidation.
 - Preserve master's merchant catalogue Design A, nested categories, selection/review pane, accessible validation, CSV import, immutable retry and responsive light/dark styling.
 - Preserve master's customer subcategory navigation, plain-language errors, persistent toasts, quote-compatible checkout and saved-request recovery.
+- Include the other developer's native customer/merchant/rider error redaction and toast hosts, including modal hosts and native feedback parity tests. These source changes do not silently rebuild or distribute APKs.
 - Add the Oracle branch's verified Google token handling, account linking, role checks, native clients and release/deployment tooling. Retain guest-first browsing, cart recovery and rider functionality.
 - Keep existing APK download links and package/signing records. Merging mobile source does not replace already installed APKs or complete pending native-device checks.
 - Keep live Google/WhatsApp configuration, JWT secrets, PostgreSQL, Caddy, DNS, uploads and all other Oracle services unchanged.
@@ -28,7 +30,13 @@ Before merging, require the owner's requested branch protection and an independe
 
 ## Verification status
 
-Consolidation and local verification are in progress. Remote master and the running production release have not yet been changed by this integration. Record the final PR, CI and deployment evidence here when available; a prepared branch alone is not a completed production deployment.
+- [Consolidation PR #2](https://github.com/CryptoSodi/SirfBazar/pull/2) targets master; independent review is requested from `mazharmehdi`.
+- [Initial CI run 37807030699](https://github.com/CryptoSodi/SirfBazar/actions/runs/37807030699) passed all release gates for `7c76552`, including Linux production packaging/smoke, disposable database regressions and browser journeys. The additional native feedback merge requires a fresh green run before approval/merge.
+- Local API and all four web-app builds, native typechecks, Google/WhatsApp/POS/recovery tests, release-gate tests and mocked browser journeys passed for the initial merge. Windows Turbopack encountered a worker crash; Webpack passed locally and the unchanged normal Turbopack build passed Linux CI. No production build setting was weakened.
+- The additional native feedback merge passed all three native typechecks, 48 customer tests, 7 merchant authentication tests, both merchant/rider push-lifecycle suites (3 tests each), and the 20-case cross-client Google harness. It does not alter the already-verified web apps or API. Its native feedback test is now part of the customer CI script rather than an unexecuted file.
+- Interface review: retained merchant light/dark catalogue and customer checkout/subcategory screenshots; keyboard, toast layering and responsive fixtures passed at 320-1440px. Fixtures intentionally use missing/empty product data to check recovery. Real native-device login, checkout and notification rendering remain separate release gates.
+- Master protection is saved with `release-checks` bound to GitHub Actions, strict up-to-date checks, one approving PR review, conversation resolution, admin enforcement and no force pushes/deletion. Production environment deployment permission is master only; secrets were not changed.
+- Remote master and the running Oracle release have not yet been changed by this integration. A prepared/approved PR is not a completed production deployment; verify the master push and server release pointer after merge.
 
 ## Rollback
 

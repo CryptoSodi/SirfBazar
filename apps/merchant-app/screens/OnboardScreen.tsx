@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { IconLabel } from '../components/IconLabel';
 import { useNavigation } from '@react-navigation/native';
@@ -199,7 +200,7 @@ export default function OnboardScreen() {
           </Field>
         </View>
 
-        {!!error && <Text style={{ color: colors.danger, marginTop: 12, fontSize: 13 }}>{error}</Text>}
+        {!!error && <ToastMessage>{error}</ToastMessage>}
 
         <TouchableOpacity style={[s.btn, { marginTop: 16 }]} onPress={submit} disabled={busy}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Create my shop</Text>}

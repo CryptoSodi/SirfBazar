@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
@@ -81,13 +82,13 @@ export default function DeliveryLocationScreen() {
       </View>
       {showAddresses && <View style={{ gap: 12, marginTop: 16 }}>
         {!addresses && !addressError && <View style={[s.row, { gap: 8 }]}><ActivityIndicator color={colors.primary} /><Text style={s.muted}>Loading saved addresses…</Text></View>}
-        {!!addressError && <><Notice danger>{addressError}</Notice><TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={() => void loadAddresses()}><Text style={s.btnGhostText}>Retry saved addresses</Text></TouchableOpacity></>}
+        {!!addressError && <><ToastMessage>{addressError}</ToastMessage><TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={() => void loadAddresses()}><Text style={s.btnGhostText}>Retry saved addresses</Text></TouchableOpacity></>}
         {addresses?.map((address) => <TouchableOpacity key={address.id} accessibilityRole="button" disabled={busy} onPress={() => hasPoint(address) ? void chooseSaved(address) : goTab(navigation, 'ProfileTab', { screen: 'AddressEdit', params: { addressId: address.id } })} style={[s.card, { gap: 5 }]}><Text style={[s.body, { fontWeight: '700' }]}>{address.label || 'Delivery address'}</Text><Text style={s.muted}>{address.fullAddress}</Text>{!hasPoint(address) && <Text style={{ color: colors.primary, fontSize: 12 }}>Confirm this address’s map pin first</Text>}</TouchableOpacity>)}
         {addresses?.length === 0 && <Notice>No saved addresses yet. Choose a point on the map, or add a saved address.</Notice>}
         {addresses && <TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={() => goTab(navigation, 'ProfileTab', { screen: 'Addresses' })}><Text style={s.btnGhostText}>Manage saved addresses</Text></TouchableOpacity>}
       </View>}
       <View style={{ marginTop: 20 }}><Notice tone="blue">Current location needs your permission. It is requested only when you choose it. Manual map selection does not need GPS access.</Notice></View>
-      {!!error && <View style={{ marginTop: 12 }}><Notice danger>{error}</Notice></View>}
+      {!!error && <View style={{ marginTop: 12 }}><ToastMessage>{error}</ToastMessage></View>}
       <TouchableOpacity accessibilityRole="button" disabled={busy} onPress={() => void browseWithoutArea()} style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}><Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>Keep browsing without location</Text></TouchableOpacity>
     </ScrollView>
     <LoginSheet visible={login} onClose={() => setLogin(false)} onSuccess={() => { setLogin(false); void loadAddresses(); }} />

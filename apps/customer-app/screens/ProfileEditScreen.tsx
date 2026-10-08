@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -60,7 +61,7 @@ export default function ProfileEditScreen() {
         <View style={{ marginTop: 16 }}><Text style={[s.body, { fontSize: 12, fontWeight: '700', marginBottom: 7 }]}>Email · optional</Text><TextInput ref={emailInput} accessibilityLabel="Email, optional" autoComplete="email" keyboardType="email-address" autoCapitalize="none" style={s.input} value={email} onChangeText={setEmail} placeholder="name@example.com" placeholderTextColor={colors.faint} editable={!busy} /></View>
         <Text style={[s.faint, { marginTop: 12, lineHeight: 16 }]}>Leave email blank to keep your existing email.</Text>
       </>}
-      {!!error && <View style={{ marginTop: 16 }}><Notice danger>{error}</Notice></View>}
+      {!!error && <View style={{ marginTop: 16 }}><ToastMessage>{error}</ToastMessage></View>}
     </ScrollView>
     <ActionDock><TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy }} style={[s.btn, s.row, { justifyContent: 'center', gap: 9, backgroundColor: deleteAccount ? colors.dangerSolid : colors.action, opacity: busy ? 0.6 : 1 }]} disabled={busy} onPress={() => void (deleteAccount ? removeAccount() : save())}>{busy && <ActivityIndicator color="#fff" size="small" />}<Text style={s.btnText}>{deleteAccount ? (busy ? 'Deleting account…' : 'Delete my account') : (busy ? 'Saving details…' : 'Save details')}</Text></TouchableOpacity></ActionDock>
   </KeyboardAvoidingView>;

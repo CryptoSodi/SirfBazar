@@ -1,3 +1,4 @@
+import { ToastMessage } from './Toast';
 import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
@@ -153,7 +154,7 @@ export function AddButton({
     <TouchableOpacity accessibilityRole="button" accessibilityLabel="Check basket" disabled={state !== 'idle'} onPress={() => void checkBasket()} style={{ backgroundColor: colors.emeraldBg, borderRadius: full ? 13 : 9, minHeight: full ? 52 : 44, paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center' }}>
       {state === 'adding' ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary, fontSize: full ? 15 : 12, fontWeight: '700' }}>Check basket</Text>}
     </TouchableOpacity>
-    {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 11, marginTop: 5 }}>{error}</Text>}
+    {!!error && <ToastMessage>{error}</ToastMessage>}
   </View>;
 
   if (item && item.quantity > 0)
@@ -200,7 +201,7 @@ export function AddButton({
           <Text style={{ color: colors.primary, fontSize: 17 }}>+</Text>
         </TouchableOpacity>
       </View>
-      {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 11, marginTop: 5 }}>{error}</Text>}
+      {!!error && <ToastMessage>{error}</ToastMessage>}
       </View>
     );
 
@@ -253,7 +254,7 @@ export function AddButton({
           </Text>
         )}
       </TouchableOpacity>
-      {!!error && <Text accessibilityRole="alert" style={{ color: colors.danger, fontSize: 11, marginTop: 5 }}>{error}</Text>}
+      {!!error && <ToastMessage>{error}</ToastMessage>}
     </View>
   );
 }

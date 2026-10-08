@@ -1,3 +1,4 @@
+import { toast, ToastHost } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { IconLabel } from '../components/IconLabel';
 import { useCallback, useEffect, useState } from 'react';
@@ -44,7 +45,7 @@ export default function CatalogScreen() {
         setTotalPages(res.totalPages ?? 1);
         setPage(nextPage + 1);
       } catch (e: any) {
-        alert(e.message);
+        toast(e.message, false);
       } finally {
         setLoading(false);
       }
@@ -157,7 +158,7 @@ function AddModal({ product, onClose, onAdded }: any) {
   const save = async () => {
     const pricePaisa = Math.round((Number(priceRs) || 0) * 100);
     const stockQuantity = Math.max(0, Math.floor(Number(stock) || 0));
-    if (pricePaisa < 100) return alert('Enter a valid price');
+    if (pricePaisa < 100) return toast('Enter a valid price', false);
     setBusy(true);
     try {
       await api.post('/merchant/products', {
@@ -167,7 +168,7 @@ function AddModal({ product, onClose, onAdded }: any) {
       });
       onAdded();
     } catch (e: any) {
-      alert(e.message);
+      toast(e.message, false);
     } finally {
       setBusy(false);
     }
@@ -204,6 +205,6 @@ function AddModal({ product, onClose, onAdded }: any) {
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    <ToastHost active={true} /></Modal>
   );
 }

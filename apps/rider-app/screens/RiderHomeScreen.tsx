@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
@@ -73,7 +74,7 @@ export default function RiderHomeScreen() {
         <View style={{ flex: 1 }}><View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><Icon name={profile?.isOnline ? "online" : "offline"} color={profile?.isOnline ? palette.action : palette.quiet} size={18} /><Text style={{ color: palette.ink, fontSize: 14, fontWeight: "700" }}>You’re {profile?.isOnline ? "online" : "offline"}</Text></View><Body muted small style={{ marginTop: 4 }}>Your shop can see your online status.</Body></View>
         <Pressable accessibilityRole="switch" accessibilityLabel="Available for deliveries" accessibilityState={{ checked: !!profile?.isOnline, disabled: presenceBusy || profile?.approvalStatus !== 'APPROVED' }} disabled={presenceBusy || profile?.approvalStatus !== 'APPROVED'} onPress={toggleOnline} style={{ width: 46, minHeight: 44, justifyContent: 'center', opacity: presenceBusy ? 0.5 : 1 }}><View style={{ width: 46, height: 28, borderRadius: 18, backgroundColor: profile?.isOnline ? palette.action : palette.control, padding: 3 }}><View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFFFFF', alignSelf: profile?.isOnline ? 'flex-end' : 'flex-start' }} /></View></Pressable>
       </View>
-      {!!message && <Note tone="red" style={{ marginBottom: 12 }}>{message}</Note>}
+      {!!message && <ToastMessage>{message}</ToastMessage>}
       {profile?.approvalStatus === 'PENDING' && <Note icon="clock" tone="amber" style={{ marginBottom: 16 }}>Awaiting approval from {profile.merchant?.shopName ?? 'your shop'}. You can deliver after the owner approves and activates your account.</Note>}
       {current ? <>
         <View style={{ backgroundColor: palette.hero, borderRadius: 22, padding: 20, overflow: 'hidden' }}>

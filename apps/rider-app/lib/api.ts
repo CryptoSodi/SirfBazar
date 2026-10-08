@@ -1,3 +1,4 @@
+import { friendlyError } from './friendly-error';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /** Defaults to the live production API. Local backend: EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:3001/api */
@@ -90,7 +91,7 @@ async function request(method: string, path: string, body?: unknown, retry = tru
     /* empty body */
   }
   if (!res.ok) {
-    const msg = Array.isArray(data?.message) ? data.message.join(', ') : data?.message || `Request failed (${res.status})`;
+    const msg = friendlyError(data?.message, res.status, path, data?.code);
     throw new ApiError(msg, res.status);
   }
   return data;

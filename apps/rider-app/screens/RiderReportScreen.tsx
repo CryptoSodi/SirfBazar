@@ -1,3 +1,4 @@
+import { ToastMessage } from '../components/Toast';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -38,7 +39,7 @@ export default function RiderReportScreen() {
     {open && <View style={{ backgroundColor: palette.surface, borderColor: palette.line, borderWidth: 1, borderRadius: 12, marginTop: 4 }}>{issueTypes.map((item) => <Pressable key={item} onPress={() => { setType(item); setOpen(false); }} style={{ padding: 12 }}><Text style={{ color: palette.ink, fontSize: 14 }}>{item}</Text></Pressable>)}</View>}
     <Field label="What should the shop know?" value={notes} onChangeText={setNotes} placeholder="Describe what happened and where you are." multiline />
     <Body muted small style={{ marginTop: 8 }}>Do not include passwords or delivery codes.</Body><Note style={{ marginTop: 22 }}>Do not leave the order or change its delivery status until you have clear instructions.</Note>
-    {!!message && <Note tone={message.startsWith('Issue sent') ? 'green' : 'red'} style={{ marginTop: 12 }}>{message}</Note>}
+    {!!message && <ToastMessage ok={(message.startsWith('Issue sent') ? 'green' : 'red') === 'green'}>{message}</ToastMessage>}
     <LinkButton onPress={() => navigation.navigate('Help')} icon="phone" style={{ marginTop: 12 }}>Call the shop instead</LinkButton>
   </Page>;
 }
