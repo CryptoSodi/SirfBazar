@@ -156,7 +156,7 @@ body { background:var(--sb-paper); color:var(--sb-ink); }
 .sb-site-promise { background:#07563c; color:#fff; font-size:11px; }
 .sb-site-promise .sb-site-container { min-height:29px; }
 .sb-site-promise a:hover { text-decoration:underline; }
-.sb-site-mainbar { display:grid; grid-template-columns:142px 180px minmax(220px,1fr) 40px auto 124px; gap:22px; min-height:86px; }
+.sb-site-mainbar { display:grid; grid-template-columns:142px 180px minmax(220px,1fr) 40px 40px auto 124px; gap:16px; min-height:86px; }
 .sb-header-brand img { width:140px; height:auto; max-height:40px; }
 .sb-site-location { min-width:0; max-width:none; border-inline-start:1px solid var(--sb-border); padding-inline-start:18px; }
 .sb-site-location .sb-pin { color:#008860; font-size:24px; }
@@ -170,6 +170,22 @@ body { background:var(--sb-paper); color:var(--sb-ink); }
 .sb-site-search button { width:32px; height:32px; color:#007a52; font-size:22px; }
 .sb-icon-button { display:inline-grid; place-items:center; width:40px; height:40px; border-radius:9px; color:var(--sb-text-secondary); font-size:23px; }
 .sb-icon-button:hover { background:var(--sb-support); }
+.sb-account-menu { position:relative; min-width:0; }
+.sb-account-menu summary { list-style:none; cursor:pointer; }
+.sb-account-menu summary::-webkit-details-marker { display:none; }
+.sb-account-trigger { border:1px solid var(--sb-border); }
+.sb-account-panel { position:absolute; z-index:48; inset-inline-end:0; inset-block-start:calc(100% + 10px); width:min(18rem,calc(100vw - 34px)); padding:16px; border:1px solid var(--sb-border); border-radius:16px; background:var(--sb-surface); color:var(--sb-ink); box-shadow:0 8px 24px #00000014; }
+.sb-account-panel strong { display:block; font-size:15px; font-weight:700; line-height:1.5; }
+.sb-account-panel p { margin-block:6px 12px; color:var(--sb-text-secondary); font-size:13px; line-height:1.5; text-wrap:pretty; }
+.sb-account-panel a { display:flex; align-items:center; min-height:44px; padding:10px 12px; margin-block-start:8px; border-radius:10px; background:var(--sb-support); color:var(--sb-ink); font-size:14px; font-weight:600; line-height:1.5; }
+.sb-account-panel a:hover { text-decoration:underline; }
+.sb-account-menu summary:focus-visible, .sb-account-panel a:focus-visible { outline:2px solid currentColor; outline-offset:3px; }
+.sb-account-mobile-trigger { min-height:65px; display:grid; justify-items:center; align-content:center; color:var(--sb-text-secondary); }
+.sb-account-mobile.active summary { color:var(--sb-action); }
+.sb-mobile-nav .sb-account-panel { inset-block-start:auto; inset-block-end:calc(100% + 8px); }
+.sb-mobile-nav .sb-account-panel a { position:static; display:flex; justify-content:flex-start; color:var(--sb-ink); }
+@media (min-width:761px) and (max-width:1100px) { .sb-site-mainbar:has(.sb-account-desktop) { grid-template-columns:130px 155px minmax(100px,1fr) 40px 40px 36px 100px; } }
+@media (max-width:760px) { .sb-site-mainbar .sb-account-desktop { display:none; } }
 .sb-header-orders { white-space:nowrap; font-size:13px; font-weight:700; }
 .sb-header-orders { display:inline-flex; align-items:center; gap:6px; }
 .sb-header-orders::first-letter { font-size:21px; }

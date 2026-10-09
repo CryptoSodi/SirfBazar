@@ -563,6 +563,7 @@ try {
     ['./check-location-picker-browser.cjs', process.env.BROWSER_WEB_URL],
     ['./check-customer-feedback.cjs', process.env.BROWSER_WEB_URL],
     ['./check-shop-availability-browser.cjs', process.env.BROWSER_WEB_URL],
+    ['./check-account-menu-browser.cjs', process.env.BROWSER_WEB_URL],
   ]) {
     const context = await browser.newContext(fixture.includes('location-picker') ? { hasTouch: true, isMobile: true } : {});
     try { console.log(await require(fixture)(await context.newPage(), url)); }
