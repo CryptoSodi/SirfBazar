@@ -340,7 +340,9 @@ test('postcommit notification failure cannot make merchant acceptance appear ret
     const accepted = await service.accept(shop.userId, order.id);
     assert.equal(accepted.status, OrderStatus.PREPARING);
   } finally { notifications.notify = original; }
-  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.MERCHANT_ACCEPTED);
+  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.PREPARING);
+  const timeline = await prisma.orderTimelineEntry.findMany({ where: { orderId: order.id } });
+  assert.deepEqual(timeline.map(entry => entry.status).sort(), ['MERCHANT_ACCEPTED', 'PREPARING'].sort());
 });
 
 test('linked support orders, rider location and nested OTP projection respect tenancy', async () => {
@@ -515,9 +517,7 @@ test('admin status repair rolls back status and timeline if audit persistence fa
   assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.SENT_TO_MERCHANT);
   assert.equal(await prisma.orderTimelineEntry.count({ where: { orderId: order.id, status: OrderStatus.MERCHANT_ACCEPTED } }), 0);
   await admin.overrideOrderStatus(buyer.user.id, order.id, OrderStatus.MERCHANT_ACCEPTED, 'Review evidence');
-  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.PREPARING);
-  const timeline = await prisma.orderTimelineEntry.findMany({ where: { orderId: order.id } });
-  assert.deepEqual(timeline.map(entry => entry.status).sort(), ['MERCHANT_ACCEPTED', 'PREPARING'].sort());
+  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.MERCHANT_ACCEPTED);
   assert.equal(await prisma.auditLog.count({ where: { entityId: order.id, action: 'ORDER_STATUS_OVERRIDE' } }), 1);
 });
 
