@@ -70,3 +70,5 @@ body {
 }
 
 @media (max-width: 600px) { .sb-admin-login input { font-size: 16px; } }
+.merchant-access-modal button { min-height: 44px; }
+.merchant-access-modal :is(input, textarea) { font-size: 16px; min-width: 0; }

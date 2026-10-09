@@ -1,5 +1,5 @@
 import { ToastMessage } from './Toast';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, errorMessage, pkr } from '../lib/api';
 import { readOrders, type MerchantOrder } from '../lib/merchant-contracts';
@@ -52,6 +52,7 @@ export function NewOrderAlert() {
   const [orders, setOrders] = useState<MerchantOrder[]>([]);
   const [closed, setClosed] = useState<Record<string, number>>(() => dismissedOrders());
   const [busy, setBusy] = useState(false);
+  const writeLock = useRef(false);
   const [error, setError] = useState('');
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
@@ -107,18 +108,30 @@ export function NewOrderAlert() {
   };
 
   const accept = async () => {
+    if (writeLock.current) return;
+    writeLock.current = true;
     setBusy(true); setError('');
     try {
       const result = await api.post(`/merchant/orders/${order.id}/accept`);
-      if (result?.status !== 'MERCHANT_ACCEPTED') throw new Error('The service did not confirm acceptance.');
-      await confirmState('MERCHANT_ACCEPTED');
+      if (result?.status !== 'PREPARING') throw new Error('Acceptance could not be confirmed. Check the saved order.');
+      await confirmState('PREPARING');
+      navigate(`/orders?order=${encodeURIComponent(order.id)}`);
     } catch (cause) {
+      try {
+        const saved = await api.get(`/merchant/orders/${order.id}`);
+        if (['PREPARING', 'READY_FOR_PICKUP', 'RIDER_ASSIGNED', 'RIDER_ARRIVED_AT_SHOP', 'PICKED_UP', 'ON_THE_WAY', 'RIDER_ARRIVED_AT_CUSTOMER', 'DELIVERED'].includes(saved?.status)) {
+          await load(); window.dispatchEvent(new Event('sb:orders'));
+          navigate(`/orders?order=${encodeURIComponent(order.id)}`);
+          return;
+        }
+      } catch { /* Keep the review action available without repeating the POST. */ }
       setError(`${errorMessage(cause)} Refresh the order before trying again.`);
-    } finally { setBusy(false); }
+    } finally { writeLock.current = false; setBusy(false); }
   };
 
   const reject = async () => {
-    if (!reason.trim()) return;
+    if (writeLock.current || !reason.trim()) return;
+    writeLock.current = true;
     setBusy(true); setError('');
     try {
       const result = await api.post(`/merchant/orders/${order.id}/reject`, { reason: reason.trim() });
@@ -127,7 +140,7 @@ export function NewOrderAlert() {
       setRejecting(false); setReason('');
     } catch (cause) {
       setError(`${errorMessage(cause)} Refresh the order before trying again.`);
-    } finally { setBusy(false); }
+    } finally { writeLock.current = false; setBusy(false); }
   };
 
   const ageMinutes = Math.max(0, Math.floor((now - new Date(order.createdAt).getTime()) / 60_000));

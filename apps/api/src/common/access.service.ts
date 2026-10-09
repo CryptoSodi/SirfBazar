@@ -17,12 +17,13 @@ export interface MerchantContext {
 export class AccessService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async merchantContext(userId: string): Promise<MerchantContext> {
+  async merchantContext(userId: string, options: { allowDisabled?: boolean } = {}): Promise<MerchantContext> {
     const merchant = await this.prisma.merchant.findUnique({
       where: { userId },
-      select: { id: true, user: { select: { status: true } } },
+      select: { id: true, approvalStatus: true, user: { select: { status: true } } },
     });
     if (merchant && merchant.user.status === 'ACTIVE') {
+      this.requireEnabled(merchant.approvalStatus, options.allowDisabled);
       return {
         merchantId: merchant.id,
         isOwner: true,
@@ -31,9 +32,10 @@ export class AccessService {
     }
     const staff = await this.prisma.merchantStaff.findFirst({
       where: { userId, status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } },
-      include: { user: { select: { status: true } } },
+      include: { user: { select: { status: true } }, merchant: { select: { approvalStatus: true } } },
     });
     if (staff?.user.status === 'ACTIVE') {
+      this.requireEnabled(staff.merchant.approvalStatus, options.allowDisabled);
       let permissions: StaffPermission[] = [];
       try {
         const parsed: unknown = JSON.parse(staff.permissions);
@@ -46,6 +48,12 @@ export class AccessService {
       return { merchantId: staff.merchantId, isOwner: false, permissions };
     }
     throw new ForbiddenException('No merchant account linked to this user');
+  }
+
+  private requireEnabled(status: string, allowDisabled = false) {
+    if (!allowDisabled && ['SUSPENDED', 'REJECTED', 'INACTIVE'].includes(status)) {
+      throw new ForbiddenException('This shop has been disabled. Contact support to restore access.');
+    }
   }
 
   requirePermission(ctx: MerchantContext, permission: StaffPermission) {

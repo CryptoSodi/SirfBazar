@@ -190,10 +190,12 @@ async function main() {
   const mOrder = (mOrders.data as any[]).find((o) => o.id === orderId);
   check('merchant sees the order', !!mOrder);
 
-  await api('POST', `/merchant/orders/${orderId}/accept`, { token: merchant1Owner.accessToken, expect: 201 });
-  await api('POST', `/merchant/orders/${orderId}/preparing`, { token: merchant1Owner.accessToken, expect: 201 });
-  await api('POST', `/merchant/orders/${orderId}/ready`, { token: merchant1Owner.accessToken, expect: 201 });
-  check('merchant accept → preparing → ready', true);
+  const accepted = await api('POST', `/merchant/orders/${orderId}/accept`, { token: merchant1Owner.accessToken, expect: 201 });
+  check('merchant acceptance starts preparation', accepted.data.status === 'PREPARING', accepted.data.status);
+  const preparing = await api('GET', `/merchant/orders/${orderId}`, { token: merchant1Owner.accessToken, expect: 200 });
+  check('preparation is persisted without a second action', preparing.data.status === 'PREPARING', preparing.data.status);
+  const ready = await api('POST', `/merchant/orders/${orderId}/ready`, { token: merchant1Owner.accessToken, expect: 201 });
+  check('packed order becomes ready for pickup', ready.data.status === 'READY_FOR_PICKUP', ready.data.status);
 
   const riders = await api('GET', '/merchant/riders', { token: merchant1Owner.accessToken, expect: 200 });
   const riderList: any[] = Array.isArray(riders.data) ? riders.data : riders.data.items ?? [];

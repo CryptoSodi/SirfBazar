@@ -14,7 +14,7 @@ test('new order events are deduplicated and acceptance/cancellation clear their 
   assert.equal(pending.length, 1);
   assert.equal(applyOrderEvent(pending, event), pending);
   assert.equal(applyOrderEvent(pending, { ...event, status: 'SENT_TO_MERCHANT' }), pending);
-  for (const status of ['MERCHANT_ACCEPTED', 'CANCELLED_BY_CUSTOMER', 'MERCHANT_REJECTED']) {
+  for (const status of ['MERCHANT_ACCEPTED', 'PREPARING', 'CANCELLED_BY_CUSTOMER', 'MERCHANT_REJECTED']) {
     assert.deepEqual(applyOrderEvent(pending, { ...event, status }), []);
   }
   assert.deepEqual(applyOrderEvent(pending, { orderId: 'other', orderNumber: 'SB-2', status: 'DELIVERED' }), pending);

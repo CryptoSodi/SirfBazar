@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
+import { merchantTrial } from '../common/merchant-access-policy';
 import {
   ACTIVE_ORDER_STATUSES,
   MerchantApprovalStatus,
@@ -54,8 +55,9 @@ export class MerchantService {
           averagePreparationMinutes: dto.averagePreparationMinutes ?? 20,
           logoUrl: dto.logoUrl ?? null,
           bannerUrl: dto.bannerUrl ?? null,
-          approvalStatus: MerchantApprovalStatus.SUBMITTED,
-          isOnline: false,
+          approvalStatus: MerchantApprovalStatus.APPROVED,
+          isOnline: true,
+          isOpen: true,
         },
       });
       // Don't overwrite User.role — the account keeps any customer/rider access.
@@ -75,7 +77,7 @@ export class MerchantService {
 
     // Role changed — the old token is stale, hand back a fresh pair.
     const tokens = await this.auth.issueTokens(userId, UserRole.MERCHANT_OWNER);
-    return { merchant, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: tokens.user };
+    return { merchant: { ...merchant, trial: merchantTrial(merchant.createdAt) }, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: tokens.user };
   }
 
   async addDocument(userId: string, dto: AddDocumentDto) {
@@ -151,13 +153,14 @@ export class MerchantService {
   // ── Profile ────────────────────────────────────────────────────────────────
 
   async profile(userId: string) {
-    const ctx = await this.access.merchantContext(userId);
+    // Disabled shops can still read their status and contact support.
+    const ctx = await this.access.merchantContext(userId, { allowDisabled: true });
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: ctx.merchantId },
       include: { documents: true },
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
-    return { ...merchant, isOwner: ctx.isOwner, permissions: ctx.permissions };
+    return { ...merchant, trial: merchantTrial(merchant.createdAt), isOwner: ctx.isOwner, permissions: ctx.permissions };
   }
 
   async updateProfile(userId: string, dto: UpdateMerchantProfileDto) {
@@ -188,10 +191,11 @@ export class MerchantService {
   async setOnline(userId: string, online: boolean) {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.STORE);
-    await this.prisma.merchant.update({
-      where: { id: ctx.merchantId },
+    const saved = await this.prisma.merchant.updateMany({
+      where: { id: ctx.merchantId, ...(online ? { approvalStatus: MerchantApprovalStatus.APPROVED } : {}) },
       data: { isOnline: online },
     });
+    if (saved.count !== 1) throw new BadRequestException('This shop is not active. Contact support to restore access.');
     return { ok: true, isOnline: online };
   }
 

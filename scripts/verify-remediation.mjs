@@ -72,6 +72,7 @@ try {
     requireHttpLocal('BROWSER_WEB_URL', process.env.BROWSER_WEB_URL);
     requireHttpLocal('BROWSER_POS_URL', process.env.BROWSER_POS_URL);
     requireHttpLocal('BROWSER_SHOP_URL', process.env.BROWSER_SHOP_URL);
+    requireHttpLocal('BROWSER_ADMIN_URL', process.env.BROWSER_ADMIN_URL);
     if (!process.env.PLAYWRIGHT_MODULE_PATH) throw new Error('--browser requires PLAYWRIGHT_MODULE_PATH for an installed Playwright module');
     if (!existsSync(resolve(root, 'scripts/browser-remediation.mjs'))) throw new Error('Browser journey script is missing');
     run('browser journeys', process.execPath, [resolve(root, 'scripts/browser-remediation.mjs')], 240000);

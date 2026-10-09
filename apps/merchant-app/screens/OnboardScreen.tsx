@@ -121,7 +121,7 @@ export default function OnboardScreen() {
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
         <Text style={s.h1}>Set up your shop</Text>
-        <Text style={[s.muted, { marginTop: 4 }]}>A few details so customers can find and order from you.</Text>
+        <Text style={[s.muted, { marginTop: 4 }]}>Start your one-month trial with no admin approval. Your shop starts active. Access continues afterward unless admin disables it.</Text>
 
         {/* Shop front photo */}
         <Text style={[s.h2, { marginTop: 18, marginBottom: 8 }]}>Shop front photo</Text>

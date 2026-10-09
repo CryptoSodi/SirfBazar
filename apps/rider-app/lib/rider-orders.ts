@@ -40,5 +40,9 @@ export function customerPhone(order: RiderOrder): string | undefined {
 }
 
 export function isActive(status: string): boolean {
-  return ['RIDER_ASSIGNED', 'RIDER_ARRIVED_AT_SHOP', 'PICKED_UP', 'ON_THE_WAY', 'RIDER_ARRIVED_AT_CUSTOMER'].includes(status);
+  return ['MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'RIDER_ASSIGNED', 'RIDER_ARRIVED_AT_SHOP', 'PICKED_UP', 'ON_THE_WAY', 'RIDER_ARRIVED_AT_CUSTOMER'].includes(status);
+}
+
+export function waitingForPacking(status: string): boolean {
+  return ['MERCHANT_ACCEPTED', 'PREPARING'].includes(status);
 }
