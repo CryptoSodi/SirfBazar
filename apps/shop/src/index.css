@@ -3,6 +3,24 @@
 @import "../shared/design/operations.css";
 @import "leaflet/dist/leaflet.css";
 
+.order-details { overflow-wrap: anywhere; }
+.order-details :is(.text-slate-400, .text-slate-500, .text-slate-600) { color: var(--muted); }
+.order-details :is(.text-slate-700, .text-slate-800) { color: var(--ink); }
+.order-details :is(.border-slate-200, .divide-slate-100 > :not(:last-child)) { border-color: var(--line); }
+
+.order-workflow { --sb-panel: var(--surface); --sb-panel-2: var(--surface-2); --sb-text: var(--ink); --sb-secondary: var(--muted); --sb-border: var(--line); display: grid; gap: 12px; padding: 16px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; overflow-wrap: anywhere; }
+.order-workflow h3 { margin: 0; font-size: 16px; line-height: 1.4; }
+.order-workflow p { margin: 0; line-height: 1.5; color: var(--sb-secondary); }
+.order-workflow .field { margin: 0; }
+.order-workflow select { min-width: 0; width: 100%; font-size: 16px; }
+.order-workflow > button { justify-self: start; max-width: 100%; white-space: normal; min-height: 44px; }
+.order-workflow-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.order-workflow-actions .btn { min-height: 44px; max-width: 100%; white-space: normal; }
+.order-rider-card { display: flex; gap: 12px; padding: 12px; background: var(--sb-panel); border: 1px solid var(--sb-border); border-radius: 8px; }
+.order-rider-card > div { min-width: 0; }
+.order-rider-card a { display: inline-block; padding-block: 8px; text-decoration: underline; }
+.order-rider-empty { display: grid; gap: 8px; }
+
 .ops-live-status { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 5px 10px; border: 1px solid var(--sb-border); border-radius: 9px; color: var(--sb-text); text-decoration: none; white-space: nowrap; font-size: 12px; font-weight: 700; }
 .ops-live-status small { font-size: 10px; font-weight: 500; }
 .ops-live-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: #95a4a0; }

@@ -15,6 +15,7 @@ export type MerchantProfile = {
   isOnline: boolean;
   isOpen: boolean;
   approvalStatus: string;
+  trial?: { startedAt: string; endsAt: string; isInTrial: boolean; accessContinuesAfterTrial: boolean };
 };
 
 export function readProfile(value: unknown): MerchantProfile {
@@ -150,7 +151,7 @@ export function readRiderOrders(value: unknown): RiderOrder[] {
 }
 
 export function can(profile: MerchantProfile | null, permission: 'ORDERS' | 'RIDERS' | 'STORE'): boolean {
-  return !!profile && (profile.isOwner || profile.permissions.includes(permission));
+  return !!profile && !['SUSPENDED', 'REJECTED', 'INACTIVE'].includes(profile.approvalStatus) && (profile.isOwner || profile.permissions.includes(permission));
 }
 
 export function assignableRider(rider: MerchantRider): boolean {

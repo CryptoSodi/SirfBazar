@@ -185,6 +185,7 @@ jobs:
       BROWSER_WEB_URL: http://127.0.0.1:3000
       BROWSER_POS_URL: http://127.0.0.1:4173
       BROWSER_SHOP_URL: http://127.0.0.1:4174
+      BROWSER_ADMIN_URL: http://127.0.0.1:4175
       PLAYWRIGHT_MODULE_PATH: ${{ github.workspace }}/apps/web/node_modules/playwright
     steps:
       - uses: actions/checkout@v4
@@ -197,6 +198,8 @@ jobs:
         working-directory: apps/pos
       - run: npm ci
         working-directory: apps/shop
+      - run: npm ci
+        working-directory: apps/admin
       - run: npm install --no-save --package-lock=false playwright@1.58.2
         working-directory: apps/web
       - run: npx playwright install --with-deps chromium
@@ -207,6 +210,8 @@ jobs:
         working-directory: apps/pos
       - run: npm run build
         working-directory: apps/shop
+      - run: npm run build
+        working-directory: apps/admin
       - name: Run isolated browser fixtures
         shell: bash
         run: |
@@ -216,14 +221,17 @@ jobs:
           pos_pid=$!
           npm --prefix apps/shop run preview -- --host 127.0.0.1 --port 4174 > "$RUNNER_TEMP/remediation-shop.log" 2>&1 &
           shop_pid=$!
-          trap 'kill "$web_pid" "$pos_pid" "$shop_pid" 2>/dev/null || true' EXIT
+          npm --prefix apps/admin run preview -- --host 127.0.0.1 --port 4175 > "$RUNNER_TEMP/remediation-admin.log" 2>&1 &
+          admin_pid=$!
+          trap 'kill "$web_pid" "$pos_pid" "$shop_pid" "$admin_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 40); do
-            if curl -fsS "$BROWSER_WEB_URL/checkout" >/dev/null && curl -fsS "$BROWSER_POS_URL" >/dev/null && curl -fsS "$BROWSER_SHOP_URL/products" >/dev/null; then break; fi
+            if curl -fsS "$BROWSER_WEB_URL/checkout" >/dev/null && curl -fsS "$BROWSER_POS_URL" >/dev/null && curl -fsS "$BROWSER_SHOP_URL/products" >/dev/null && curl -fsS "$BROWSER_ADMIN_URL/merchants" >/dev/null; then break; fi
             sleep 1
           done
           curl -fsS "$BROWSER_WEB_URL/checkout" >/dev/null
           curl -fsS "$BROWSER_POS_URL" >/dev/null
           curl -fsS "$BROWSER_SHOP_URL/products" >/dev/null
+          curl -fsS "$BROWSER_ADMIN_URL/merchants" >/dev/null
           node scripts/verify-remediation.mjs --browser
 
       - name: Retain isolated browser screenshots

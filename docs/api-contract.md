@@ -119,7 +119,10 @@ Both bulk routes accept JSON bodies up to 6 MiB to accommodate mapped CSV rows a
 ### Online-order workflow
 
 - `GET /merchant/orders?status=` · `GET /merchant/orders/:id`
-- `POST /merchant/orders/:id/accept` · `/reject {reason}` · `/preparing` · `/ready` · `/assign-rider {riderId}` (rider must belong to this merchant; order must be READY_FOR_PICKUP)
+- `POST /merchant/orders/:id/accept` atomically records acceptance and starts preparation; returns `{ok:true,status:'PREPARING'}`. Buyers see Preparing without a second shop action.
+- `/reject {reason}` · `/preparing` (retained for older Accepted orders) · `/ready` (packed order only).
+- `/assign-rider {riderId}` accepts MERCHANT_ACCEPTED, PREPARING or READY_FOR_PICKUP. The rider must belong to the shop, be active/approved and idle without another order. Assignment during preparation preserves preparation status and reserves the rider; the response includes the actual saved status and rider. Duplicate or competing assignments return a conflict rather than replacing a rider.
+- `/ready` returns READY_FOR_PICKUP without a rider, or RIDER_ASSIGNED when a rider was already reserved. The acceptance and readiness timeline entries remain. Rider pickup is still permitted only after readiness; assignment never implies packing is complete. See [merchant order flow](merchant-order-flow.md).
 - `POST /merchant/orders/:id/items/:itemId/unavailable` `{replacementMerchantProductId?}`
 
 ## Rider (role RIDER)
@@ -161,3 +164,8 @@ Customer offers require an APPROVED merchant with both `isOnline=true` and `isOp
 Approved shops remain in `/merchants/nearby` and `/merchants/:id`, with their real availability flags, so customers can distinguish an offline/closed shop from an area without shops. Customer clients display unavailable directory cards without shopping/navigation actions. `isOnline=false` is labelled Offline; an online shop with `isOpen=false` is labelled Closed. Saved opening/closing hours alone do not switch either flag.
 
 Customer and guest cart additions and quantity increases recheck shop availability in their existing transaction. Offline/closed shops cannot receive new additions. Existing basket contents are retained; reductions/removals and guest-to-customer merge retain existing behaviour. Customer basket interfaces block checkout while a shop is unavailable and offer an explicit availability refresh. Order quote/placement retain their existing final eligibility checks. Availability is evaluated on refresh/request, not a new real-time scheduling or push system.
+# Merchant SaaS onboarding policy
+
+`POST /merchant/onboard` creates an active (`APPROVED`), online, open shop without admin approval. Existing account verification remains required. Customer visibility and order acceptance still obey hours, approved inventory, stock and delivery eligibility. Existing pending shops require an explicit admin activation; there is no bulk status migration.
+
+Onboarding merchant, merchant profile, admin merchant list/detail include additive `trial: { startedAt, endsAt, isInTrial, accessContinuesAfterTrial: true }`. Trial duration is one calendar month from `createdAt` (clamped at month end); elapsed time does not restrict access. Admin disable/reactivate uses existing suspend/reactivate endpoints. Disabled shops retain profile/status access but owner/staff merchant operations are blocked; customer/rider capabilities on the same account are preserved.

@@ -1,7 +1,7 @@
 import { ToastMessage } from '../components/Toast';
 import { ReferenceIcon as UiIcon } from '../components/ReferenceIcon';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, errorMessage, pkr, statusLabel } from '../lib/api';
 import { assignableRider, can, readListingsPage, readOrder, readOrdersPage, readProfile, readRiders, type MerchantListing, type MerchantOrder, type MerchantProfile, type MerchantRider, type Paged } from '../lib/merchant-contracts';
 import { Badge, Modal, Table, btnCls, btnDanger, btnGhost, inputCls, useToast } from '../components/ui';
@@ -66,7 +66,7 @@ export default function Orders() {
     } finally {
       if (current === requestNumber.current) setLoading(false);
     }
-  }, []);
+  }, [page]);
 
   // Reload on filter change.
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function Orders() {
     setProfileError('');
     try { setProfile(await api.getParsed('/merchant/profile', readProfile)); }
     catch (e) { setProfile(null); setProfileError(errorMessage(e)); }
-  }, [page]);
+  }, []);
   useEffect(() => { void loadProfile(); return () => { requestNumber.current++; }; }, [loadProfile]);
   useEffect(() => { const requested = searchParams.get('order'); if (requested) setSelectedId(requested); }, [searchParams]);
 
@@ -132,6 +132,7 @@ export default function Orders() {
 
       {selectedId && (
         <OrderModal
+          key={selectedId}
           orderId={selectedId}
           profile={profile}
           profileError={profileError}
@@ -173,49 +174,65 @@ function OrderModal({
   const [ridersLoading, setRidersLoading] = useState(false);
   const [ridersError, setRidersError] = useState('');
   const [riderId, setRiderId] = useState('');
-  const [confirmAssign, setConfirmAssign] = useState(false);
+  const actionInFlight = useRef(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [unavailableItem, setUnavailableItem] = useState<any | null>(null);
+  const detailRequest = useRef(0);
 
   const loadOrder = useCallback(async () => {
+    const request = ++detailRequest.current;
     const fresh = await api.getParsed(`/merchant/orders/${orderId}`, readOrder);
-    setOrder(fresh);
-    setDetailError('');
-    setUncertain(false);
+    if (request === detailRequest.current) {
+      setOrder(fresh);
+      setDetailError('');
+      setUncertain(false);
+    }
     return fresh;
   }, [orderId]);
 
   useEffect(() => {
     setDetailLoading(true);
     loadOrder().catch((e) => setDetailError(errorMessage(e))).finally(() => setDetailLoading(false));
+    return () => { detailRequest.current++; };
   }, [loadOrder]);
 
-  const act = async (action: string, expectedStatus: string, okMsg: string, body?: unknown) => {
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden && !actionInFlight.current && !uncertain) void loadOrder().catch(() => undefined); };
+    const timer = setInterval(refresh, 15000);
+    window.addEventListener('sb:orders', refresh);
+    return () => { clearInterval(timer); window.removeEventListener('sb:orders', refresh); };
+  }, [loadOrder, uncertain]);
+
+  const act = async (action: string, expectedStatus: string | string[], okMsg: string, body?: unknown) => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setBusy(true);
     setActionError('');
-    const confirmed = (fresh: MerchantOrder) => fresh.status === expectedStatus &&
+    const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    const confirmed = (fresh: MerchantOrder) => expected.includes(fresh.status) &&
       (action !== 'assign-rider' || fresh.rider?.id === (body as { riderId: string }).riderId);
     try {
       const result = await api.post(`/merchant/orders/${orderId}/${action}`, body);
-      if (result?.ok !== true || result.status !== expectedStatus) throw new Error('The service did not confirm the expected order status.');
+      if (result?.ok !== true || !expected.includes(result.status)) throw new Error('The order update was not confirmed. Refresh to check its saved status.');
       const fresh = await loadOrder();
       reload();
       if (!confirmed(fresh)) throw new Error('The order changed while this action was being confirmed.');
       toast(okMsg);
-      setConfirmAssign(false);
+      window.dispatchEvent(new Event('sb:orders'));
       setRejecting(false);
     } catch (e) {
       try {
         const fresh = await loadOrder();
         reload();
-        if (confirmed(fresh)) { toast(`Latest order state confirmed: ${statusLabel(expectedStatus)}`); setConfirmAssign(false); setRejecting(false); return; }
+        if (confirmed(fresh)) { toast(action === 'assign-rider' ? 'Rider assignment confirmed' : `Latest order state confirmed: ${statusLabel(fresh.status)}`); window.dispatchEvent(new Event('sb:orders')); setRejecting(false); return; }
         setActionError(`${errorMessage(e)} The latest order state is shown. Review it before trying again.`);
       } catch {
         setUncertain(true);
         setActionError(`The outcome could not be confirmed. Refresh this order before trying again. ${errorMessage(e)}`);
       }
     } finally {
+      actionInFlight.current = false;
       setBusy(false);
     }
   };
@@ -224,7 +241,9 @@ function OrderModal({
     setRidersLoading(true);
     setRidersError('');
     try {
-      setRiders(readRiders(await api.get('/merchant/riders')).filter(assignableRider));
+      const available = readRiders(await api.get('/merchant/riders')).filter((r) => assignableRider(r) && r.currentStatus === 'IDLE' && !r.currentOrderId);
+      setRiders(available);
+      setRiderId(current => available.some(r => r.id === current) ? current : '');
     } catch (e) {
       setRiders([]);
       setRidersError(errorMessage(e));
@@ -233,10 +252,10 @@ function OrderModal({
     }
   }, []);
 
-  // Load assignable riders once the order is ready for pickup.
+  // Delivery planning is available during preparation, in the same sidebar.
   useEffect(() => {
-    if (order?.status === 'READY_FOR_PICKUP') loadRiders();
-  }, [order?.status, loadRiders]);
+    if (profile && can(profile, 'RIDERS') && !order?.rider && ['MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'].includes(order?.status ?? '')) void loadRiders();
+  }, [order?.status, order?.rider?.id, profile, loadRiders]);
 
   if (!order) return <Modal title="Order details" onClose={onClose}><div className="p-4" role={detailError ? 'alert' : undefined}>{detailError ? <>Unable to load this order. {detailError} <button type="button" className="ops-button" onClick={() => { setDetailError(''); setDetailLoading(true); loadOrder().catch((e) => setDetailError(errorMessage(e))).finally(() => setDetailLoading(false)); }}>Retry</button></> : detailLoading ? <InlineSkeleton label="Loading order details" rows={5} /> : 'Order details unavailable.'}</div></Modal>;
 
@@ -246,7 +265,7 @@ function OrderModal({
 
   return (
     <Modal title={`Order ${order.orderNumber}`} onClose={onClose}>
-      <div className="space-y-4 text-sm">
+      <div className="order-details space-y-4 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <Badge value={s} />
           <span className="text-slate-400">{statusLabel(s)}</span>
@@ -254,6 +273,38 @@ function OrderModal({
         </div>
 
         {/* Customer + delivery */}
+        <section className="order-workflow" aria-labelledby="order-next-step">
+          <h3 id="order-next-step">Next step</h3>
+          {!profile ? profileError ? <><ToastMessage>Unable to check your permissions. Retry before updating this order.</ToastMessage><button type="button" className={btnGhost} onClick={retryProfile}>Retry permission check</button></> : <p role="status">Checking your shop permissions…</p> : !can(profile, 'ORDERS') ? <p>You need order-management permission to update this order. Ask the shop owner.</p> : <>
+            {s === 'SENT_TO_MERCHANT' && <>
+              <p>Accept to start preparing. The buyer will see the update immediately after it is saved.</p>
+              <div className="order-workflow-actions">
+                <button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => void act('accept', 'PREPARING', 'Order accepted. Preparation started.')}>{busy ? 'Accepting…' : 'Accept order'}</button>
+                <button type="button" className={btnDanger} disabled={busy || uncertain} onClick={() => setRejecting(true)}>Reject order</button>
+              </div>
+            </>}
+            {['MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'].includes(s) && <>
+              <p>{s === 'READY_FOR_PICKUP' ? 'The order is packed. Assign a rider for pickup.' : 'Prepare and pack the items. You can assign a rider now; pickup stays blocked until you mark the order ready.'}</p>
+              {order.rider ? <div className="order-rider-card"><ReferenceIcon name="rider" /><div><strong>{order.rider.fullName}</strong><p>Assigned rider{s === 'PREPARING' || s === 'MERCHANT_ACCEPTED' ? ' · waiting for packing' : ''}</p>{order.rider.phoneNumber && <a href={`tel:${order.rider.phoneNumber}`}>Call {order.rider.phoneNumber}</a>}</div></div> : !can(profile, 'RIDERS') ? <p>Ask the shop owner to assign a rider. Rider-management permission is required.</p> : ridersLoading ? <InlineSkeleton label="Loading available riders" rows={2} /> : ridersError ? <><ToastMessage>Unable to load riders. Check your connection and retry.</ToastMessage><button type="button" className={btnGhost} onClick={() => void loadRiders()}>Retry riders</button></> : riders.length === 0 ? <div className="order-rider-empty"><strong>No riders available</strong><p>Add or approve a rider, or wait for a current delivery to finish.</p><div className="order-workflow-actions"><Link className={btnGhost} to="/riders">Manage riders</Link><button type="button" className={btnGhost} onClick={() => void loadRiders()}>Refresh riders</button></div></div> : <>
+                <label className="field" htmlFor="assign-rider">Delivery rider
+                  <select id="assign-rider" className={inputCls} value={riderId} disabled={busy || uncertain} onChange={(e) => setRiderId(e.target.value)}>
+                    <option value="">Choose an available rider</option>
+                    {riders.map((r) => <option key={r.id} value={r.id}>{r.fullName} · {r.phoneNumber}{r.isOnline ? ' · Online' : ' · Offline'}</option>)}
+                  </select>
+                </label>
+                <button type="button" className={btnCls} disabled={busy || uncertain || !riderId} onClick={() => void act('assign-rider', ['MERCHANT_ACCEPTED', 'PREPARING', 'RIDER_ASSIGNED'], 'Rider assigned', { riderId })}>{busy ? 'Assigning…' : 'Assign rider'}</button>
+              </>}
+              {s === 'MERCHANT_ACCEPTED' && <button type="button" className={btnGhost} disabled={busy || uncertain} onClick={() => void act('preparing', 'PREPARING', 'Preparation started')}>Start preparing</button>}
+              {['MERCHANT_ACCEPTED', 'PREPARING'].includes(s) && <button type="button" className={order.rider ? btnCls : btnGhost} disabled={busy || uncertain} onClick={() => void act('ready', ['READY_FOR_PICKUP', 'RIDER_ASSIGNED'], 'Order ready for pickup')}>{busy ? 'Updating…' : 'Mark ready for pickup'}</button>}
+            </>}
+            {s === 'RIDER_ASSIGNED' && <p>The order is ready. {order.rider?.fullName ?? 'The assigned rider'} can confirm pickup in the rider app.</p>}
+            {!['SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP', 'RIDER_ASSIGNED'].includes(s) && <p>No shop action is needed now. Delivery updates will appear in this order.</p>}
+          </>}
+          {actionError && <ToastMessage>{actionError}</ToastMessage>}
+          {uncertain && <button type="button" className={btnGhost} disabled={busy} onClick={() => loadOrder().catch((e) => setActionError(errorMessage(e)))}>Check saved order</button>}
+        </section>
+
+        {/* Customer + delivery details */}
         <div className="grid grid-cols-1 gap-1 text-slate-600 sm:grid-cols-2">
           <div>
             <b>Customer:</b> {order.customer?.user?.fullName ?? '—'}
@@ -331,32 +382,6 @@ function OrderModal({
           </ul>
         </details>
 
-        {actionError && <ToastMessage>{actionError}</ToastMessage>}
-        {uncertain && <button type="button" className={btnGhost} onClick={() => loadOrder().catch((e) => setDetailError(errorMessage(e)))}>Refresh order to check outcome</button>}
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
-          {!profile ? profileError ? <span className="text-xs text-red-700" role="alert">Unable to verify merchant permissions. {profileError} <button type="button" className={btnGhost} onClick={retryProfile}>Retry</button></span> : <span className="text-xs text-slate-500">Checking merchant permissions before showing actions.</span> : !can(profile, 'ORDERS') ? <span className="text-xs text-red-700">You do not have order-management permission.</span> : <>
-            {s === 'SENT_TO_MERCHANT' && <>
-              <button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('accept', 'MERCHANT_ACCEPTED', 'Order accepted')}>Accept order</button>
-              <button type="button" className={btnDanger} disabled={busy || uncertain} onClick={() => setRejecting(true)}>Reject order</button>
-            </>}
-            {s === 'MERCHANT_ACCEPTED' && <>
-              <button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('preparing', 'PREPARING', 'Order is preparing')}>Start preparing</button>
-              <button type="button" className={btnGhost} disabled={busy || uncertain} onClick={() => act('ready', 'READY_FOR_PICKUP', 'Order ready for pickup')}>Mark ready</button>
-            </>}
-            {s === 'PREPARING' && <button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('ready', 'READY_FOR_PICKUP', 'Order ready for pickup')}>Mark ready for pickup</button>}
-            {s === 'READY_FOR_PICKUP' && <div className="w-full space-y-3">
-              {!can(profile, 'RIDERS') ? <p className="text-xs text-red-700">Rider permission is required to assign a rider.</p> : ridersLoading ? <InlineSkeleton label="Loading your riders" rows={4} /> : ridersError ? <p role="alert" className="text-xs text-red-700">Unable to load riders. {ridersError} <button type="button" className={btnGhost} onClick={loadRiders}>Retry</button></p> : riders.length === 0 ? <p className="text-xs text-slate-600">No active, approved riders are available for this shop. Add or approve a rider in My riders.</p> : <>
-                <label htmlFor="assign-rider" className="block text-xs font-semibold text-slate-700">Choose one of your active, approved riders</label>
-                <select id="assign-rider" className={`${inputCls} w-full`} value={riderId} onChange={(e) => { setRiderId(e.target.value); setConfirmAssign(false); }}>
-                  <option value="">Select a rider</option>
-                  {riders.map((r) => <option key={r.id} value={r.id}>{r.fullName} · {r.phoneNumber}</option>)}
-                </select>
-                {confirmAssign ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><p>Assign {riders.find((r) => r.id === riderId)?.fullName} to order {order.orderNumber}?</p><div className="mt-2 flex gap-2"><button type="button" className={btnCls} disabled={busy || uncertain} onClick={() => act('assign-rider', 'RIDER_ASSIGNED', 'Rider assignment confirmed', { riderId })}>{busy ? 'Confirming…' : 'Confirm assignment'}</button><button type="button" className={btnGhost} disabled={busy} onClick={() => setConfirmAssign(false)}>Cancel</button></div></div> : <button type="button" className={btnCls} disabled={busy || uncertain || !riderId} onClick={() => setConfirmAssign(true)}>Assign selected rider</button>}
-              </>}
-            </div>}
-            {!['SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'].includes(s) && <span className="text-xs text-slate-500">No merchant actions are available for this status.</span>}
-          </>}
-        </div>
         {rejecting && s === 'SENT_TO_MERCHANT' && <div className="rounded-xl border border-red-200 bg-red-50 p-3"><label htmlFor="rejection-reason" className="block text-xs font-semibold text-red-900">Reason for rejecting this order</label><textarea id="rejection-reason" className={`${inputCls} mt-2`} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} required /><div className="mt-2 flex gap-2"><button type="button" className={btnDanger} disabled={busy || uncertain || !reason.trim()} onClick={() => act('reject', 'MERCHANT_REJECTED', 'Order rejected', { reason: reason.trim() })}>Confirm rejection</button><button type="button" className={btnGhost} disabled={busy} onClick={() => setRejecting(false)}>Cancel</button></div></div>}
         {unavailableItem && <UnavailableItemModal orderId={orderId} item={unavailableItem} onClose={() => setUnavailableItem(null)} onSaved={async () => { setUnavailableItem(null); await loadOrder(); reload(); toast('Item availability update sent to the customer'); }} />}
       </div>

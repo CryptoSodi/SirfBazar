@@ -17,6 +17,7 @@ import {
 import { parsePage, paged, PageQuery } from '../common/utils/pagination';
 import { randomBytes } from 'crypto';
 import { serializable } from '../common/transaction';
+import { merchantTrial } from '../common/merchant-access-policy';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -59,7 +60,7 @@ export class AdminMarketplaceService {
       }),
       this.prisma.merchant.count({ where }),
     ]);
-    return paged(rows, total, page, pageSize);
+    return paged(rows.map(row => ({ ...row, trial: merchantTrial(row.createdAt) })), total, page, pageSize);
   }
 
   async merchantDetail(merchantId: string) {
@@ -73,7 +74,7 @@ export class AdminMarketplaceService {
       },
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
-    return merchant;
+    return { ...merchant, trial: merchantTrial(merchant.createdAt) };
   }
 
   async setMerchantApproval(
@@ -88,26 +89,34 @@ export class AdminMarketplaceService {
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
 
-    await this.prisma.merchant.update({
-      where: { id: merchantId },
-      data: {
-        approvalStatus: status,
-        ...(status !== MerchantApprovalStatus.APPROVED ? { isOnline: false } : {}),
-      },
+    const allowed: string[] = [MerchantApprovalStatus.APPROVED, MerchantApprovalStatus.REJECTED, MerchantApprovalStatus.SUSPENDED];
+    if (!allowed.includes(status)) {
+      throw new BadRequestException('Choose an active or disabled shop status.');
+    }
+    await serializable(this.prisma, async (tx) => {
+      const before = await tx.merchant.findUniqueOrThrow({ where: { id: merchantId } });
+      await tx.merchant.update({ where: { id: merchantId }, data: {
+        approvalStatus: status, isOnline: status === MerchantApprovalStatus.APPROVED,
+      } });
+      await tx.auditLog.create({ data: {
+        userId: adminUserId, action: `MERCHANT_${status}`, entityType: 'Merchant', entityId: merchantId,
+        oldValue: JSON.stringify({ approvalStatus: before.approvalStatus }),
+        newValue: JSON.stringify({ approvalStatus: status, reason }),
+      } });
     });
 
     const titles: Record<string, [string, string]> = {
       [MerchantApprovalStatus.APPROVED]: [
-        'Shop approved 🎉',
-        `${merchant.shopName} is now live on SirfBazar. Go online to start receiving orders.`,
+        'Shop activated',
+        `${merchant.shopName} is active on SirfBazar. Check your opening hours and products before receiving orders.`,
       ],
       [MerchantApprovalStatus.REJECTED]: [
         'Application rejected',
         `Your application for ${merchant.shopName} was rejected${reason ? `: ${reason}` : '.'}`,
       ],
       [MerchantApprovalStatus.SUSPENDED]: [
-        'Shop suspended',
-        `${merchant.shopName} has been suspended${reason ? `: ${reason}` : '.'} Contact support.`,
+        'Shop disabled',
+        `${merchant.shopName} has been disabled${reason ? `: ${reason}` : '.'} Contact support to restore access.`,
       ],
     };
     const note = titles[status];
@@ -119,16 +128,8 @@ export class AdminMarketplaceService {
         body: note[1],
         type: NotificationType.SYSTEM,
         referenceId: merchantId,
-      });
+      }).catch(() => undefined); // Saved access must not appear to fail if notification delivery is down.
     }
-    await this.audit.log({
-      userId: adminUserId,
-      action: `MERCHANT_${status}`,
-      entityType: 'Merchant',
-      entityId: merchantId,
-      oldValue: { approvalStatus: merchant.approvalStatus },
-      newValue: { approvalStatus: status, reason },
-    });
     return { ok: true, approvalStatus: status };
   }
 
