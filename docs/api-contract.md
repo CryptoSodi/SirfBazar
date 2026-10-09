@@ -153,3 +153,11 @@ Settlement generation atomically claims unsettled, delivered, collected ONLINE o
 - Support: `GET /admin/support-tickets?status=&page=` · `GET /admin/support-tickets/:id` · `PUT /admin/support-tickets/:id {status?, priority?, assignedToAdminId?}` · `POST /admin/support-tickets/:id/messages {message}`
 - Analytics: `GET /admin/analytics?from=&to=` → `{ordersByDay:[{date, orders, gmvPaisa, itemValuePaisa}], topProducts:[…], topMerchants:[…], avgDeliveryMinutes, cancellationRate}`. `itemValuePaisa` is delivered merchandise subtotal; `gmvPaisa` remains the existing collected order total.
 - Audit: `GET /admin/audit-logs?entityType=&page=`
+
+## Customer shop availability
+
+Customer offers require an APPROVED merchant with both `isOnline=true` and `isOpen=true`. Search, nearby, popular, personalized/recommended and similar product feeds, product-detail offers and public shop inventory enforce this rule with or without customer coordinates. An offline/closed shop's public inventory returns an empty paginated result. The merchant-independent global catalogue and authenticated merchant inventory/iPOS are unchanged.
+
+Approved shops remain in `/merchants/nearby` and `/merchants/:id`, with their real availability flags, so customers can distinguish an offline/closed shop from an area without shops. Customer clients display unavailable directory cards without shopping/navigation actions. `isOnline=false` is labelled Offline; an online shop with `isOpen=false` is labelled Closed. Saved opening/closing hours alone do not switch either flag.
+
+Customer and guest cart additions and quantity increases recheck shop availability in their existing transaction. Offline/closed shops cannot receive new additions. Existing basket contents are retained; reductions/removals and guest-to-customer merge retain existing behaviour. Customer basket interfaces block checkout while a shop is unavailable and offer an explicit availability refresh. Order quote/placement retain their existing final eligibility checks. Availability is evaluated on refresh/request, not a new real-time scheduling or push system.

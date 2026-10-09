@@ -383,6 +383,10 @@ body { background:var(--sb-paper); color:var(--sb-ink); }
 .sb-browse-shop strong { font-size:15px; }
 .sb-browse-shop small { color:var(--sb-text-secondary); font-size:11px; }
 .sb-browse-shop b { margin-top:5px; color:var(--sb-action); font-size:12px; }
+.sb-shop-unavailable { cursor:default; background:var(--sb-surface); }
+.sb-home-shop.sb-shop-unavailable:hover { border-color:var(--sb-border); }
+.sb-shop-unavailable .sb-shop-mark { background:var(--sb-support); color:var(--sb-text-secondary); }
+.sb-shop-unavailable small:last-child { font-size:12px; line-height:1.5; font-weight:600; }
 .sb-appearance-option { min-height:42px; padding:8px 13px; border:1px solid var(--sb-border); border-radius:9px; background:var(--sb-surface); color:var(--sb-text-secondary); font-size:12px; }
 .sb-appearance-option.selected { border-color:#007a52; background:var(--sb-mint); color:var(--sb-action); font-weight:700; }
 .sb-product-page { display:grid; gap:32px; }

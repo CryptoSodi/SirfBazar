@@ -74,7 +74,7 @@ export class CartService {
     if (quantity < 1) throw new BadRequestException('Quantity must be at least 1');
     return serializable(this.prisma, async (tx) => {
     await this.lockOwner(tx, owner);
-    const mp = await this.loadSellableMerchantProduct(merchantProductId, tx);
+    const mp = await this.loadSellableMerchantProduct(merchantProductId, tx, true);
 
     const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
     const existing = await tx.cartItem.findUnique({
@@ -119,7 +119,7 @@ export class CartService {
     if (quantity <= 0) {
       await tx.cartItem.delete({ where: { id: item.id } });
     } else {
-      const mp = await this.loadSellableMerchantProduct(item.merchantProductId, tx);
+      const mp = await this.loadSellableMerchantProduct(item.merchantProductId, tx, quantity > item.quantity);
       if (quantity > mp.stockQuantity) {
         throw new BadRequestException(`Only ${mp.stockQuantity} in stock at this shop`);
       }
@@ -362,7 +362,7 @@ export class CartService {
     };
   }
 
-  private async loadSellableMerchantProduct(merchantProductId: string, tx: Prisma.TransactionClient = this.prisma) {
+  private async loadSellableMerchantProduct(merchantProductId: string, tx: Prisma.TransactionClient = this.prisma, requireAcceptingOrders = false) {
     const mp = await tx.merchantProduct.findUnique({
       where: { id: merchantProductId },
       include: { merchant: true, product: true },
@@ -371,6 +371,9 @@ export class CartService {
     if (!mp.isAvailable) throw new BadRequestException('Product is currently unavailable');
     if (mp.merchant.approvalStatus !== MerchantApprovalStatus.APPROVED) {
       throw new BadRequestException('This shop is not currently active');
+    }
+    if (requireAcceptingOrders && (!mp.merchant.isOnline || !mp.merchant.isOpen)) {
+      throw new BadRequestException(`${mp.merchant.shopName} is not accepting orders right now. Choose another shop or try again later.`);
     }
     if (mp.product.approvalStatus !== 'APPROVED') {
       throw new BadRequestException('This product is not available');

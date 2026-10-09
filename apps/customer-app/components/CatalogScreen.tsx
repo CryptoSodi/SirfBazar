@@ -7,6 +7,7 @@ import { api, getConfirmedLocation, pkr } from '../lib/api';
 import { subscribeCustomerEvent } from '../lib/customer-events';
 import { useTheme } from '../lib/theme';
 import { findCategoryName } from '../lib/category-tree';
+import { shopAcceptingOrders, shopStatus } from '../lib/shop-availability';
 import { CategoryChips, Field, Icon, IconButton, Notice, PageHeading, ProductCard, SearchField, SectionTitle, StatePanel, goTab, usePageInset } from './CustomerUI';
 
 type Filters = { sort: 'relevance' | 'price_asc' | 'price_desc' | 'rating'; brand: string; min: string; max: string };
@@ -71,8 +72,14 @@ export function CatalogScreen({ merchantId, initialCategory = '', initialQuery =
   };
   const filterCount = Number(filters.sort !== 'relevance') + Number(!!filters.brand.trim()) + Number(!!filters.min.trim()) + Number(!!filters.max.trim());
   const emptyMessage = q.trim() ? `No listings match “${q.trim()}”. Try fewer words or another category.` : 'Try another category or adjust your filters.';
+  const unavailableShop = !!merchantId && shop?.id === merchantId && !shopAcceptingOrders(shop);
+  if (unavailableShop) return <View style={s.screen}><ScrollView contentContainerStyle={{ padding: inset }}>
+    <PageHeading title={shop.shopName} subtitle={`${shopStatus(shop)} · Not accepting orders`} />
+    <StatePanel icon="shop" title="This shop is unavailable." message="Its products are hidden until it is accepting orders again. Items already in your basket stay there." action="Explore other shops" onPress={() => goTab(navigation, 'HomeTab', { screen: 'Shops' })} secondaryAction="Check availability again" onSecondary={retry} />
+    {!!metaError && <ToastMessage>{metaError}</ToastMessage>}
+  </ScrollView></View>;
   return <View style={s.screen}>
-    <FlatList data={items} numColumns={2} keyExtractor={listingKey} columnWrapperStyle={{ gap: 12 }} contentContainerStyle={{ padding: inset, paddingTop: 12, gap: 12, paddingBottom: 28 }}
+    <FlatList data={merchantId && (shop?.id !== merchantId || !shopAcceptingOrders(shop)) ? [] : items} numColumns={2} keyExtractor={listingKey} columnWrapperStyle={{ gap: 12 }} contentContainerStyle={{ padding: inset, paddingTop: 12, gap: 12, paddingBottom: 28 }}
       ListHeaderComponent={<View>
         {globalCatalog && <><PageHeading title={'The everyday\ncatalogue.'} subtitle="Explore products, then find a shop that sells them." /><View style={{ marginTop: 16, marginBottom: 4 }}><Notice>These are catalogue products, not priced shop listings. Choose a seller before adding.</Notice></View></>}
         {!!merchantId && shop && <>

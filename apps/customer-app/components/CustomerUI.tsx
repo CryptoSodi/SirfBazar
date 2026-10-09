@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../lib/theme';
 import { useBadges } from '../lib/badges';
 import { pkr } from '../lib/api';
+import { shopAcceptingOrders, shopStatus } from '../lib/shop-availability';
 import { AddButton } from './AddButton';
 import { CustomerReferenceIcon, type CustomerIconName } from './CustomerReferenceIcon';
 
@@ -115,9 +116,10 @@ export function ProductCard({ item, onPress }: { item: any; onPress: () => void 
 }
 export function ShopCard({ shop, onPress }: { shop: any; onPress: () => void }) {
   const { colors } = useTheme();
-  return <TouchableOpacity accessibilityRole="button" onPress={onPress} style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 17, padding: 14, marginVertical: 5, flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+  const accepting = shopAcceptingOrders(shop);
+  return <TouchableOpacity accessibilityRole="button" accessibilityLabel={`${shop.shopName}, ${shopStatus(shop)}${accepting ? '' : ', not accepting orders'}`} accessibilityState={{ disabled: !accepting }} disabled={!accepting} onPress={accepting ? onPress : undefined} style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 17, padding: 14, marginVertical: 5, flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
     <View style={{ backgroundColor: colors.emeraldBg, borderRadius: 14, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><Icon name="shop" size={25} color={colors.primary} /></View>
-    <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 5 }}>{shop.shopName}</Text><Text style={{ color: colors.muted, fontSize: 11, lineHeight: 16 }}>{[shop.area, shop.city].filter(Boolean).join(', ') || 'Independent local shop'}</Text><Text style={{ color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 8 }}><Text style={{ color: colors.primary }}>{shop.isOnline && shop.isOpen ? 'Open' : 'Closed'}</Text> · {shop.estimatedDeliveryMinutes != null ? `Est. ${shop.estimatedDeliveryMinutes} min · ` : ''}Fee in basket</Text></View><Icon name="chevron" />
+    <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 5 }}>{shop.shopName}</Text><Text style={{ color: colors.muted, fontSize: 11, lineHeight: 16 }}>{[shop.area, shop.city].filter(Boolean).join(', ') || 'Independent local shop'}</Text><Text style={{ color: accepting ? colors.primary : colors.text, fontSize: 12, lineHeight: 18, marginTop: 8 }}>{shopStatus(shop)}{accepting ? ` · ${shop.estimatedDeliveryMinutes != null ? `Est. ${shop.estimatedDeliveryMinutes} min · ` : ''}Fee in basket` : ' · Not accepting orders'}</Text></View>{accepting && <Icon name="chevron" />}
   </TouchableOpacity>;
 }
 export function Notice({ children, danger = false, tone = 'info', icon = 'info' }: { children: ReactNode; danger?: boolean; tone?: 'info' | 'warning' | 'blue'; icon?: IconName }) {

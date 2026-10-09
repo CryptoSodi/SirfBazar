@@ -50,7 +50,7 @@ test('active descendant resolver fails closed on invalid, inactive, orphaned and
 });
 test('public catalogue, search, nearby and shop filters all include descendants', async () => {
   let where;
-  const db = { category: { findMany: async () => rows }, product: { findMany: async args => { where = args.where; return []; }, count: async () => 0 }, merchantProduct: { findMany: async args => { where = args.where.product; return []; }, count: async () => 0 }, merchant: { findUnique: async () => ({ id: 'shop', approvalStatus: 'APPROVED' }), findMany: async args => { where = args.where.products?.some.product; return []; } } };
+  const db = { category: { findMany: async () => rows }, product: { findMany: async args => { where = args.where; return []; }, count: async () => 0 }, merchantProduct: { findMany: async args => { where = args.where.product; return []; }, count: async () => 0 }, merchant: { findUnique: async () => ({ id: 'shop', approvalStatus: 'APPROVED', isOnline: true, isOpen: true }), findMany: async args => { where = args.where.products?.some.product; return []; } } };
   const service = new CatalogService(db);
   for (const call of [() => service.catalogProducts({ categoryId: 'root' }), () => service.search({ categoryId: 'root' }), () => service.nearbyProducts({ categoryId: 'root' }), () => service.merchantProducts('shop', { categoryId: 'root' }), () => service.nearbyMerchants({ categoryId: 'root' })]) {
     await call(); assert.deepEqual(where.categoryId, { in: ['root', 'fruit', 'apple'] }); assert.equal(where.approvalStatus, 'APPROVED');
