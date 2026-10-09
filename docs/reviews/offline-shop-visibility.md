@@ -30,7 +30,7 @@ Passed:
 - API and customer-native `node node_modules/typescript/bin/tsc --noEmit`.
 - API isolated actual-service tests: availability across located/unlocated feeds, personalized recommendations, detail offers/similar, offline-only items, directory retention, direct shop inventory, guest/customer cart increases versus reductions/removal, online recovery. Registered in `test:remediation:unit`; existing category and cart-merge/checkout suites also exercised.
 - Web `node --test test/*.test.cjs`: 13 tests, including link/static-card semantics.
-- Native `node --test test/*.test.cjs`: all 50 passed, including the direct-shop source-component test proving cached inventory stays hidden while offline or metadata is unresolved.
+- Native `node --test test/*.test.cjs`: all 50 passed, including the direct-shop source-component test proving cached inventory stays hidden while offline or metadata is unresolved. The availability suite is also explicitly registered in the customer-app `npm test` command used by CI.
 - Web `node node_modules/next/dist/bin/next build`: production compilation, type checking and prerendering passed.
 - `node scripts/browser-shop-availability.mjs`: mocked local browser checks pass for home/directory, 320px/1280px light/dark cards, no unavailable links/keyboard targets, direct-shop inventory suppression and online recovery, retained basket reductions/removal, blocked checkout and explicit availability refresh. Actual screenshots inspected locally. Minimum status/name text contrast 6.15:1. CI's browser fixture runner includes this check.
 
