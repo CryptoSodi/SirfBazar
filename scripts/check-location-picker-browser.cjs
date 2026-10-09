@@ -81,6 +81,7 @@ module.exports = async (page, baseUrl) => {
   await picker.getByRole('button', { name: 'Use my current location', exact: true }).click();
   await page.evaluate(() => window.__fixtureGps.success({ coords: { latitude: 31.62, longitude: 74.42 } }));
   await picker.getByText('Selected: 31.62000, 74.42000', { exact: true }).waitFor();
+  await page.setViewportSize({ width: 320, height: 720 });
   await page.evaluate(() => {
     window.__fixtureStorageSet = Storage.prototype.setItem;
     Storage.prototype.setItem = function(key, value) {
@@ -92,11 +93,16 @@ module.exports = async (page, baseUrl) => {
   await picker.getByText(/Unable to save this location/).waitFor();
   assert.equal(await page.evaluate(() => localStorage.getItem('sb.location')), beforeStorageFailure, 'failed saving must retain the prior confirmed location');
   assert.equal(await picker.isVisible(), true);
-  await picker.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
+  const errorBounds = await picker.locator('[data-toast-host] > div').last().boundingBox();
+  const retryBounds = await picker.getByRole('button', { name: 'Confirm this location', exact: true }).boundingBox();
+  assert.ok(errorBounds.y + errorBounds.height <= retryBounds.y, 'error feedback must not cover the mobile retry action');
+  await page.screenshot({ path: 'output/playwright/location-save-error-320.png' });
   await page.evaluate(() => { Storage.prototype.setItem = window.__fixtureStorageSet; });
   await picker.getByRole('button', { name: 'Confirm this location', exact: true }).click();
   await picker.waitFor({ state: 'hidden' });
   assert.equal((await page.evaluate(() => JSON.parse(localStorage.getItem('sb.location')))).latitude, 31.62);
+  await page.locator('[data-toast-host] > div').last().getByText('Location updated. Nearby shops will refresh for this pin.').waitFor();
+  assert.equal(await page.getByText(/Unable to save this location/).count(), 0, 'successful retry replaces its error without requiring manual dismissal');
   await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 720 });
   await trigger.click(); await map.waitFor();

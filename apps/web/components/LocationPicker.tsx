@@ -12,7 +12,7 @@ import { AppIcon } from './AppIcon';
 
 export function LocationPicker({ onClose }: { onClose: () => void }) {
   const { choose } = useLocation();
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
   const [initial] = useState(() => getStoredLocation() ?? FALLBACK_LOCATION);
   const [point, setPoint] = useState<PickedPoint>(initial);
   const [chosen, setChosen] = useState(initial.label !== FALLBACK_LOCATION.label);
@@ -61,6 +61,8 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
     // delays must not silently cancel a confirmation or keep the old label.
     try {
       choose({ ...selected, label: `Pinned location (${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)})` });
+      if (error) dismiss(error, false);
+      setError('');
       toast('Location updated. Nearby shops will refresh for this pin.');
       onClose();
     } catch {
@@ -80,7 +82,7 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
       <LocationMap point={point} onChange={pin} onError={setError} />
       {error && <ToastMessage>{error}</ToastMessage>}
       </div>
-      <div className="sb-area-picker-footer"><p className="sb-area-picker-coordinates" role="status">{chosen ? 'Selected' : 'Map centre'}: {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</p><button type="button" className="btn-primary w-full" disabled={!chosen || busy} onClick={confirm}>Confirm this location</button></div>
+      <div className="sb-area-picker-footer" data-toast-clearance><p className="sb-area-picker-coordinates" role="status">{chosen ? 'Selected' : 'Map centre'}: {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</p><button type="button" className="btn-primary w-full" disabled={!chosen || busy} onClick={confirm}>Confirm this location</button></div>
     </div>
   </div>, document.body);
 }
