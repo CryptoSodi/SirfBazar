@@ -94,9 +94,16 @@ async (page) => {
         const title=document.getElementById('home-hero-title'); const hero=title.closest('section'); const img=hero.querySelector('img');
         const box=hero.getBoundingClientRect(); const image=img.getBoundingClientRect();
         const c=getComputedStyle(title); const d=getComputedStyle(hero.querySelectorAll('p')[1]);
-        return {width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,hero:{width:box.width,height:box.height},image:{width:image.width,height:image.height},font:c.fontFamily,fontLoaded:document.fonts.check('800 56px "Plus Jakarta Sans"'),fontSize:c.fontSize,foreground:c.color,background:getComputedStyle(hero).backgroundColor,muted:d.color,dpr:devicePixelRatio,scale:visualViewport.scale};
+        const primary=getComputedStyle(hero.querySelector('a')); const secondary=getComputedStyle(hero.querySelectorAll('a')[1]);
+        const linear = color => color.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+        const luminance = color => linear(color).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+        const contrast = (a,b) => {const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+        const background=getComputedStyle(hero).backgroundColor;
+        return {width:innerWidth,overflow:document.documentElement.scrollWidth>innerWidth,hero:{width:box.width,height:box.height},image:{width:image.width,height:image.height},font:c.fontFamily,fontLoaded:document.fonts.check('800 56px "Plus Jakarta Sans"'),fontSize:c.fontSize,foreground:c.color,background,muted:d.color,ratios:{heading:contrast(c.color,background),description:contrast(d.color,background),primary:contrast(primary.color,primary.backgroundColor),secondary:contrast(secondary.color,background)},dpr:devicePixelRatio,scale:visualViewport.scale};
       });
       check(!measured.overflow, `${theme} ${width}px has no horizontal page overflow`);
+      check(measured.background === (theme === 'dark' ? 'rgb(25, 34, 30)' : 'rgb(238, 247, 240)'), `${theme} ${width}px hero follows the selected appearance`);
+      check(Object.values(measured.ratios).every(ratio=>ratio>=4.5), `${theme} ${width}px hero text and both CTAs meet AA contrast`);
       check(Math.abs(measured.image.width/measured.image.height-809/644)<.01,`${theme} ${width}px keeps complete artwork aspect ratio`);
       captures.push({theme,...measured});
     }
@@ -106,10 +113,12 @@ async (page) => {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.evaluate(() => {localStorage.setItem('sb.theme','system');window.dispatchEvent(new Event('sb:theme'));});
   check(await page.evaluate(() => document.documentElement.dataset.theme==='dark'), 'System follows dark OS preference');
+  check(await page.locator('section[aria-labelledby="home-hero-title"]').evaluate(el=>getComputedStyle(el).backgroundColor==='rgb(25, 34, 30)'), 'System dark also changes the hero surface');
   await page.emulateMedia({colorScheme:'light'});
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   check(await page.evaluate(() => document.documentElement.dataset.theme==='light'), 'System reacts to light OS preference');
+  check(await page.locator('section[aria-labelledby="home-hero-title"]').evaluate(el=>getComputedStyle(el).backgroundColor==='rgb(238, 247, 240)'), 'System light restores the original hero surface');
   const themeButton = page.getByRole('button',{name:'Appearance: system. Change appearance'});
   await themeButton.click(); await page.getByRole('button',{name:'Appearance: light. Change appearance'}).click();
   check(await page.evaluate(() => document.documentElement.dataset.theme==='dark' && JSON.parse(localStorage.getItem('sb.location')).latitude===31.40981), 'Visible appearance control cycles without resetting area');

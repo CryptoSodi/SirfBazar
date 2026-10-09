@@ -1,5 +1,38 @@
 # Grocery homepage hero — implementation and interface review
 
+## Dark-mode correction — supersedes the original pale-island decision below
+
+9 October 2026. The owner reported that the hero still looked light in dark mode.
+Scope: existing customer homepage hero CSS and its local-only browser regression.
+No artwork, copy, routes, backend, dependencies or other apps changed.
+
+| Severity | Domain | Location | Before | After | Why |
+| --- | --- | --- | --- | --- | --- |
+| MEDIUM, resolved | Colors | apps/web/components/GroceryHero.module.css:1 | Fixed pale surface/ink and forced light color scheme in every theme | Existing data-theme dark tokens for surface, ink, muted, action, mint and focus; distinct filled CTA foreground; inset unchanged artwork | Selected appearance must apply to the hero, not just the page around it |
+
+Coverage: accessibility (computed text/control contrast, keyboard order, focus,
+reduced motion, 320px/200% text); layout (eight widths, complete image ratio);
+writing (unchanged labels and destinations verified); typography (wrapping and
+font checks); colors (rendered Light/Dark and System); UI polish (desktop/mobile
+visual inspection and theme switching). No remaining actionable hero findings.
+The original opaque artwork remains pale inside its own rounded frame in dark
+mode, unfiltered and unmodified; the hero itself is now dark.
+
+Actual checks: 16/16 customer-web tests; normal Next production build including
+TypeScript; git diff --check; local production website on port 5222 with the
+committed Playwright CLI fixture: **88 checks passed**. Screenshots refreshed at
+1672, 1440, 1366, 1024, 768, 390, 360 and 320px in both themes, under the filenames
+listed below. System changes now assert the actual hero surface, not only html.
+
+Measured dark text ratios: heading 14.86:1, description 8.73:1, primary CTA
+11.14:1, secondary CTA 9.92:1. Light ratios unchanged and all checked pairs meet
+4.5:1. All browser API calls intercepted; no real OTP/orders/data writes.
+Not verified: screen-reader devices, physical phone and actual toolbar zoom.
+The interface skills guided reuse of the shared semantic palette and contrast
+checks instead of recoloring the supplied artwork. **Approve** in this scope.
+
+## Original release record
+
 9 October 2026. Scope: the existing customer website homepage hero, Next.js
 16.4 / React 18 / TypeScript, existing Plus Jakarta Sans and Lucide icons.
 CSS Modules keep the new presentation off checkout, search and other apps.

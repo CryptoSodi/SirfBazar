@@ -29,3 +29,13 @@ SIRFBAZAR_GROCERY_HERO_CODEX.md are the available implementation instructions.
 The owner's subsequent “when it's done push it” authorizes the existing release
 workflow after verification, superseding the handoff's no-deployment constraint.
 It does not authorize backend source/configuration or production-data edits.
+# Dark-mode follow-up — 9 October 2026
+
+The owner rejected the intentional pale hero in dark mode. The hero must now
+follow the existing html data-theme switch, including System preference changes.
+Reuse the site's dark surface, ink, muted, mint, action and focus tokens. Separate
+accent text from filled-action foreground/background so both themes remain legible.
+Keep the original opaque grocery artwork unfiltered in an inset rounded frame;
+do not generate or recolor it. Light appearance, routes, guest state and layout
+order remain unchanged. Verify computed hero colors, both CTA contrasts, focus,
+all eight widths, System and enlarged text before releasing this correction.
