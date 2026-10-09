@@ -80,11 +80,3 @@ phone, screen-reader speech, browser 200% zoom or RTL. Google calls were mocked;
 the fallback remains usable if the deployed API/key cannot return an address.
 An exact plot number is only displayed when supplied by a returned address or
 entered by the customer; it is never synthesized from coordinates.
-
-## Release state
-
-Changes are local on codex/readable-location-labels, not committed or deployed.
-The prior dark-hero release is merged as ad9c9576, with all GitHub checks and the
-normal API deployment passing. Vercel rejected that production deployment with
-“Deployment rate limited — retry in 24 hours”; the website therefore still serves
-the previous frontend. No quota bypass, billing or hosting changes were made.
