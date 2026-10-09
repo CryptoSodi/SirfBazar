@@ -95,5 +95,33 @@ module.exports = async function checkAccountMenu(page, baseUrl) {
   await page.evaluate(() => { localStorage.setItem('sb.accessToken', 'fixture-access'); window.dispatchEvent(new Event('sb:auth')); });
   await page.getByLabel('Account: your profile and orders', { exact: true }).click();
   await page.getByRole('navigation', { name: 'Account options' }).getByRole('link', { name: 'View your profile' }).waitFor();
-  return `PASS account navbar/mobile guest entry, existing login flow, signed-in/auth-switch state, keyboard/Escape/outside close, five responsive widths, RTL and light/dark; minimum text contrast ${minimumContrast.toFixed(2)}:1`;
+  // Expired/revoked sessions publish the canonical event without sb:auth.
+  await page.evaluate(() => {
+    localStorage.setItem('sb.session', JSON.stringify({ access: null, refresh: null, user: null, epoch: 'expired', identity: '' }));
+    localStorage.removeItem('sb.accessToken');
+    localStorage.removeItem('sb.user');
+    window.dispatchEvent(new Event('sb:session'));
+  });
+  await page.getByLabel('Account: sign up or sign in', { exact: true }).waitFor();
+  assert.equal(await page.locator('details.sb-account-menu[open]').count(), 0, 'Session expiry closes stale signed-in options');
+  const otherTab = await page.context().newPage();
+  try {
+    await otherTab.goto(baseUrl + '/search');
+    await otherTab.getByRole('heading', { name: 'Find your everyday essentials' }).waitFor();
+    await otherTab.evaluate(() => {
+      localStorage.setItem('sb.session', JSON.stringify({ access: 'fixture-access', refresh: 'fixture-refresh', user: { id: 'fixture-customer' }, epoch: 'other-tab', identity: 'fixture-customer::' }));
+      localStorage.setItem('sb.accessToken', 'fixture-access');
+      localStorage.setItem('sb.user', JSON.stringify({ id: 'fixture-customer' }));
+    });
+    await page.getByLabel('Account: your profile and orders', { exact: true }).waitFor();
+    await page.getByLabel('Account: your profile and orders', { exact: true }).click();
+    await otherTab.evaluate(() => {
+      localStorage.setItem('sb.session', JSON.stringify({ access: null, refresh: null, user: null, epoch: 'other-tab-logout', identity: '' }));
+      localStorage.removeItem('sb.accessToken');
+      localStorage.removeItem('sb.user');
+    });
+    await page.getByLabel('Account: sign up or sign in', { exact: true }).waitFor();
+    assert.equal(await page.locator('details.sb-account-menu[open]').count(), 0, 'Cross-tab logout closes stale signed-in options');
+  } finally { await otherTab.close(); }
+  return `PASS account navbar/mobile guest entry, existing login flow, signed-in/auth-switch/session-expiry/cross-tab state, keyboard/Escape/outside close, five responsive widths, RTL and light/dark; minimum text contrast ${minimumContrast.toFixed(2)}:1`;
 };

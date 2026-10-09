@@ -34,3 +34,6 @@ Not verified: physical mobile/screen-reader execution, true browser 200% zoom (6
 ## Verdict
 
 Approve for the reported local scope. Not deployed.
+## Session-state follow-up
+
+The automated PR review identified that session expiry and cross-tab authentication emit `sb:session`, not only `sb:auth`. The header now subscribes to both, with matching cleanup. The browser regression also covers canonical session expiry and real same-origin storage events from a second tab for login and logout; stale open account options must close.

@@ -6,5 +6,5 @@ const url = process.env.BROWSER_WEB_URL || 'http://127.0.0.1:5201';
 if (!['localhost', '127.0.0.1'].includes(new URL(url).hostname)) throw Error('Account fixtures require a local preview.');
 await mkdir('output/playwright', { recursive: true });
 const browser = await chromium.launch({ headless: true });
-try { console.log(await require('./check-account-menu-browser.cjs')(await browser.newPage(), url)); }
+try { const context = await browser.newContext(); console.log(await require('./check-account-menu-browser.cjs')(await context.newPage(), url)); }
 finally { await browser.close(); }
