@@ -9,12 +9,14 @@ import { LocationMap } from './LocationMap';
 import { useModalFocus } from './useModalFocus';
 import { ToastMessage, useToast } from './Toast';
 import { AppIcon } from './AppIcon';
+import { isUnnamedLocation, manualLocationLabel } from '@/lib/location-label';
 
 export function LocationPicker({ onClose }: { onClose: () => void }) {
   const { choose } = useLocation();
   const { toast, dismiss } = useToast();
   const [initial] = useState(() => getStoredLocation() ?? FALLBACK_LOCATION);
   const [point, setPoint] = useState<PickedPoint>(initial);
+  const [areaName, setAreaName] = useState(() => initial.label === FALLBACK_LOCATION.label || isUnnamedLocation(initial.label) ? '' : initial.label);
   const [chosen, setChosen] = useState(initial.label !== FALLBACK_LOCATION.label);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -30,6 +32,7 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
 
   const pin = (next: PickedPoint) => {
     invalidateRequest();
+    if (Math.abs(next.latitude - point.latitude) > 1e-7 || Math.abs(next.longitude - point.longitude) > 1e-7) setAreaName('');
     setBusy(false); setError(''); setPoint(next); setChosen(true);
   };
 
@@ -60,7 +63,7 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
     // Save the exact selection synchronously: map/viewport events and network
     // delays must not silently cancel a confirmation or keep the old label.
     try {
-      choose({ ...selected, label: `Pinned location (${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)})` });
+      choose({ ...selected, label: manualLocationLabel(areaName) || 'Pinned location' });
       if (error) dismiss(error, false);
       setError('');
       toast('Location updated. Nearby shops will refresh for this pin.');
@@ -80,6 +83,9 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
       <h3 className="sb-area-picker-map-title">Pick my area</h3>
       <p className="sb-area-picker-copy">Select a point or move the map until the pin is in the right place. You can also focus the map and use arrow keys.</p>
       <LocationMap point={point} onChange={pin} onError={setError} />
+      <label htmlFor="area-address-name" className="sb-area-picker-map-title block">Area or address name <span className="font-normal">(optional)</span></label>
+      <input id="area-address-name" className="input w-full" value={areaName} maxLength={160} onChange={event => setAreaName(event.target.value)} placeholder="e.g. Plot 72, street, neighbourhood" aria-describedby="area-address-name-hint" autoComplete="off" style={{ fontSize: 16 }} />
+      <p id="area-address-name-hint" className="sb-area-picker-copy">Add your house or plot name for the header. Otherwise, a map address is shown when available. Moving the pin clears this name.</p>
       {error && <ToastMessage>{error}</ToastMessage>}
       </div>
       <div className="sb-area-picker-footer" data-toast-clearance><p className="sb-area-picker-coordinates" role="status">{chosen ? 'Selected' : 'Map centre'}: {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</p><button type="button" className="btn-primary w-full" disabled={!chosen || busy} onClick={confirm}>Confirm this location</button></div>
