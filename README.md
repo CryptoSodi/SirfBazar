@@ -6,30 +6,35 @@ Unlike dark-store models, SirfBazar **owns no inventory and no warehouses** — 
 
 ## Android APK downloads
 
-Release-signed **testing builds**, version 1.0.0 (build 1), built on 8 October 2026.
-These connect to the live SirfBazar API; they are not a Google Play release.
-All three download links were checked successfully on 8 October 2026.
+Release-signed **testing builds**, version 1.0.0 (build 2), built on 9 October 2026
+from consolidated `master` commit `3190156`. These connect to the live SirfBazar
+API; they are not a Google Play release.
 
 | App | Package | Download |
 |---|---|---|
-| Customer | `pk.sirfbazar.customer` | [Download customer APK](https://expo.dev/artifacts/eas/23-oJtE8MVYwfXaGyV2JzrTV8pEW5tKBxaeXeasrs2Q.apk) |
-| Merchant | `pk.sirfbazar.merchant` | [Download merchant APK](https://expo.dev/artifacts/eas/LNk5RrAQQLC_Udql-OASxzP3DVZRMbyUuWMnPIb34mo.apk) |
-| Rider | `pk.sirfbazar.rider` | [Download rider APK](https://expo.dev/artifacts/eas/KQTRfta8lHsQTf0_tpKvsyxJkkoLOYtOQjERCw7H9Xg.apk) |
+| Customer | `pk.sirfbazar.customer` | [Download customer APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-2026-10-09/sirfbazar-customer-v1.0.0-build2.apk) |
+| Merchant | `pk.sirfbazar.merchant` | [Download merchant APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-2026-10-09/sirfbazar-merchant-v1.0.0-build2.apk) |
+| Rider | `pk.sirfbazar.rider` | [Download rider APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-2026-10-09/sirfbazar-rider-v1.0.0-build2.apk) |
 
-**Download links expire on 22 October 2026.** Package names, release signatures,
-and file hashes were verified; see the [APK verification report](docs/production-readiness/ANDROID_LOCAL_RELEASE_CANDIDATES.md)
-for checksums, build IDs, and retained local copies. Native-device login and
-checkout checks remain pending, and Google consent is still in Testing.
+The [GitHub prerelease](https://github.com/CryptoSodi/SirfBazar/releases/tag/android-2026-10-09)
+includes all three APKs, `SHA256SUMS.txt` and `build-manifest.json`. These downloads
+are hosted on GitHub and do not use expiring Expo artifact links. Package names,
+release signatures, build numbers and checksums passed verification; see the
+[9 October APK report](docs/production-readiness/ANDROID_RELEASE_2026-10-09.md).
 
-**These APKs predate the master consolidation.** They do not contain every later
-mobile source change now in `master`. Merging or pushing code does not update
-installed apps or replace these downloads: build and verify new APKs from
-`master`, then install/distribute them to ship those changes. iOS also requires
-a separate build and distribution step; no iOS download is provided here.
+These APKs include the consolidation and mobile changes through `3190156`.
+Later pushes do not update installed apps or replace these binaries: new mobile
+changes require another build and installation. iOS requires a separate build;
+no iOS download is provided here. Native-device login, checkout, GPS and push
+checks remain pending, and known dependency warnings remain documented in the
+report. Google consent was last recorded as External/Testing; this release does
+not change consent or test-user access.
 
-These APKs use the new per-app SirfBazar release keys. They cannot update an
-older APK signed with a different key in place. Do not uninstall an existing app
-without first considering loss of its local data.
+Build 2 uses the same per-app SirfBazar release keys as the 8 October build-1
+APKs, preserving their update signing identity. Older APKs signed with a different
+key cannot be updated in place. Do not uninstall an existing app without first
+considering loss of its local data. The [previous build report](docs/production-readiness/ANDROID_LOCAL_RELEASE_CANDIDATES.md)
+is retained as historical evidence.
 
 ## Repository layout
 
