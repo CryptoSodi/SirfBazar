@@ -56,6 +56,7 @@ export function Header() {
       fetchCart().then((cart) => setCartCount(cart.itemCount ?? 0)).catch(() => undefined);
     };
     const onAuth = () => { setSignedIn(isLoggedIn()); refreshCart(); };
+    const onSession = () => setSignedIn(isLoggedIn());
     const onCart = (event: Event) => {
       const view = (event as CustomEvent).detail;
       if (view?.itemCount != null) setCartCount(view.itemCount);
@@ -63,8 +64,9 @@ export function Header() {
     };
     refreshCart();
     window.addEventListener('sb:auth', onAuth);
+    window.addEventListener('sb:session', onSession);
     window.addEventListener('sb:cart', onCart);
-    return () => { window.removeEventListener('sb:auth', onAuth); window.removeEventListener('sb:cart', onCart); };
+    return () => { window.removeEventListener('sb:auth', onAuth); window.removeEventListener('sb:session', onSession); window.removeEventListener('sb:cart', onCart); };
   }, []);
 
   const cycleTheme = () => {
