@@ -10,6 +10,7 @@ import { formatPKR } from '@/lib/format';
 import { locationQuery, useLocation } from '@/lib/location';
 import { ProductCard, ProductCardData } from '@/components/ProductCard';
 import { Icon } from '@/components/Icons';
+import { shopAcceptingOrders, shopStatus } from '@/components/ShopAvailability';
 
 export default function ShopPage() {
   const { id } = useParams<{ id: string }>();
@@ -33,9 +34,13 @@ export default function ShopPage() {
     api.get(`/merchants/${id}?${locationQuery(location)}`).then((value) => { if (active) setShop(value); }).catch((cause: Error) => { if (active) setError(cause.message); });
     api.get(`/merchants/${id}/reviews?pageSize=10`).then((value) => { if (active) setReviews(value.items ?? []); }).catch(() => undefined);
     return () => { active = false; };
-  }, [id, resolved, location?.latitude, location?.longitude]);
+  }, [id, resolved, location?.latitude, location?.longitude, retryProducts]);
 
   useEffect(() => {
+    if (!shop || shop.id !== id || !shopAcceptingOrders(shop)) {
+      setProducts([]); setTotal(0); setLoadingProducts(false);
+      return;
+    }
     let active = true;
     const timer = setTimeout(() => {
       setLoadingProducts(true); setProductsError('');
@@ -45,10 +50,16 @@ export default function ShopPage() {
         .finally(() => { if (active) setLoadingProducts(false); });
     }, 250);
     return () => { active = false; clearTimeout(timer); };
-  }, [id, q, page, retryProducts]);
+  }, [id, q, page, retryProducts, shop?.id, shop?.isOnline, shop?.isOpen]);
 
   if (error) return <div role="alert" className="card p-6"><p>Unable to load this shop: {error}</p><Link className="btn-secondary mt-3 inline-flex" href="/search?type=shops">Explore other shops</Link></div>;
-  if (!shop) return <p role="status">Loading shop…</p>;
+  if (!shop || shop.id !== id) return <p role="status">Loading shop…</p>;
+  if (!shopAcceptingOrders(shop)) return <div className="sb-shop-page">
+    <nav className="sb-breadcrumb" aria-label="Breadcrumb"><Link href="/">Home</Link><span aria-hidden="true">/</span><Link href="/search?type=shops">Local shops</Link><span aria-hidden="true">/</span><span>{shop.shopName}</span></nav>
+    <section className="card p-6"><h1>{shop.shopName}</h1><p className="mt-3 font-semibold">{shopStatus(shop)} · Not accepting orders</p><p className="sb-muted mt-3">This shop’s products are hidden until it is accepting orders again. Any items already in your basket stay there.</p>
+      <div className="flex flex-wrap gap-3 mt-4"><Link className="btn-primary" href="/search?type=shops">Explore other shops</Link><button className="btn-secondary" onClick={() => { setPage(1); setRetryProducts((value) => value + 1); }}>Check availability again</button></div>
+    </section>
+  </div>;
 
   return <div className="sb-shop-page"><nav className="sb-breadcrumb" aria-label="Breadcrumb"><Link href="/">Home</Link><span aria-hidden="true"><UiIcon name="chevron" size={18} /></span><Link href="/search?type=shops">Local shops</Link><span aria-hidden="true"><UiIcon name="chevron" size={18} /></span><span>{shop.shopName}</span></nav><section className="sb-shop-hero"><span className="sb-shop-hero-mark"><Icon name="shop" size={37} /></span><div><span className="sb-home-eyebrow">Your local shop</span><h1>{shop.shopName}</h1><p>{shop.shopType || 'Local shop'} · {shop.address || shop.city || 'Area details unavailable'}</p><div className="sb-shop-facts"><span>{shop.estimatedDeliveryMinutes ? `${shop.estimatedDeliveryMinutes} min estimated delivery` : 'Delivery time in basket'}</span><span>Delivery fee shown in basket</span><span>Prepared &amp; delivered by this shop</span></div></div><span className="sb-shop-open">{shop.isOnline && shop.isOpen ? <><Icon name="online" size={16} /> Open</> : "Closed"}</span></section>
     <div className="sb-shop-title"><h2>{tab === 'products' ? 'On the shelves' : 'Delivery & reviews'}</h2><button onClick={() => setTab('information')}>Shop information <Icon name="info" size={18} /></button></div><div className="sb-shop-tabs"><button className={tab === 'products' ? 'selected' : ''} onClick={() => setTab('products')}>All products</button><button className={tab === 'information' ? 'selected' : ''} onClick={() => setTab('information')}>Delivery &amp; reviews</button></div>

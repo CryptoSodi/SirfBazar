@@ -258,7 +258,7 @@ export class CatalogService {
       for (const { merchant, reach } of inRange) reachByMerchant.set(merchant.id, reach);
       merchantFilter = { merchantId: { in: [...reachByMerchant.keys()] } };
     } else {
-      merchantFilter = { merchant: { approvalStatus: MerchantApprovalStatus.APPROVED } };
+      merchantFilter = {};
     }
 
     const offers = await this.prisma.merchantProduct.findMany({
@@ -266,6 +266,9 @@ export class CatalogService {
         isAvailable: true,
         stockQuantity: { gt: 0 },
         ...merchantFilter,
+        // Discovery includes offline shops; sellable offers never do, even
+        // without a location or if a shop changed state after range lookup.
+        merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true },
         product: {
           approvalStatus: ProductApprovalStatus.APPROVED,
           ...(opts.productIds ? { id: { in: opts.productIds } } : {}),
@@ -495,7 +498,7 @@ export class CatalogService {
     }
 
     const offerRows = await this.prisma.merchantProduct.findMany({
-      where: { productId, ...merchantFilter },
+      where: { productId, ...merchantFilter, merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true } },
       include: {
         merchant: { select: { id: true, shopName: true, ratingAverage: true } },
       },
@@ -630,15 +633,17 @@ export class CatalogService {
   ) {
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: merchantId },
-      select: { id: true, approvalStatus: true },
+      select: { id: true, approvalStatus: true, isOnline: true, isOpen: true },
     });
     if (!merchant || merchant.approvalStatus !== MerchantApprovalStatus.APPROVED) {
       throw new NotFoundException('Merchant not found');
     }
 
     const { page, pageSize, skip, take } = parsePage(query);
+    if (!merchant.isOnline || !merchant.isOpen) return paged([], 0, page, pageSize);
     const where: Prisma.MerchantProductWhereInput = {
       merchantId,
+      merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true },
       product: {
         approvalStatus: ProductApprovalStatus.APPROVED,
         ...(query.categoryId ? { categoryId: { in: await resolveCategoryBranch(this.prisma, query.categoryId) } } : {}),

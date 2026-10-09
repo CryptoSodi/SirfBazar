@@ -8,7 +8,7 @@ for (const url of [shop, web]) if (!['localhost', '127.0.0.1'].includes(new URL(
 await mkdir('output/playwright', { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const [file, url] of [['./check-catalog-autoload-browser.cjs', shop], ['./check-location-picker-browser.cjs', web]]) {
+  for (const [file, url] of [['./check-catalog-autoload-browser.cjs', shop], ['./check-location-picker-browser.cjs', web], ['./check-shop-availability-browser.cjs', web]]) {
     const context = await browser.newContext(file.includes('location-picker') ? { hasTouch: true, isMobile: true } : {});
     try {
       await context.route('**/*', route => {
