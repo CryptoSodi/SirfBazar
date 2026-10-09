@@ -572,3 +572,14 @@ Change the selected logo, main colour, wording, typography direction or logo com
 | `Pasted text(20260927-005813).txt` | Earlier supporting palette and merchant-visible, low-friction principles; not its superseded sign/logo or provisional type direction |
 
 **Final rule:** Improve implementation quality without changing the identity the user selected.
+
+## Android App-Role Icons: Approved 9 October 2026
+
+The owner requested distinct Customer, Merchant and Rider icons and approved
+integrating the delivered icon family. This is a scoped exception for Android
+launcher artwork, not a replacement corporate identity: Customer keeps the
+original basket, Merchant uses a storefront containing that basket, and Rider
+uses a delivery scooter with the basket on its delivery box. All retain #009966
+and the original basket paths. The website, in-app logos, splash screens and
+iOS icons remain unchanged. See [Android launcher icons](docs/design/ANDROID_APP_ICONS.md)
+for assets, verification and build details.
