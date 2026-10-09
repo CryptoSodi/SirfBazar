@@ -7,7 +7,8 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { fetchCart, hasCartSession, isLoggedIn } from '@/lib/api';
-import { FALLBACK_LOCATION, useLocation } from '@/lib/location';
+import { useLocation } from '@/lib/location';
+import { LocationControl } from './LocationControl';
 import { LocationPicker } from './LocationPicker';
 import { Icon } from './Icons';
 import { AccountMenu } from './AccountMenu';
@@ -90,7 +91,7 @@ export function Header() {
       <div className="sb-site-promise"><div className="sb-site-container"><span>Everyday essentials. From your neighbourhood.</span><Link href="/contact">Need a hand? We’re here to help&nbsp; <UiIcon name="chevron" size={18} /></Link></div></div>
       <div className="sb-site-container sb-site-mainbar">
         {brand}
-        <button type="button" onClick={() => setPickerOpen(true)} className="sb-site-location" title={location?.label}><span className="sb-pin"><Icon name="pin" size={20} /></span><span><small>{location?.label === FALLBACK_LOCATION.label ? 'Example area' : 'Shops near'}</small><strong>{location?.label ?? 'Choose your area'} <Icon name="down" size={16} /></strong></span></button>
+        <LocationControl location={location} onClick={() => setPickerOpen(true)} />
         <form className="sb-site-search" role="search" onSubmit={(event) => { event.preventDefault(); if (q.trim()) router.push(`/search?q=${encodeURIComponent(q.trim())}`); }}><label htmlFor="site-search" className="sr-only">Search products and shops</label><Icon name="search" size={19} /><input id="site-search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search milk, eggs, bread and more" /><button type="submit" aria-label="Search"><UiIcon name="arrow" size={18} /></button></form>
         {appearance}
         <AccountMenu signedIn={signedIn} />
