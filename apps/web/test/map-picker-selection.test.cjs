@@ -26,7 +26,7 @@ function fixture() {
   const mapNode = all.find(node => node.type === GoogleMap);
   const confirm = all.find(node => node.type === 'button' && node.props.children.includes('Confirm this location'));
   let center = { lat: 31.5204, lng: 74.3587 };
-  mapNode.props.onLoad({ getCenter: () => ({ lat: () => center.lat, lng: () => center.lng }), setCenter: point => { center = point; } });
+  mapNode.props.onLoad({ getCenter: () => ({ lat: () => center.lat, lng: () => center.lng }), setCenter: point => { center = point; }, addListener: () => ({ remove() {} }) });
   return { states, map: mapNode.props, confirm: confirm.props, setCenter: point => { center = point; }, confirmed: () => confirmed };
 }
 

@@ -85,7 +85,11 @@ export function MapPicker({
         </div>
 
         <div className="relative flex-1">
-          {loadError ? (
+          {!GOOGLE_MAPS_API_KEY ? (
+            <div className="grid h-full place-items-center p-6 text-center text-sm text-stone-600" role="alert">
+              Google Maps is not configured for this site. Use your current location or enter the address details manually.
+            </div>
+          ) : loadError ? (
             <div className="grid h-full place-items-center p-6 text-center text-sm text-red-600">
               Couldn’t load the map. Check that the Google Maps key allows this site.
             </div>
@@ -104,10 +108,10 @@ export function MapPicker({
                 }}
                 onLoad={(map) => {
                   mapRef.current = map;
+                  map.addListener('idle', syncCenter);
                 }}
                 onDragEnd={() => { syncCenter(); setChosen(true); }}
                 onClick={(event) => { if (event.latLng) { const next = { lat: event.latLng.lat(), lng: event.latLng.lng() }; mapRef.current?.setCenter(next); setCenter(next); setChosen(true); } }}
-                onIdle={syncCenter}
               />
               {/* Fixed centre pin — its tip points at the map centre. */}
               <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full text-4xl drop-shadow-md">

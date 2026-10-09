@@ -82,7 +82,7 @@ export function LocationPicker({ onClose }: { onClose: () => void }) {
       <button type="button" className="btn-primary w-full" onClick={useGps} disabled={busy}>{busy ? 'Updating location…' : <><AppIcon name="location" size={18} /> Use my current location</>}</button>
       <h3 className="sb-area-picker-map-title">Pick my area</h3>
       <p className="sb-area-picker-copy">Select a point or move the map until the pin is in the right place. You can also focus the map and use arrow keys.</p>
-      <LocationMap point={point} onChange={pin} onError={setError} />
+      <LocationMap point={point} onChange={pin} />
       <label htmlFor="area-address-name" className="sb-area-picker-map-title block">Area or address name <span className="font-normal">(optional)</span></label>
       <input id="area-address-name" className="input w-full" value={areaName} maxLength={160} onChange={event => setAreaName(event.target.value)} placeholder="e.g. Plot 72, street, neighbourhood" aria-describedby="area-address-name-hint" autoComplete="off" style={{ fontSize: 16 }} />
       <p id="area-address-name-hint" className="sb-area-picker-copy">Add your house or plot name for the header. Otherwise, a map address is shown when available. Moving the pin clears this name.</p>

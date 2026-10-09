@@ -1,7 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 @import "../shared/design/operations.css";
-@import "leaflet/dist/leaflet.css";
 
 .order-details { overflow-wrap: anywhere; }
 .order-details :is(.text-slate-400, .text-slate-500, .text-slate-600) { color: var(--muted); }
