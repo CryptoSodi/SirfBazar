@@ -3,7 +3,6 @@ import { AppIcon as UiIcon } from '../components/AppIcon';
 
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { FALLBACK_LOCATION, locationQuery, useLocation } from '@/lib/location';
@@ -12,6 +11,7 @@ import { CategoryIcon } from '@/components/CategoryIcon';
 import { Icon } from '@/components/Icons';
 import { CoverageNotice } from '@/components/CoverageNotice';
 import { HomeRail } from '@/components/HomeRail';
+import { GroceryHero } from '@/components/GroceryHero';
 import { ShopAvailabilityLink, shopAcceptingOrders, shopStatus } from '@/components/ShopAvailability';
 
 export default function HomePage() {
@@ -47,11 +47,7 @@ export default function HomePage() {
   const inExampleArea = location?.label === FALLBACK_LOCATION.label;
 
   return <div className="sb-home">
-    <section className="sb-home-hero" aria-labelledby="home-hero-title">
-      <div className="sb-home-hero-copy"><span className="sb-home-eyebrow">Familiar shops. Easier shopping.</span><h1 id="home-hero-title">Your everyday<br />essentials.<br /><em>Closer than ever.</em></h1><p>Fill your basket from local shops. They prepare your order and deliver it to your door.</p><div className="sb-hero-actions"><Link href="/search" className="btn-primary">Shop essentials&nbsp; <UiIcon name="arrow" size={18} /></Link><Link href="/search?type=shops">Explore shops</Link></div></div>
-      <div className="sb-hero-art" aria-hidden="true"><span className="sb-hero-orbit" /><Image className="sb-hero-bread" src="/design/product-bread.svg" alt="" width={150} height={180} /><Image className="sb-hero-banana" src="/design/product-banana.svg" alt="" width={155} height={140} /><div className="sb-hero-bag"><span>YOUR DAILY<br />GOOD THINGS</span></div><Image className="sb-hero-milk" src="/design/product-milk.svg" alt="" width={140} height={185} /><Image className="sb-hero-tomato" src="/design/product-tomato.svg" alt="" width={125} height={100} /></div>
-      <div className="sb-hero-note">From their shelves.<br /><strong>To your doorstep.</strong></div>
-    </section>
+    <GroceryHero hasConfirmedLocation={resolved && !!location && !inExampleArea} />
 
     {noShopsInArea && <CoverageNotice className="mt-6" inExampleArea={inExampleArea} onBrowseExample={() => choose(FALLBACK_LOCATION)} onRetry={() => setReload((value) => value + 1)} />}
 
