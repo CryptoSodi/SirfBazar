@@ -119,19 +119,20 @@ export function MapPicker({
               </div>
               <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/40" />
 
-              <button
-                type="button"
-                aria-label="Use my current location"
-                onClick={recenterToGps}
-                className="absolute bottom-4 right-4 z-10 grid h-11 w-11 place-items-center rounded-full border border-stone-200 bg-white text-lg shadow-lg"
-                title="Use my current location"
-              >
-                {locating ? '…' : <AppIcon name="location" size={20} />}
-              </button>
             </>
           ) : (
             <div className="grid h-full place-items-center text-sm text-stone-500">Loading map…</div>
           )}
+          <button
+            type="button"
+            aria-label="Use my current location"
+            onClick={recenterToGps}
+            disabled={locating}
+            className="absolute bottom-4 right-4 z-10 grid h-11 w-11 place-items-center rounded-full border border-stone-200 bg-white text-lg shadow-lg disabled:opacity-60"
+            title="Use my current location"
+          >
+            {locating ? '…' : <AppIcon name="location" size={20} />}
+          </button>
         </div>
 
         <div className="border-t border-stone-200 p-4">
