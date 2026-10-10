@@ -105,7 +105,7 @@ try {
   await firstPage.getByLabel('City').fill('Lahore');
   await firstPage.getByRole('button', { name: 'Pin on map' }).click();
   const firstPicker = firstPage.getByRole('dialog', { name: 'Choose a delivery location' });
-  await firstPicker.getByText(/Google Maps is not configured|Couldn’t load the map/).waitFor();
+  assert.equal(await firstPicker.locator('.leaflet-container').count(), 0, 'checkout picker must not render a Leaflet map');
   await firstPicker.getByRole('button', { name: 'Select map center' }).click();
   await firstPicker.getByRole('button', { name: 'Confirm this location' }).click();
   await firstPicker.waitFor({ state: 'hidden' });
@@ -148,7 +148,7 @@ try {
   await picker.getByRole('button', { name: 'Use current location' }).click();
   await mapPage.getByText(/Location access failed/).waitFor();
   await picker.getByRole('button', { name: 'Dismiss notification' }).click();
-  await picker.getByText(/Google Maps is not configured|Couldn’t load the map/).waitFor();
+  assert.equal(await picker.locator('.leaflet-container').count(), 0, 'saved-address picker must not render a Leaflet map');
   await picker.getByRole('button', { name: 'Select map center' }).click();
   await picker.getByRole('button', { name: 'Confirm this location' }).click();
   await picker.waitFor({ state: 'hidden' });
