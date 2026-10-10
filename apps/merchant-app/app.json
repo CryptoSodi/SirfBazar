@@ -18,7 +18,14 @@
       "bundleIdentifier": "pk.sirfbazar.merchant"
     },
     "android": {
-      "package": "pk.sirfbazar.merchant"
+      "package": "pk.sirfbazar.merchant",
+      "icon": "./assets/brand/app-icons/merchant/icon-1024.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand/app-icons/merchant/adaptive-foreground.png",
+        "backgroundImage": "./assets/brand/app-icons/merchant/adaptive-background.png",
+        "backgroundColor": "#009966",
+        "monochromeImage": "./assets/brand/app-icons/merchant/monochrome.png"
+      }
     },
     "plugins": [
       "@react-native-google-signin/google-signin",
