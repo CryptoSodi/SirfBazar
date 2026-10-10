@@ -29,18 +29,21 @@ model User {
   updatedAt       DateTime  @updatedAt
   lastLoginAt     DateTime?
 
-  customer      Customer?
-  merchant      Merchant?
-  rider         Rider?
-  staffOf       MerchantStaff[]
-  refreshTokens RefreshToken[]
-  notifications Notification[]
-  pushTokens    PushToken[]
+  customer             Customer?
+  merchant             Merchant?
+  rider                Rider?
+  staffOf              MerchantStaff[]
+  refreshTokens        RefreshToken[]
+  notifications        Notification[]
+  pushTokens           PushToken[]
   webPushSubscriptions WebPushSubscription[]
-  auditLogs     AuditLog[]
+  auditLogs            AuditLog[]
+  posTrial             MerchantPosTrial?
 }
 
-/** Expo push token per device — one user can have several (phone + tablet). */
+/**
+ * Expo push token per device — one user can have several (phone + tablet).
+ */
 model PushToken {
   id        String   @id @default(cuid())
   userId    String
@@ -54,7 +57,9 @@ model PushToken {
   @@index([userId])
 }
 
-/** Browser Web Push subscription for the merchant/customer desktop PWA. */
+/**
+ * Browser Web Push subscription for the merchant/customer desktop PWA.
+ */
 model WebPushSubscription {
   id        String   @id @default(cuid())
   userId    String
@@ -74,7 +79,7 @@ model RefreshToken {
   id        String    @id @default(cuid())
   userId    String
   tokenHash String    @unique
-  role      String?   // Role selected for this app session; null on pre-migration tokens.
+  role      String? // Role selected for this app session; null on pre-migration tokens.
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
@@ -98,12 +103,12 @@ model OtpCode {
 }
 
 model Customer {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  defaultAddressId  String?
-  walletBalancePaisa Int     @default(0)
-  loyaltyPoints     Int      @default(0)
-  createdAt         DateTime @default(now())
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  defaultAddressId   String?
+  walletBalancePaisa Int      @default(0)
+  loyaltyPoints      Int      @default(0)
+  createdAt          DateTime @default(now())
 
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   addresses CustomerAddress[]
@@ -169,6 +174,7 @@ model Merchant {
   latitude                  Float
   longitude                 Float
   serviceRadiusKm           Float    @default(5)
+  deliveryFeePaisa          Int      @default(0)
   logoUrl                   String?
   bannerUrl                 String?
   openingTime               String   @default("09:00")
@@ -185,18 +191,47 @@ model Merchant {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
-  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  staff      MerchantStaff[]
-  documents  MerchantDocument[]
-  riders     Rider[]
-  products   MerchantProduct[]
-  orders     Order[]
-  reviews    Review[]
-  settlements Settlement[]
-  tickets    SupportTicket[]
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staff          MerchantStaff[]
+  documents      MerchantDocument[]
+  riders         Rider[]
+  products       MerchantProduct[]
+  orders         Order[]
+  reviews        Review[]
+  settlements    Settlement[]
+  tickets        SupportTicket[]
+  operatingHours MerchantOperatingHours[]
 
   @@index([city, approvalStatus])
   @@index([latitude, longitude])
+}
+
+model MerchantOperatingHours {
+  id            String   @id @default(cuid())
+  merchantId    String
+  dayOfWeek     Int
+  isClosed      Boolean  @default(false)
+  opensAt       String?
+  closesAt      String?
+  closesNextDay Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, dayOfWeek])
+  @@index([merchantId])
+}
+
+model MerchantPosTrial {
+  userId    String    @id
+  optedIn   Boolean   @default(false)
+  startedAt DateTime?
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model MerchantStaff {
@@ -247,13 +282,33 @@ model Rider {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  merchant        Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchant        Merchant              @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders          Order[]
   locationUpdates RiderLocationUpdate[]
   reviews         Review[]
 
   @@index([merchantId])
+}
+
+model OrderRevision {
+  id                 String    @id @default(cuid())
+  orderId            String
+  requestId          String    @unique
+  status             String    @default("PENDING")
+  createdByUserId    String
+  resolvedByUserId   String?
+  originalTotalPaisa Int
+  proposedTotalPaisa Int
+  payload            Json
+  createdAt          DateTime  @default(now())
+  expiresAt          DateTime
+  resolvedAt         DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@index([status, expiresAt])
 }
 
 model Category {
@@ -300,18 +355,18 @@ model Product {
 }
 
 model MerchantProduct {
-  id                String   @id @default(cuid())
-  merchantId        String
-  productId         String
-  pricePaisa        Int
+  id                 String   @id @default(cuid())
+  merchantId         String
+  productId          String
+  pricePaisa         Int
   discountPricePaisa Int?
-  stockQuantity     Int      @default(0)
-  lowStockThreshold Int      @default(5)
-  isAvailable       Boolean  @default(true)
-  merchantSku       String?
-  preparationNotes  String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  stockQuantity      Int      @default(0)
+  lowStockThreshold  Int      @default(5)
+  isAvailable        Boolean  @default(true)
+  merchantSku        String?
+  preparationNotes   String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -355,48 +410,48 @@ model CartItem {
 }
 
 model Order {
-  id                        String    @id @default(cuid())
-  parentOrderId             String?
-  isParent                  Boolean   @default(false)
-  orderNumber               String    @unique
-  customerId                String
-  merchantId                String? // null on multi-merchant parent rows
-  riderId                   String?
-  deliveryAddressId         String?
-  status                    String    @default("CREATED")
-  paymentStatus             String    @default("PENDING")
-  paymentMethod             String    @default("COD") // COD | WALLET | CARD | JAZZCASH | EASYPAISA | BANK_TRANSFER | CASH
-  channel                   String    @default("ONLINE") // ONLINE (marketplace) | POS (in-store sale)
-  subtotalPaisa             Int       @default(0)
-  deliveryFeePaisa          Int       @default(0)
-  serviceFeePaisa           Int       @default(0)
-  smallOrderFeePaisa        Int       @default(0)
-  discountAmountPaisa       Int       @default(0)
-  commissionAmountPaisa     Int       @default(0)
-  totalAmountPaisa          Int       @default(0)
-  merchantEarningPaisa      Int       @default(0)
-  couponCode                String?
-  customerNote              String?
-  merchantNote              String?
-  cancellationReason        String?
-  deliveryOtp               String?
-  estimatedDeliveryMinutes  Int?
-  settlementId              String?
-  createdAt                 DateTime  @default(now())
-  acceptedAt                DateTime?
-  readyForPickupAt          DateTime?
-  riderAssignedAt           DateTime?
-  pickedUpAt                DateTime?
-  deliveredAt               DateTime?
-  cancelledAt               DateTime?
+  id                       String    @id @default(cuid())
+  parentOrderId            String?
+  isParent                 Boolean   @default(false)
+  orderNumber              String    @unique
+  customerId               String
+  merchantId               String? // null on multi-merchant parent rows
+  riderId                  String?
+  deliveryAddressId        String?
+  status                   String    @default("CREATED")
+  paymentStatus            String    @default("PENDING")
+  paymentMethod            String    @default("COD") // COD | WALLET | CARD | JAZZCASH | EASYPAISA | BANK_TRANSFER | CASH
+  channel                  String    @default("ONLINE") // ONLINE (marketplace) | POS (in-store sale)
+  subtotalPaisa            Int       @default(0)
+  deliveryFeePaisa         Int       @default(0)
+  serviceFeePaisa          Int       @default(0)
+  smallOrderFeePaisa       Int       @default(0)
+  discountAmountPaisa      Int       @default(0)
+  commissionAmountPaisa    Int       @default(0)
+  totalAmountPaisa         Int       @default(0)
+  merchantEarningPaisa     Int       @default(0)
+  couponCode               String?
+  customerNote             String?
+  merchantNote             String?
+  cancellationReason       String?
+  deliveryOtp              String?
+  estimatedDeliveryMinutes Int?
+  settlementId             String?
+  createdAt                DateTime  @default(now())
+  acceptedAt               DateTime?
+  readyForPickupAt         DateTime?
+  riderAssignedAt          DateTime?
+  pickedUpAt               DateTime?
+  deliveredAt              DateTime?
+  cancelledAt              DateTime?
 
-  parent          Order?               @relation("OrderChildren", fields: [parentOrderId], references: [id])
-  children        Order[]              @relation("OrderChildren")
-  customer        Customer             @relation(fields: [customerId], references: [id])
-  merchant        Merchant?            @relation(fields: [merchantId], references: [id])
-  rider           Rider?               @relation(fields: [riderId], references: [id])
-  deliveryAddress CustomerAddress?     @relation(fields: [deliveryAddressId], references: [id])
-  settlement      Settlement?          @relation(fields: [settlementId], references: [id])
+  parent          Order?                @relation("OrderChildren", fields: [parentOrderId], references: [id])
+  children        Order[]               @relation("OrderChildren")
+  customer        Customer              @relation(fields: [customerId], references: [id])
+  merchant        Merchant?             @relation(fields: [merchantId], references: [id])
+  rider           Rider?                @relation(fields: [riderId], references: [id])
+  deliveryAddress CustomerAddress?      @relation(fields: [deliveryAddressId], references: [id])
+  settlement      Settlement?           @relation(fields: [settlementId], references: [id])
   items           OrderItem[]
   timeline        OrderTimelineEntry[]
   payments        Payment[]
@@ -405,6 +460,7 @@ model Order {
   tickets         SupportTicket[]
   couponUsages    CouponUsage[]
   locationUpdates RiderLocationUpdate[]
+  revisions       OrderRevision[]
 
   @@index([customerId, status])
   @@index([merchantId, status])
@@ -505,25 +561,25 @@ model Refund {
 }
 
 model Coupon {
-  id                    String   @id @default(cuid())
-  code                  String   @unique
-  title                 String
-  description           String?
-  discountType          String // PERCENTAGE | FIXED | FREE_DELIVERY
-  discountValue         Float // percent, or paisa when FIXED
-  maxDiscountAmountPaisa Int?
-  minimumOrderAmountPaisa Int    @default(0)
-  startDate             DateTime
-  endDate               DateTime
-  usageLimitTotal       Int?
-  usageLimitPerCustomer Int      @default(1)
-  newUsersOnly          Boolean  @default(false)
-  applicableMerchantId  String?
-  applicableCategoryId  String?
-  applicableCity        String?
+  id                       String   @id @default(cuid())
+  code                     String   @unique
+  title                    String
+  description              String?
+  discountType             String // PERCENTAGE | FIXED | FREE_DELIVERY
+  discountValue            Float // percent, or paisa when FIXED
+  maxDiscountAmountPaisa   Int?
+  minimumOrderAmountPaisa  Int      @default(0)
+  startDate                DateTime
+  endDate                  DateTime
+  usageLimitTotal          Int?
+  usageLimitPerCustomer    Int      @default(1)
+  newUsersOnly             Boolean  @default(false)
+  applicableMerchantId     String?
+  applicableCategoryId     String?
+  applicableCity           String?
   paymentMethodRestriction String?
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
+  isActive                 Boolean  @default(true)
+  createdAt                DateTime @default(now())
 
   usages CouponUsage[]
 }
@@ -583,9 +639,9 @@ model SupportTicket {
   updatedAt         DateTime  @updatedAt
   resolvedAt        DateTime?
 
-  order    Order?    @relation(fields: [orderId], references: [id])
-  customer Customer? @relation(fields: [customerId], references: [id])
-  merchant Merchant? @relation(fields: [merchantId], references: [id])
+  order    Order?                 @relation(fields: [orderId], references: [id])
+  customer Customer?              @relation(fields: [customerId], references: [id])
+  merchant Merchant?              @relation(fields: [merchantId], references: [id])
   messages SupportTicketMessage[]
 
   @@index([status])

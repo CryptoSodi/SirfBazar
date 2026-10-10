@@ -390,19 +390,23 @@ function OrderModal({
 }
 
 function UnavailableItemModal({ orderId, item, onClose, onSaved }: { orderId: string; item: MerchantOrder['items'][number]; onClose: () => void; onSaved: () => void }) {
+  const [requestId] = useState(() => crypto.randomUUID());
   const [products, setProducts] = useState<MerchantListing[]>([]);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [totalPages, setTotalPages] = useState(1);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [action, setAction] = useState<'REMOVE' | 'REDUCE' | 'REPLACE'>('REMOVE');
+  const [proposedQuantity, setProposedQuantity] = useState(String(Math.max(1, item.quantity - 1)));
   const [replacementId, setReplacementId] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { const timer = setTimeout(() => { setPage(1); setQuery(search.trim()); }, 250); return () => clearTimeout(timer); }, [search]);
   useEffect(() => {
     let active = true;
-    const params = new URLSearchParams({ page: String(page), pageSize: '20', isAvailable: 'true', minStock: String(item.quantity) });
+    if (action !== 'REPLACE') { setProducts([]); setLoadingProducts(false); setError(''); return () => { active = false; }; }
+    const params = new URLSearchParams({ page: String(page), pageSize: '20', isAvailable: 'true', minStock: '1' });
     if (query) params.set('q', query);
     setLoadingProducts(true);
     setError('');
@@ -413,30 +417,51 @@ function UnavailableItemModal({ orderId, item, onClose, onSaved }: { orderId: st
       setTotalPages(result.totalPages);
     }).catch((cause) => { if (active) setError(errorMessage(cause)); }).finally(() => { if (active) setLoadingProducts(false); });
     return () => { active = false; };
-  }, [page, query, item.quantity]);
+  }, [page, query, action]);
   const submit = async () => {
     setBusy(true); setError('');
-    try { await api.post(`/merchant/orders/${orderId}/items/${item.id}/unavailable`, replacementId ? { replacementMerchantProductId: replacementId } : {}); onSaved(); }
+    try {
+      const quantity = Number(proposedQuantity);
+      if (action === 'REDUCE' && (!Number.isSafeInteger(quantity) || quantity < 1 || quantity >= item.quantity)) throw Error('Choose a positive quantity below the confirmed quantity.');
+      if (action === 'REPLACE' && (!replacementId || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > item.quantity)) throw Error('Choose an in-stock replacement and valid quantity.');
+      const change = action === 'REMOVE' ? { originalItemId: item.id, action } : action === 'REDUCE'
+        ? { originalItemId: item.id, action, quantity }
+        : { originalItemId: item.id, action, quantity, replacementMerchantProductId: replacementId };
+      await api.post(`/merchant/orders/${orderId}/revisions`, { requestId, changes: [change] });
+      onSaved();
+    }
     catch (cause) { setError(errorMessage(cause)); }
     finally { setBusy(false); }
   };
   return <Modal title={`Unavailable: ${item.productNameSnapshot}`} onClose={onClose}>
     <div className="dialog-body space-y-3">
-      <p className="small muted">Remove the unavailable item or suggest an in-stock replacement. The customer must accept a suggested replacement.</p>
-      <label className="field">Search your shop listings
-        <input className={inputCls} type="search" value={search} onChange={(event) => { setReplacementId(''); setSearch(event.target.value); }} placeholder="Search replacement products" />
-      </label>
-      <label className="field">Replacement product
-        <select value={replacementId} onChange={(event) => setReplacementId(event.target.value)}>
-          <option value="">No replacement — remove item</option>
-          {products.filter((product) => product.id !== item.merchantProductId).map((product) => <option value={product.id} key={product.id}>{product.product.name} · stock {product.stockQuantity} · {pkr(product.discountPricePaisa ?? product.pricePaisa)}</option>)}
+      <p className="small muted">The original order remains unchanged until the customer approves. Proposals expire after 30 minutes.</p>
+      <label className="field">Proposed change
+        <select value={action} onChange={(event) => { setAction(event.target.value as typeof action); setReplacementId(''); }}>
+          <option value="REMOVE">Remove unavailable item</option>
+          {item.quantity > 1 && <option value="REDUCE">Reduce quantity</option>}
+          <option value="REPLACE">Suggest a replacement</option>
         </select>
       </label>
+      {action !== 'REMOVE' && <label className="field">Proposed quantity
+        <input className={inputCls} type="number" min="1" max={item.quantity} step="1" value={proposedQuantity} onChange={(event) => setProposedQuantity(event.target.value)} />
+      </label>}
+      {action === 'REPLACE' && <>
+        <label className="field">Search your shop listings
+          <input className={inputCls} type="search" value={search} onChange={(event) => { setReplacementId(''); setSearch(event.target.value); }} placeholder="Search replacement products" />
+        </label>
+        <label className="field">Replacement product
+          <select value={replacementId} onChange={(event) => setReplacementId(event.target.value)}>
+            <option value="">Choose an in-stock product</option>
+            {products.filter((product) => product.id !== item.merchantProductId && product.stockQuantity >= Number(proposedQuantity)).map((product) => <option value={product.id} key={product.id}>{product.product.name} · stock {product.stockQuantity} · {pkr(product.discountPricePaisa ?? product.pricePaisa)}</option>)}
+          </select>
+        </label>
+      </>}
       {loadingProducts && <p className="small muted" role="status">Loading eligible products…</p>}
       {!loadingProducts && products.length === 0 && !error && <p className="small muted">No eligible products match this search.</p>}
-      {totalPages > 1 && <nav className="catalog-pagination" aria-label="Replacement product pages"><button type="button" className="btn" disabled={page <= 1 || loadingProducts} onClick={() => { setPage(page - 1); setReplacementId(''); }}><UiIcon name="back" /> Previous</button><span>Page {page} of {totalPages}</span><button type="button" className="btn" disabled={page >= totalPages || loadingProducts} onClick={() => { setPage(page + 1); setReplacementId(''); }}>Next <UiIcon name="arrow" /></button></nav>}
+      {action === 'REPLACE' && totalPages > 1 && <nav className="catalog-pagination" aria-label="Replacement product pages"><button type="button" className="btn" disabled={page <= 1 || loadingProducts} onClick={() => { setPage(page - 1); setReplacementId(''); }}><UiIcon name="back" /> Previous</button><span>Page {page} of {totalPages}</span><button type="button" className="btn" disabled={page >= totalPages || loadingProducts} onClick={() => { setPage(page + 1); setReplacementId(''); }}>Next <UiIcon name="arrow" /></button></nav>}
       {error && <ToastMessage>{error}</ToastMessage>}
-      <div className="row"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn primary" disabled={busy || loadingProducts} onClick={() => void submit()}>{busy ? 'Updating…' : replacementId ? 'Suggest replacement' : 'Mark unavailable'}</button></div>
+      <div className="row"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="button" className="btn primary" disabled={busy || loadingProducts || (action === 'REPLACE' && !replacementId)} onClick={() => void submit()}>{busy ? 'Sending proposal…' : 'Request customer approval'}</button></div>
     </div>
   </Modal>;
 }

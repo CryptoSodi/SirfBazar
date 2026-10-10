@@ -81,3 +81,15 @@ One backend serves all five clients. Role-based JWT auth separates customer, mer
 - S3-compatible storage for shop/product/document images (URLs are already first-class fields).
 - FCM/SMS/email providers behind `NotificationsService`; real OTP provider behind `IOtpService` (`OTP_PROVIDER=external`).
 - Payment gateways: server-to-server callbacks hit the existing `payments.confirm` path.
+
+## 2026-10-11 additive schema update
+
+The following local schema additions have authored SQL upgrades and are not yet applied to any database:
+
+- `User.googleProfile`: a Google identity snapshot written only after verified Google authentication, used for session-owned account display. It is not inferred from a matching email.
+- `MerchantOperatingHours`: one row per merchant/day with closed-day and overnight fields. Legacy scalar opening/closing fields remain for compatibility.
+- `Merchant.deliveryFeePaisa` and `Merchant.serviceRadiusKm`: merchant-entered settings. The fee is not part of checkout pricing until the charging policy is confirmed.
+- `MerchantPosTrial`: one owner-scoped opt-in/trial record with UTC start/end timestamps and status. Expired/declined merchants cannot create POS sales; POS history remains readable.
+- `OrderRevision`: immutable original/proposed snapshots, idempotency key, pending/approved/rejected/expired status and lifecycle timestamps. A pending revision leaves the order unchanged; supported approval is limited to eligible COD orders without coupons/discounts.
+
+Upgrade files: `apps/api/prisma/upgrades/20261011-google-account-profile.sql` and `apps/api/prisma/upgrades/20261011-merchant-settings-pos-and-order-revisions.sql`. Back up and apply through the approved database-change process before deploying code that reads these fields/tables. Rolling back the application does not require dropping additive schema; retain new tables/columns and proposal audit records.

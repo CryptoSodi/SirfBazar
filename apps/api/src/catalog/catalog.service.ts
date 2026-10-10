@@ -5,6 +5,7 @@ import { MerchantApprovalStatus, ProductApprovalStatus } from '../common/constan
 import { boundingBox, estimateDeliveryMinutes, haversineKm } from '../common/utils/geo';
 import { paged, parsePage } from '../common/utils/pagination';
 import { resolveCategoryBranch } from '../common/utils/category-tree';
+import { isMerchantOpenAt } from '../common/merchant-hours';
 import {
   LocationQuery,
   NearbyMerchantsQuery,
@@ -209,10 +210,12 @@ export class CatalogService {
         longitude: { gte: box.minLon, lte: box.maxLon },
         ...extraWhere,
       },
+      include: { operatingHours: true },
     });
 
     const inRange: { merchant: (typeof candidates)[number]; reach: MerchantReach }[] = [];
     for (const merchant of candidates) {
+      if (extraWhere.isOpen === true && extraWhere.isOnline === true && !isMerchantOpenAt(merchant.operatingHours, merchant.openingTime, merchant.closingTime)) continue;
       const exactKm = haversineKm(latitude, longitude, merchant.latitude, merchant.longitude);
       if (exactKm > Math.min(radius, merchant.serviceRadiusKm)) continue;
       const distanceKm = round1(exactKm);
@@ -253,7 +256,7 @@ export class CatalogService {
 
     let merchantFilter: Prisma.MerchantProductWhereInput;
     if (hasLocation) {
-      const inRange = await this.merchantsInRange(opts.latitude!, opts.longitude!, opts.radiusKm);
+      const inRange = await this.merchantsInRange(opts.latitude!, opts.longitude!, opts.radiusKm, { isOpen: true, isOnline: true });
       if (inRange.length === 0) return [];
       for (const { merchant, reach } of inRange) reachByMerchant.set(merchant.id, reach);
       merchantFilter = { merchantId: { in: [...reachByMerchant.keys()] } };
@@ -275,13 +278,14 @@ export class CatalogService {
           ...(opts.productWhere ?? {}),
         },
       },
-      include: { product: true, merchant: true },
+      include: { product: true, merchant: { include: { operatingHours: true } } },
     });
 
     const effective = (o: (typeof offers)[number]) => o.discountPricePaisa ?? o.pricePaisa;
 
     const bestByProduct = new Map<string, (typeof offers)[number]>();
     for (const offer of offers) {
+      if (!isMerchantOpenAt(offer.merchant.operatingHours, offer.merchant.openingTime, offer.merchant.closingTime)) continue;
       const price = effective(offer);
       if (opts.minPricePaisa != null && price < opts.minPricePaisa) continue;
       if (opts.maxPricePaisa != null && price > opts.maxPricePaisa) continue;
@@ -492,7 +496,7 @@ export class CatalogService {
       merchant: { approvalStatus: MerchantApprovalStatus.APPROVED },
     };
     if (hasLocation) {
-      const inRange = await this.merchantsInRange(query.latitude!, query.longitude!);
+      const inRange = await this.merchantsInRange(query.latitude!, query.longitude!, undefined, { isOpen: true, isOnline: true });
       for (const { merchant, reach } of inRange) reachByMerchant.set(merchant.id, reach);
       merchantFilter = { merchantId: { in: [...reachByMerchant.keys()] } };
     }
@@ -589,6 +593,7 @@ export class CatalogService {
       const merchants = await this.prisma.merchant.findMany({
         where: { approvalStatus: MerchantApprovalStatus.APPROVED, ...extraWhere },
         orderBy: [{ ratingAverage: 'desc' }, { ratingCount: 'desc' }],
+        include: { operatingHours: true },
       });
       rows = merchants.map((merchant) => ({ merchant, reach: null }));
     }
@@ -598,7 +603,7 @@ export class CatalogService {
   }
 
   async merchantDetail(merchantId: string, query: LocationQuery) {
-    const merchant = await this.prisma.merchant.findUnique({ where: { id: merchantId } });
+    const merchant = await this.prisma.merchant.findUnique({ where: { id: merchantId }, include: { operatingHours: true } });
     if (!merchant || merchant.approvalStatus !== MerchantApprovalStatus.APPROVED) {
       throw new NotFoundException('Merchant not found');
     }
@@ -633,14 +638,14 @@ export class CatalogService {
   ) {
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: merchantId },
-      select: { id: true, approvalStatus: true, isOnline: true, isOpen: true },
+      select: { id: true, approvalStatus: true, isOnline: true, isOpen: true, openingTime: true, closingTime: true, operatingHours: true },
     });
     if (!merchant || merchant.approvalStatus !== MerchantApprovalStatus.APPROVED) {
       throw new NotFoundException('Merchant not found');
     }
 
     const { page, pageSize, skip, take } = parsePage(query);
-    if (!merchant.isOnline || !merchant.isOpen) return paged([], 0, page, pageSize);
+    if (!merchant.isOnline || !merchant.isOpen || !isMerchantOpenAt(merchant.operatingHours, merchant.openingTime, merchant.closingTime)) return paged([], 0, page, pageSize);
     const where: Prisma.MerchantProductWhereInput = {
       merchantId,
       merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true },
@@ -704,6 +709,9 @@ export class CatalogService {
       minimumOrderValuePaisa: number;
       isOnline: boolean;
       isOpen: boolean;
+      openingTime: string;
+      closingTime: string;
+      operatingHours?: Parameters<typeof isMerchantOpenAt>[0];
       city: string;
       area: string | null;
     },
@@ -722,6 +730,7 @@ export class CatalogService {
       minimumOrderValuePaisa: merchant.minimumOrderValuePaisa,
       isOnline: merchant.isOnline,
       isOpen: merchant.isOpen,
+      isAvailableNow: merchant.isOnline && merchant.isOpen && isMerchantOpenAt(merchant.operatingHours, merchant.openingTime, merchant.closingTime),
       city: merchant.city,
       area: merchant.area,
     };

@@ -37,3 +37,9 @@ rejected. Early assignment preserves preparation status. Pickup stays blocked
 until readiness; cancellation releases only the matching rider reservation.
 No database schema, payment, OTP, authentication or production configuration changes.
 Native merchant/rider app changes require new binaries before installation.
+
+## Customer-approved order revisions (2026-10-11)
+
+When stock is insufficient, a merchant may propose removing, reducing or replacing items through `POST /merchant/orders/:id/revisions`. The original order, inventory and totals remain unchanged while the proposal is pending. The owning customer must explicitly approve or reject within 30 minutes by default; expiry never approves and preserves the original order. One pending proposal is allowed per order, and request IDs make retries idempotent. Fulfillment and rider assignment are blocked until resolution.
+
+Approval revalidates the original order snapshot, current replacement price and stock inside a transaction. Until real payment adjustments/refunds are supported, only eligible COD orders without coupons/discounts use this workflow. Digital-payment and discounted orders are rejected rather than silently changing amounts. Revision state and audit snapshots require the additive SQL upgrade documented in `docs/architecture.md`; it is authored but unapplied.

@@ -7,6 +7,7 @@ import {
   PlaceOrderDto,
   QuoteOrderDto,
   RateOrderDto,
+  OrderRevisionResponseDto,
   ReplacementResponseDto,
 } from './orders.dto';
 import { AuthUser, CurrentUser, Roles } from '../common/decorators';
@@ -66,5 +67,15 @@ export class OrdersController {
     @Body() dto: ReplacementResponseDto,
   ) {
     return this.orders.respondToReplacement(user.userId, id, itemId, dto.accept);
+  }
+
+  @Post(':id/revisions/:revisionId/respond')
+  respondRevision(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('revisionId') revisionId: string,
+    @Body() dto: OrderRevisionResponseDto,
+  ) {
+    return this.orders.respondToRevision(user.userId, id, revisionId, dto.accept);
   }
 }

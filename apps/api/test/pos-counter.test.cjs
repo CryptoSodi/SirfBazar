@@ -4,11 +4,13 @@ const assert = require('node:assert/strict');
 const { PosService } = require('../src/pos/pos.service');
 
 function fixture() {
-  let state = { stock: 10, orders: [], audits: [] }, queue = Promise.resolve(), auditFails = false;
+  let state = { stock: 10, orders: [], audits: [], trial: null }, queue = Promise.resolve(), auditFails = false;
   const offer = { id: 'mp1', productId: 'p1', merchantId: 'shop', merchantSku: 'LOCAL1', pricePaisa: 29050, discountPricePaisa: null,
     isAvailable: true, product: { name: 'Milk', unit: 'pack', barcode: '00123', imageUrl: null, approvalStatus: 'APPROVED', isRestricted: false, requiresPrescription: false } };
   let lookupRows = null, lastQuery, missNextReplay = false;
   const prisma = {
+    merchant: { findUnique: async () => ({ userId: 'owner' }) },
+    merchantPosTrial: { findUnique: async () => state.trial },
     merchantProduct: { findMany: async (query) => { lastQuery = query; return lookupRows ?? [{ ...offer, stockQuantity: state.stock }]; } },
     order: { findUnique: async ({ where }) => { if (missNextReplay) { missNextReplay = false; return null; } return state.orders.find((o) => o.id === where.id) ?? null; },
       findFirst: async ({ where }) => state.orders.find((o) => o.id === where.id && o.merchantId === where.merchantId && o.channel === where.channel) ?? null },
@@ -36,7 +38,7 @@ function fixture() {
   };
   const access = { merchantContext: async (userId) => ({ merchantId: userId === 'foreign' ? 'other-shop' : 'shop', isOwner: userId === 'owner', permissions: userId === 'denied' ? [] : ['POS'] }),
     requirePermission: (ctx) => { if (!ctx.isOwner && !ctx.permissions.includes('POS')) throw Error('Permission denied'); } };
-  return { service: new PosService(prisma, access), state: () => state, offer, setRows: (rows) => { lookupRows = rows; }, query: () => lastQuery, failAudit: () => { auditFails = true; }, missNextReplay: () => { missNextReplay = true; } };
+  return { service: new PosService(prisma, access), state: () => state, offer, setRows: (rows) => { lookupRows = rows; }, query: () => lastQuery, failAudit: () => { auditFails = true; }, missNextReplay: () => { missNextReplay = true; }, setTrial: (trial) => { state.trial = trial; } };
 }
 const input = { requestId: '6c322b3a-1304-4d4f-b2a8-374b5f15f08a', counterName: 'Counter 1', amountTenderedPaisa: 100000,
   items: [{ merchantProductId: 'mp1', quantity: 2, expectedUnitPricePaisa: 29050 }] };
@@ -90,4 +92,24 @@ test('capabilities and refresh lookup require POS permission and retain tenant f
   await assert.rejects(f.service.capabilities('denied'), /Permission/);
   await f.service.listProducts('owner', undefined, ['mp1']);
   assert.deepEqual(f.query().where, { merchantId: 'shop', id: { in: ['mp1'] } });
+});
+
+test('expired and declined POS trials block new sales while retaining read-only records', async () => {
+  const f = fixture();
+  f.setTrial({ optedIn: true, startedAt: new Date('2026-01-01T00:00:00Z'), endsAt: new Date('2026-02-01T00:00:00Z') });
+  const expired = await f.service.capabilities('owner');
+  assert.equal(expired.salesEnabled, false); assert.equal(expired.readOnly, true); assert.equal(expired.trial.status, 'EXPIRED');
+  await assert.rejects(f.service.createSale('owner', input), /trial has ended.*read-only/);
+  assert.equal(f.state().stock, 10); assert.equal(f.state().orders.length, 0);
+  f.setTrial({ optedIn: false, startedAt: null, endsAt: null });
+  await assert.rejects(f.service.createSale('owner', input), /POS sales are disabled/);
+});
+
+test('legacy shops remain enabled and a completed receipt retry remains readable after expiry', async () => {
+  const f = fixture();
+  assert.equal((await f.service.capabilities('owner')).salesEnabled, true);
+  await f.service.createSale('owner', input);
+  f.setTrial({ optedIn: true, startedAt: new Date('2026-01-01T00:00:00Z'), endsAt: new Date('2026-02-01T00:00:00Z') });
+  assert.equal((await f.service.createSale('owner', input)).id, input.requestId);
+  assert.equal(f.state().stock, 8); assert.equal(f.state().orders.length, 1);
 });

@@ -66,6 +66,16 @@ test('offline-only products disappear and return only after the shop is online a
   assert.deepEqual((await f.service.search({})).items.map(i => i.merchant.id), ['offline']);
 });
 
+test('weekly closing hours hide offers even when the legacy open toggle remains on', async () => {
+  const f = catalogFixture();
+  const openShop = f.shops.find((shop) => shop.id === 'online');
+  openShop.operatingHours = Array.from({ length: 7 }, (_, dayOfWeek) => ({
+    dayOfWeek, isClosed: true, opensAt: null, closesAt: null, closesNextDay: false,
+  }));
+  assert.deepEqual((await f.service.search({})).items, []);
+  assert.deepEqual((await f.service.nearbyMerchants({})).items.find((shop) => shop.id === 'online').isAvailableNow, false);
+});
+
 function cartFixture(isOnline, isOpen) {
   let quantity = 2, writes = 0;
   const tx = {
