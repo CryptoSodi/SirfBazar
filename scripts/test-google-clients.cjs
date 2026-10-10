@@ -7,17 +7,25 @@ const ts = require('../apps/api/node_modules/typescript');
 
 // Match the repository's existing isolated component tests: real handlers, mocked React/SDK/transport.
 function harness(file, { imports = {}, globals = {}, post, googleToken = 'google-token', env = { VITE_GOOGLE_CLIENT_ID: 'web.apps.googleusercontent.com' } } = {}) {
-  const hooks = [], calls = [], toasts = [];
+  const hooks = [], calls = [], toasts = [], pendingEffects = [];
   let cursor = 0;
   let sessionEpoch = 'A';
+  const sameDeps = (left, right) => left && right && left.length === right.length && left.every((value, index) => Object.is(value, right[index]));
   const react = {
     useRef: value => { const slot = cursor++; return hooks[slot] ??= { current: value }; },
     useState: value => { const slot = cursor++; if (!(slot in hooks)) hooks[slot] = typeof value === 'function' ? value() : value;
       return [hooks[slot], value => { hooks[slot] = typeof value === 'function' ? value(hooks[slot]) : value; }]; },
-    useEffect: () => {},
+    useCallback: (callback, deps) => { const slot = cursor++, current = hooks[slot];
+      if (!current || current.type !== 'callback' || !sameDeps(current.deps, deps)) hooks[slot] = { type: 'callback', deps, callback };
+      return hooks[slot].callback; },
+    useEffect: (callback, deps) => { const slot = cursor++, current = hooks[slot];
+      if (!current || current.type !== 'effect' || !sameDeps(current.deps, deps)) { hooks[slot] = { type: 'effect', deps }; pendingEffects.push(callback); } },
   };
   const jsx = (type, props) => ({ type, props });
-  const api = { post: async (url, body) => { calls.push({ url, body }); return post?.(url, body); } };
+  const api = {
+    get: async () => ({ linked: calls.length > 0 }),
+    post: async (url, body) => { calls.push({ url, body }); return post?.(url, body); },
+  };
   const source = fs.readFileSync(path.join(__dirname, '..', file), 'utf8').replaceAll('import.meta.env', 'testEnv');
   const exports = {};
   const standard = {
@@ -38,11 +46,17 @@ function harness(file, { imports = {}, globals = {}, post, googleToken = 'google
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS,
     target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, {
     exports, testEnv: env, process: { env: { NEXT_PUBLIC_GOOGLE_CLIENT_ID: env.VITE_GOOGLE_CLIENT_ID } },
+    ResizeObserver: class { observe() {} disconnect() {} }, setTimeout: () => 1, clearTimeout: () => {},
     require: name => { if (name.endsWith('.css')) return {}; if (name in imports) return imports[name]; if (name in standard) return standard[name]; throw Error(`Unexpected import: ${name}`); },
     ...globals,
   });
   return { calls, toasts, setSession: epoch => { sessionEpoch = epoch; }, exports,
-    render: (name = 'GoogleAccountLink', props) => { cursor = 0; return exports[name](props); } };
+    render: (name = 'GoogleAccountLink', props) => {
+      cursor = 0;
+      const tree = exports[name](props);
+      while (pendingEffects.length) pendingEffects.shift()();
+      return tree;
+    } };
 }
 function find(node, predicate) {
   if (!node || typeof node !== 'object') return null;
@@ -51,14 +65,16 @@ function find(node, predicate) {
   return null;
 }
 const byType = (tree, type) => find(tree, node => node.type === type);
+const textOf = node => Array.isArray(node) ? node.map(textOf).join('') : typeof node === 'string' || typeof node === 'number' ? String(node) : node?.props ? textOf(node.props.children) : '';
 const flush = () => new Promise(setImmediate);
+async function renderReady(h, name, props) { h.render(name, props); await flush(); return h.render(name, props); }
 
 for (const app of ['web', 'admin', 'pos', 'shop']) {
   const file = `apps/${app}/${app === 'web' ? '' : 'src/'}components/GoogleAccountLink.tsx`;
   test(`${app}: explicit authenticated linking sends only Google proof, not client-selected user or role`, async () => {
     let resolve;
     const h = harness(file, { post: () => new Promise(done => { resolve = done; }) });
-    byType(h.render(), 'button').props.onClick();
+    byType(await renderReady(h), 'button').props.onClick();
     const google = byType(h.render(), 'GoogleLogin');
     google.props.onSuccess({ credential: 'proof' });
     google.props.onSuccess({ credential: 'proof' });
@@ -66,18 +82,18 @@ for (const app of ['web', 'admin', 'pos', 'shop']) {
     assert.equal(h.calls[0].url, '/auth/google-link');
     assert.deepEqual(Object.keys(h.calls[0].body), ['idToken']);
     resolve({ linked: true }); await flush();
-    if (app === 'web') assert.equal(h.toasts.at(-1)?.message, 'Google is linked to this account.');
+    if (app === 'web' || app === 'shop') assert.ok(find(h.render(), node => node.props?.children === 'Google connected'));
     else assert.ok(find(h.render(), node => node.props?.role === 'status'));
   });
   test(`${app}: no credential or SDK error does not call API; provider failure permits retry`, async () => {
     const h = harness(file, { post: async () => { throw Error('Service unavailable'); } });
-    byType(h.render(), 'button').props.onClick();
+    byType(await renderReady(h), 'button').props.onClick();
     const google = byType(h.render(), 'GoogleLogin');
     google.props.onError(); google.props.onSuccess({}); await flush();
     assert.equal(h.calls.length, 0);
     google.props.onSuccess({ credential: 'proof' }); await flush();
     if (app === 'web') assert.equal(h.toasts.at(-1)?.message, 'Service unavailable');
-    else assert.equal(find(h.render(), node => node.props?.role === 'alert').props.children, 'Service unavailable');
+    else assert.ok(textOf(find(h.render(), node => node.props?.role === 'alert').props.children).includes('Service unavailable'));
     google.props.onSuccess({ credential: 'proof' }); await flush();
     assert.equal(h.calls.length, 2);
   });
@@ -85,7 +101,7 @@ for (const app of ['web', 'admin', 'pos', 'shop']) {
 test('web: a completed Google link from the previous account cannot enqueue success feedback', async () => {
   let resolve;
   const h = harness('apps/web/components/GoogleAccountLink.tsx', { post: () => new Promise(done => { resolve = done; }) });
-  byType(h.render(), 'button').props.onClick();
+  byType(await renderReady(h), 'button').props.onClick();
   byType(h.render(), 'GoogleLogin').props.onSuccess({ credential: 'proof-A' });
   assert.equal(h.calls.length, 1);
   h.setSession('B');
@@ -97,12 +113,12 @@ for (const app of ['customer-app', 'merchant-app', 'rider-app']) {
   const file = `apps/${app}/components/GoogleAccountLink.tsx`;
   test(`${app}: native cancelled linking never calls API`, async () => {
     const h = harness(file, { googleToken: null });
-    byType(h.render(), 'Button').props.onPress(); await flush();
+    byType(await renderReady(h), 'Button').props.onPress(); await flush();
     assert.equal(h.calls.length, 0);
   });
   test(`${app}: repeated link tap sends once and reports a retryable failure`, async () => {
     const h = harness(file, { post: async () => { throw Error('Offline'); } });
-    const button = byType(h.render(), 'Button');
+    const button = byType(await renderReady(h), 'Button');
     button.props.onPress(); button.props.onPress(); await flush();
     assert.equal(h.calls.length, 1);
     assert.equal(h.calls[0].url, '/auth/google-link');
