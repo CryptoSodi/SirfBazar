@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -85,19 +86,22 @@ export class MerchantOrdersService {
   async accept(userId: string, orderId: string) {
     const { order } = await this.ownedOrder(userId, orderId);
     this.requireStatus(order.status, [OrderStatus.SENT_TO_MERCHANT]);
-    await this.statusService.apply(order.id, OrderStatus.MERCHANT_ACCEPTED, {
-      userId,
-      role: 'MERCHANT',
-    }, { acceptedAt: new Date() }, [OrderStatus.SENT_TO_MERCHANT]);
+    const changed = await serializable(this.prisma, async (tx) => {
+      await this.statusService.applyInTransaction(tx, order.id, OrderStatus.MERCHANT_ACCEPTED,
+        { userId, role: 'MERCHANT' }, { acceptedAt: new Date() }, [OrderStatus.SENT_TO_MERCHANT]);
+      return this.statusService.applyInTransaction(tx, order.id, OrderStatus.PREPARING,
+        { userId, role: 'MERCHANT' }, {}, [OrderStatus.MERCHANT_ACCEPTED]);
+    });
+    this.statusService.broadcastStatus(changed);
     await this.afterCommit(async () => this.notifications.notify({
       userId: order.customer.user.id,
       audience: 'CUSTOMER', scopeId: order.customer.user.id,
       title: 'Order accepted',
-      body: `${await this.shopName(order.merchantId!)} accepted order ${order.orderNumber} and will start preparing it.`,
+      body: `${await this.shopName(order.merchantId!)} is preparing order ${order.orderNumber}.`,
       type: NotificationType.ORDER_ACCEPTED,
       referenceId: order.id,
     }));
-    return { ok: true, status: OrderStatus.MERCHANT_ACCEPTED };
+    return { ok: true, status: OrderStatus.PREPARING };
   }
 
   async reject(userId: string, orderId: string, reason: string) {
@@ -132,11 +136,17 @@ export class MerchantOrdersService {
   async markReady(userId: string, orderId: string) {
     const { order } = await this.ownedOrder(userId, orderId);
     this.requireStatus(order.status, [OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING]);
-    await this.statusService.apply(order.id, OrderStatus.READY_FOR_PICKUP, {
-      userId,
-      role: 'MERCHANT',
-    }, { readyForPickupAt: new Date() }, [OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING]);
-    return { ok: true, status: OrderStatus.READY_FOR_PICKUP };
+    const changed = await serializable(this.prisma, async (tx) => {
+      // Re-read inside the transaction: readiness can race an early assignment.
+      const current = await tx.order.findUniqueOrThrow({ where: { id: order.id }, select: { riderId: true } });
+      const ready = await this.statusService.applyInTransaction(tx, order.id, OrderStatus.READY_FOR_PICKUP,
+        { userId, role: 'MERCHANT' }, { readyForPickupAt: new Date() }, [OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING]);
+      if (!current.riderId) return ready;
+      return this.statusService.applyInTransaction(tx, order.id, OrderStatus.RIDER_ASSIGNED,
+        { userId, role: 'SYSTEM', notes: 'Packed order ready for the assigned rider' }, {}, [OrderStatus.READY_FOR_PICKUP]);
+    });
+    this.statusService.broadcastStatus(changed);
+    return { ok: true, status: changed.order.status };
   }
 
   /**
@@ -146,7 +156,8 @@ export class MerchantOrdersService {
   async assignRider(userId: string, orderId: string, riderId: string) {
     const { ctx, order } = await this.ownedOrder(userId, orderId);
     this.access.requirePermission(ctx, StaffPermission.RIDERS);
-    this.requireStatus(order.status, [OrderStatus.READY_FOR_PICKUP]);
+    const assignableStatuses = [OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING, OrderStatus.READY_FOR_PICKUP];
+    this.requireStatus(order.status, assignableStatuses);
 
     const rider = await this.prisma.rider.findFirst({
       where: { id: riderId, merchantId: ctx.merchantId },
@@ -157,9 +168,15 @@ export class MerchantOrdersService {
     }
 
     const changed = await serializable(this.prisma, async (tx) => {
-      const claimed = await tx.rider.updateMany({ where: { id: rider.id, merchantId: ctx.merchantId, isActive: true, approvalStatus: 'APPROVED', currentStatus: RiderStatus.IDLE }, data: { currentStatus: RiderStatus.ASSIGNED, currentOrderId: order.id } });
+      const current = await tx.order.findFirst({ where: { id: order.id, merchantId: ctx.merchantId, riderId: null, status: { in: assignableStatuses } }, select: { status: true } });
+      if (!current) throw new ConflictException('This order already has a rider or has changed. Refresh the order.');
+      const claimed = await tx.rider.updateMany({ where: { id: rider.id, merchantId: ctx.merchantId, isActive: true, approvalStatus: 'APPROVED', currentStatus: RiderStatus.IDLE, currentOrderId: null }, data: { currentStatus: RiderStatus.ASSIGNED, currentOrderId: order.id } });
       if (claimed.count !== 1) throw new BadRequestException('Rider is already assigned or unavailable');
-      return this.statusService.applyInTransaction(tx, order.id, OrderStatus.RIDER_ASSIGNED, { userId, role: 'MERCHANT', notes: `Rider ${rider.fullName}` }, { riderId: rider.id, riderAssignedAt: new Date() }, [OrderStatus.READY_FOR_PICKUP]);
+      // Null-rider claim protects an order whose status remains PREPARING.
+      const reserved = await tx.order.updateMany({ where: { id: order.id, merchantId: ctx.merchantId, riderId: null, status: current.status }, data: { riderId: rider.id, riderAssignedAt: new Date() } });
+      if (reserved.count !== 1) throw new ConflictException('Rider assignment changed. Refresh the order.');
+      const next = current.status === OrderStatus.READY_FOR_PICKUP ? OrderStatus.RIDER_ASSIGNED : current.status as OrderStatus;
+      return this.statusService.applyInTransaction(tx, order.id, next, { userId, role: 'MERCHANT', notes: `Assigned rider: ${rider.fullName}` }, {}, [current.status]);
     });
     this.statusService.broadcastStatus(changed);
 
@@ -167,7 +184,7 @@ export class MerchantOrdersService {
       userId: rider.userId,
       audience: 'RIDER', scopeId: rider.id,
       title: 'New delivery assigned',
-      body: `Pick up order ${order.orderNumber} from the shop.`,
+      body: changed.order.status === OrderStatus.RIDER_ASSIGNED ? `Pick up order ${order.orderNumber} from the shop.` : `Order ${order.orderNumber} is assigned to you. Wait for the shop to mark it ready before pickup.`,
       type: NotificationType.RIDER_ASSIGNED,
       referenceId: order.id,
     }));
@@ -183,7 +200,7 @@ export class MerchantOrdersService {
       type: NotificationType.RIDER_ASSIGNED,
       referenceId: order.id,
     }));
-    return { ok: true, status: OrderStatus.RIDER_ASSIGNED, rider: { id: rider.id, fullName: rider.fullName } };
+    return { ok: true, status: changed.order.status, rider: { id: rider.id, fullName: rider.fullName } };
   }
 
   /** Mark an item unavailable, optionally suggesting a replacement product. */
@@ -225,7 +242,7 @@ export class MerchantOrdersService {
   private requireStatus(current: string, allowed: string[]) {
     if (!allowed.includes(current)) {
       throw new BadRequestException(
-        `Action not allowed while order is ${current}. Expected: ${allowed.join(', ')}`,
+        'This action is no longer available. Refresh the order to see its next step.',
       );
     }
   }

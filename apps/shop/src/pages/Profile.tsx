@@ -115,7 +115,8 @@ export default function Profile() {
   }, []);
 
   // Staff without the STORE permission cannot edit or toggle state (backend enforces too).
-  const canEdit = !merchant || merchant.isOwner || (merchant.permissions ?? []).includes('STORE');
+  const disabledShop = ['SUSPENDED', 'REJECTED', 'INACTIVE'].includes(merchant?.approvalStatus);
+  const canEdit = !!merchant && !disabledShop && (merchant.isOwner || (merchant.permissions ?? []).includes('STORE'));
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,7 +233,7 @@ export default function Profile() {
     <div>
       <section className="page-heading"><div><div className="kicker">Store management</div><h1>Shop settings</h1><p>Your shop identity, storefront controls and workspace preferences.</p></div></section>
       <GoogleAccountLink />
-      {!canEdit && <div className="state-banner warning"><ReferenceIcon name="lock" /><div><b>Read-only settings</b><p>You do not have the Store permission to edit shop details or storefront controls.</p></div></div>}
+      {!canEdit && <div className="state-banner warning"><ReferenceIcon name="lock" /><div><b>{disabledShop ? 'Shop disabled' : 'Read-only settings'}</b><p>{disabledShop ? 'Your shop has been disabled by admin. Contact support to restore access. Your profile remains available here.' : 'You do not have the Store permission to edit shop details or storefront controls.'}</p></div></div>}
       <div className="settings-grid">
         <section className="panel panel-pad">
           <div className="between"><h2>Shop details</h2><button type="button" className="btn tiny" disabled={!canEdit} onClick={() => setEditing(true)}>Edit details <ReferenceIcon name="edit" size="sm" /></button></div>
@@ -251,7 +252,8 @@ export default function Profile() {
           <div className="setting-line"><div><b>Shop open</b><p>{isOpen ? 'Open' : 'Closed'} for new orders.</p></div><button type="button" className="btn tiny" disabled={!canEdit || stateBusy} onClick={() => toggleState(isOpen ? 'close' : 'open', isOpen ? 'Shop closed' : 'Shop opened')}>{isOpen ? 'Close shop' : 'Open shop'}</button></div>
           <div className="setting-line"><div><b>Shop availability</b><p>{isOnline ? 'Online' : 'Offline'} in customer-facing availability.</p>{!canEdit && <p>You need shop settings permission to change availability.</p>}</div><AvailabilitySwitch online={isOnline} disabled={!canEdit} busy={stateBusy} onToggle={() => void toggleAvailability()} /></div>
           <p className="small muted" style={{ marginTop: 18 }}>Changing these flags does not record a delivery, cancel an order or prove storefront availability.</p>
-          <div className="section-divider" /><h3>Approval status</h3><p className="small muted" style={{ marginTop: 7 }}>This status is supplied by the backend.</p><div style={{ marginTop: 12 }}><Badge value={merchant.approvalStatus} /></div>
+          <div className="section-divider" /><h3>Shop access</h3><p className="small muted" style={{ marginTop: 7 }}>New shops start active. Admin can disable or reactivate access.</p><div style={{ marginTop: 12 }}><Badge value={merchant.approvalStatus === 'APPROVED' ? 'ACTIVE' : merchant.approvalStatus === 'SUSPENDED' ? 'DISABLED' : merchant.approvalStatus} /></div>
+          <div className="section-divider" /><h3>One-month trial</h3>{merchant.trial?.endsAt && <p className="small muted" style={{ marginTop: 7 }}>Trial ends {new Intl.DateTimeFormat('en-PK', { dateStyle: 'medium', timeZone: 'Asia/Karachi' }).format(new Date(merchant.trial.endsAt))}.</p>}<p className="small muted" style={{ marginTop: 7 }}>Access continues after the trial unless admin disables your shop. No automatic payment or lockout is enabled.</p>
           <div className="section-divider" /><div className="definition"><span>Rating</span><b>{(merchant.ratingAverage ?? 0).toFixed(1)} / 5 · {merchant.ratingCount ?? 0} reviews</b></div><div className="definition"><span>Commission</span><b>{merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}</b></div><div className="definition"><span>Shop type</span><b>{String(merchant.shopType ?? '—').replace(/_/g, ' ')}</b></div>
         </section>
       </div>

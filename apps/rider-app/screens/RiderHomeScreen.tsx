@@ -8,7 +8,7 @@ import { Badge, Body, Button, Card, H1, H2, Icon, IconBox, LinkButton, Note, Pag
 import type { TabName } from '../components/RiderUI';
 import { api, ApiError, clearAuth, pkr } from '../lib/api';
 import { useRiderTheme } from '../lib/appearance';
-import { customerName, isActive, paymentInstruction, withoutDeliveryCode } from '../lib/rider-orders';
+import { customerName, isActive, paymentInstruction, waitingForPacking, withoutDeliveryCode } from '../lib/rider-orders';
 import type { RiderOrder } from '../lib/rider-orders';
 
 type Profile = { fullName?: string; isOnline?: boolean; isActive?: boolean; approvalStatus?: string; merchant?: { shopName?: string; phoneNumber?: string } };
@@ -87,8 +87,8 @@ export default function RiderHomeScreen() {
       {profile?.approvalStatus === 'PENDING' && <Note icon="clock" tone="amber" style={{ marginBottom: 16 }}>Awaiting approval from {profile.merchant?.shopName ?? 'your shop'}. You can deliver after the owner approves and activates your account.</Note>}
       {current ? <>
         <View style={{ backgroundColor: palette.hero, borderRadius: 22, padding: 20, overflow: 'hidden' }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Text style={{ color: palette.heroQuiet, fontSize: 10, fontWeight: '700', letterSpacing: 1.6 }}>{current.status === 'RIDER_ASSIGNED' ? 'PICKUP NEXT' : 'DELIVERY IN PROGRESS'}</Text><View style={{ paddingVertical: 5, paddingHorizontal: 8, borderRadius: 7, backgroundColor: '#FFFFFF22', borderWidth: 1, borderColor: '#FFFFFF22' }}><Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>{current.orderNumber}</Text></View></View>
-          <Text style={{ color: '#FFFFFF', fontSize: 24, lineHeight: 30, fontWeight: '700', marginTop: 13, maxWidth: 240 }}>{current.status === 'RIDER_ASSIGNED' || current.status === 'RIDER_ARRIVED_AT_SHOP' ? 'Pick up your order.' : 'Head to the customer.'}</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><Text style={{ color: palette.heroQuiet, fontSize: 10, fontWeight: '700', letterSpacing: 1.6 }}>{waitingForPacking(current.status) ? 'WAITING FOR PACKING' : current.status === 'RIDER_ASSIGNED' ? 'PICKUP NEXT' : 'DELIVERY IN PROGRESS'}</Text><View style={{ paddingVertical: 5, paddingHorizontal: 8, borderRadius: 7, backgroundColor: '#FFFFFF22', borderWidth: 1, borderColor: '#FFFFFF22' }}><Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>{current.orderNumber}</Text></View></View>
+          <Text style={{ color: '#FFFFFF', fontSize: 24, lineHeight: 30, fontWeight: '700', marginTop: 13, maxWidth: 240 }}>{waitingForPacking(current.status) ? 'Your shop is preparing the order.' : current.status === 'RIDER_ASSIGNED' || current.status === 'RIDER_ARRIVED_AT_SHOP' ? 'Pick up your order.' : 'Head to the customer.'}</Text>
           <View style={{ marginTop: 20, gap: 22 }}>
             <View style={{ flexDirection: 'row', gap: 13 }}><View style={{ width: 12, height: 12, borderWidth: 3, borderColor: '#FFFFFF', borderRadius: 6, marginTop: 4 }} /><View style={{ flex: 1 }}><Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>{current.merchant?.shopName ?? profile?.merchant?.shopName ?? 'Pickup shop'}</Text><Body small style={{ color: palette.heroQuiet, marginTop: 3 }}>{current.merchant?.address ?? 'Address in order details'}</Body></View></View>
             <View style={{ flexDirection: 'row', gap: 13 }}><View style={{ width: 12, height: 12, borderWidth: 2, borderColor: palette.heroQuiet, borderRadius: 3, marginTop: 4 }} /><View style={{ flex: 1 }}><Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '700' }}>{customerName(current)} · {current.deliveryAddress?.area ?? current.deliveryAddress?.city ?? 'Drop-off'}</Text><Body small style={{ color: palette.heroQuiet, marginTop: 3 }}>Full address in order</Body></View></View>

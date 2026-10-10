@@ -19,6 +19,7 @@ const { CustomersService } = require('../src/customers/customers.service.ts');
 const { CartService } = require('../src/cart/cart.service.ts');
 const { AdminMarketplaceService } = require('../src/admin/admin-marketplace.service.ts');
 const { MerchantPeopleService } = require('../src/merchant/merchant-people.service.ts');
+const { MerchantService } = require('../src/merchant/merchant.service.ts');
 const { of, firstValueFrom } = require('rxjs');
 const { OrderStatus, PaymentStatus } = require('../src/common/constants.ts');
 
@@ -66,6 +67,70 @@ async function cartFor(buyer, item) {
 }
 
 const request = (buyer, cart, quote) => ({ requestId: randomUUID(), cartId: cart.id, deliveryAddressId: buyer.address.id, paymentMethod: 'COD', approvedQuote: quote.approvedQuote });
+
+async function dispatchFixture() {
+  const suffix = randomUUID().slice(0, 8);
+  const shop = await merchant(suffix), buyer = await customer(suffix);
+  const riders = [];
+  for (let i = 0; i < 2; i++) {
+    const user = await prisma.user.create({ data: { role: 'RIDER', status: 'ACTIVE', phoneNumber: `flow-${randomUUID()}` } });
+    riders.push(await prisma.rider.create({ data: { merchantId: shop.id, userId: user.id, fullName: `Flow rider ${i}`, phoneNumber: user.phoneNumber, currentStatus: 'IDLE' } }));
+  }
+  const makeOrder = (state = 'PREPARING') => prisma.order.create({ data: { orderNumber: `F-${randomUUID()}`, customerId: buyer.profile.id, merchantId: shop.id, channel: 'ONLINE', status: state, paymentMethod: 'COD', paymentStatus: 'CASH_PENDING' } });
+  return { shop, buyer, riders, makeOrder, dispatch: new MerchantOrdersService(prisma, access, notifications, realtime, orders, status), rider: new RiderService(prisma, access, notifications, realtime, status, settlements) };
+}
+
+test('PostgreSQL accept commits preparation once; early assignment cannot permit unpacked pickup', async () => {
+  const f = await dispatchFixture(), order = await f.makeOrder('SENT_TO_MERCHANT');
+  const accepted = await Promise.allSettled([f.dispatch.accept(f.shop.userId, order.id), f.dispatch.accept(f.shop.userId, order.id)]);
+  assert.equal(accepted.filter(r => r.status === 'fulfilled').length, 1);
+  const events = await prisma.orderTimelineEntry.findMany({ where: { orderId: order.id }, orderBy: { createdAt: 'asc' } });
+  assert.deepEqual(events.map(e => e.status).sort(), ['MERCHANT_ACCEPTED', 'PREPARING'].sort());
+  assert.equal((await f.dispatch.assignRider(f.shop.userId, order.id, f.riders[0].id)).status, 'PREPARING');
+  await assert.rejects(f.rider.pickedUp(f.riders[0].userId, order.id));
+  assert.equal((await f.dispatch.markReady(f.shop.userId, order.id)).status, 'RIDER_ASSIGNED');
+  assert.equal((await f.rider.pickedUp(f.riders[0].userId, order.id)).status, 'ON_THE_WAY');
+});
+
+test('PostgreSQL preparing-order rider races have one winner and cancellation releases reservation', async () => {
+  const f = await dispatchFixture(), first = await f.makeOrder(), second = await f.makeOrder();
+  const attempts = await Promise.allSettled(f.riders.map(r => f.dispatch.assignRider(f.shop.userId, first.id, r.id)));
+  assert.equal(attempts.filter(r => r.status === 'fulfilled').length, 1);
+  const saved = await prisma.order.findUniqueOrThrow({ where: { id: first.id } });
+  const reserved = await prisma.rider.findMany({ where: { merchantId: f.shop.id, currentOrderId: first.id } });
+  assert.equal(reserved.length, 1); assert.equal(reserved[0].id, saved.riderId);
+  await assert.rejects(f.dispatch.assignRider(f.shop.userId, second.id, saved.riderId));
+  await orders.cancelByAdmin(f.buyer.user.id, first.id, 'Disposable early assignment cancellation');
+  const released = await prisma.rider.findUniqueOrThrow({ where: { id: saved.riderId } });
+  assert.equal(released.currentOrderId, null); assert.equal(released.currentStatus, 'IDLE');
+  const unassigned = await prisma.order.findUniqueOrThrow({ where: { id: second.id } });
+  assert.equal(unassigned.riderId, null);
+});
+
+test('PostgreSQL concurrent assignment and readiness converge without losing rider or packing state', async () => {
+  const f = await dispatchFixture(), order = await f.makeOrder();
+  const attempts = await Promise.allSettled([f.dispatch.assignRider(f.shop.userId, order.id, f.riders[0].id), f.dispatch.markReady(f.shop.userId, order.id)]);
+  assert.ok(attempts.every(r => r.status === 'fulfilled'), attempts.filter(r => r.status === 'rejected').map(r => String(r.reason)).join('; '));
+  const saved = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+  assert.equal(saved.status, 'RIDER_ASSIGNED'); assert.equal(saved.riderId, f.riders[0].id); assert.ok(saved.readyForPickupAt);
+  assert.equal((await prisma.rider.findUniqueOrThrow({ where: { id: f.riders[0].id } })).currentOrderId, order.id);
+});
+
+test('PostgreSQL onboarding is active immediately; admin disable/reactivate preserves account and trial', async () => {
+  const user = await prisma.user.create({ data: { role: 'CUSTOMER', status: 'ACTIVE', phoneNumber: `saas-${randomUUID()}` } });
+  const service = new MerchantService(prisma, access, { log: async () => {} }, { issueTokens: async () => ({ accessToken: 'fixture', refreshToken: 'fixture', user }) });
+  const result = await service.onboard(user.id, { shopName: 'Disposable SaaS shop', shopType: 'GROCERY', address: 'Fixture', city: 'Lahore', phoneNumber: user.phoneNumber, latitude: 31.5, longitude: 74.3 });
+  const shop = result.merchant;
+  assert.equal(shop.approvalStatus, 'APPROVED'); assert.equal(shop.isOnline, true); assert.equal(shop.isOpen, true);
+  await admin.setMerchantApproval(user.id, shop.id, 'SUSPENDED', 'Disposable SaaS check');
+  await assert.rejects(access.merchantContext(user.id), /disabled/);
+  await assert.rejects(service.setOnline(user.id, true), /disabled/);
+  assert.equal((await service.profile(user.id)).approvalStatus, 'SUSPENDED');
+  await admin.setMerchantApproval(user.id, shop.id, 'APPROVED');
+  assert.equal((await access.merchantContext(user.id)).merchantId, shop.id);
+  assert.equal((await service.profile(user.id)).trial.startedAt, result.merchant.trial.startedAt);
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).role, 'CUSTOMER');
+});
 
 test('approved checkout binds the quote, recovers exact ID, reserves last unit once and restores once', async () => {
   await prisma.$connect();
@@ -273,9 +338,11 @@ test('postcommit notification failure cannot make merchant acceptance appear ret
   notifications.notify = async () => { throw new Error('simulated notification outage'); };
   try {
     const accepted = await service.accept(shop.userId, order.id);
-    assert.equal(accepted.status, OrderStatus.MERCHANT_ACCEPTED);
+    assert.equal(accepted.status, OrderStatus.PREPARING);
   } finally { notifications.notify = original; }
-  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.MERCHANT_ACCEPTED);
+  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, OrderStatus.PREPARING);
+  const timeline = await prisma.orderTimelineEntry.findMany({ where: { orderId: order.id } });
+  assert.deepEqual(timeline.map(entry => entry.status).sort(), ['MERCHANT_ACCEPTED', 'PREPARING'].sort());
 });
 
 test('linked support orders, rider location and nested OTP projection respect tenancy', async () => {

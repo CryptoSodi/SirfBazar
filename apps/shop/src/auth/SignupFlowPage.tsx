@@ -49,10 +49,10 @@ function SignupProgress({ step }: { step: 1 | 2 }) {
   return <div className="signup-progress" aria-label={`Step ${step} of 2`}>
     <div className="signup-progress-title">
       <div><span className="signup-step-tag">Step {step} of 2</span><span className="signup-progress-dot">·</span><span>{step === 1 ? 'Account & Security' : 'Shop Profile & Location'}</span></div>
-      <div className="signup-activation"><BadgeCheck size={17} />Merchant onboarding</div>
+      <div className="signup-activation"><BadgeCheck size={17} />One-month trial · start immediately</div>
     </div>
     <h1>{step === 1 ? 'Owner Details & Credentials' : 'Tell Us About Your Shop'}</h1>
-    <p>{step === 1 ? 'Enter the owner details that will be needed for merchant registration.' : 'Add your shop details, written address, and location information.'}</p>
+    <p>{step === 1 ? 'Create your account and start a one-month trial. No admin approval needed.' : 'Add your shop details and location. Your shop starts active; access continues after the trial unless admin disables it.'}</p>
     <div className="signup-progress-grid">
       <div className="signup-progress-item current"><div className="signup-progress-bar" /><div className="signup-progress-caption"><span><span className="signup-progress-number">{step === 2 ? <Check size={12} /> : '1'}</span>Owner details</span><small>{step === 2 ? 'Details entered' : 'In progress'}</small></div></div>
       <div className={'signup-progress-item' + (step === 2 ? ' current' : '')}><div className="signup-progress-bar" /><div className="signup-progress-caption"><span><span className="signup-progress-number">2</span>Shop details & location</span><small>{step === 2 ? 'In progress' : 'Upcoming'}</small></div></div>
