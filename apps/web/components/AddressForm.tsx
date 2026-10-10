@@ -6,12 +6,10 @@ import { AppIcon, type AppIconName } from './AppIcon';
 import dynamic from 'next/dynamic';
 import { useRef, useState } from 'react';
 import { api } from '@/lib/api';
-import { hasMapsKey } from '@/lib/maps';
 import type { PickedPoint } from './MapPicker';
 
 // Google Maps is browser-only — load the picker lazily, never during SSR.
 const MapPicker = dynamic(() => import('./MapPicker').then((m) => m.MapPicker), { ssr: false });
-const OpenMapPicker = dynamic(() => import('./OpenMapPicker').then((m) => m.OpenMapPicker), { ssr: false });
 
 const LABELS: { key: string; icon: AppIconName }[] = [
   { key: 'Home', icon: 'home' },
@@ -188,7 +186,7 @@ export function AddressForm({
         </button>
       </div>
 
-      {showMap && (hasMapsKey ? <MapPicker initial={coords} onConfirm={onPinned} onClose={closeMap} returnFocusTo={mapTrigger.current} /> : <OpenMapPicker initial={coords} onConfirm={onPinned} onClose={closeMap} returnFocusTo={mapTrigger.current} />)}
+      {showMap && <MapPicker initial={coords} onConfirm={onPinned} onClose={closeMap} returnFocusTo={mapTrigger.current} />}
     </div>
   );
 }

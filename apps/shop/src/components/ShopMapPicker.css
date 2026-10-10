@@ -38,7 +38,7 @@
 }
 .shop-map-heading h2 { font-size: 17px; }
 .shop-map-viewport { position: relative; flex: 1; min-height: 0; }
-.shop-map-canvas, .shop-map-canvas.leaflet-container { width: 100%; height: 100%; }
+.shop-map-canvas { width: 100%; height: 100%; }
 .shop-map-pin {
   position: absolute;
   top: 50%; left: 50%; z-index: 600;

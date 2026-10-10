@@ -299,7 +299,7 @@ export default function SignupFlowPage() {
             <p className="signup-help">Choose the shop entrance on the map, use device location, or enter coordinates.</p>
             <div className="signup-map">
               {googleMapsConfigured && !mapFailed ? <GooglePinMap key={mapAttempt} latitude={latitude} longitude={longitude} onError={() => setMapFailed(true)} onSelect={point => { setLatitude(point.lat.toFixed(6)); setLongitude(point.lng.toFixed(6)); setLatitudeError(''); setLongitudeError(''); setRequestError(''); setLocationError(''); setLocationMessage('') }} /> :
-                <div className="signup-map-empty"><MapPin size={28} aria-hidden="true" /><strong>{mapFailed ? 'Map could not load' : 'Map preview unavailable'}</strong><p>{mapFailed ? 'Retry the map or use the fallback picker or coordinates.' : 'Open the fallback map picker, use device location, or enter coordinates below.'}</p></div>}
+                <div className="signup-map-empty"><MapPin size={28} aria-hidden="true" /><strong>{mapFailed ? 'Google Maps could not load' : 'Google map preview unavailable'}</strong><p>{mapFailed ? 'Retry Google Maps or enter the shop coordinates below.' : 'Open the Google map picker, use device location, or enter coordinates below.'}</p></div>}
               <div className="signup-map-actions">
                 <button ref={mapTrigger} type="button" onClick={() => setMapOpen(true)}><MapPin size={16} />Open map picker</button>
                 {mapFailed && googleMapsConfigured && <button type="button" onClick={() => { setMapFailed(false); setMapAttempt(value => value + 1) }}>Retry map</button>}
@@ -311,7 +311,7 @@ export default function SignupFlowPage() {
             {locationMessage && <small className="signup-location-status" role="status">{locationMessage}</small>}
             {locationError && <small className="signup-location-error" role="alert">{locationError}</small>}
             <div className="signup-two-col signup-coordinate-fields"><div className="signup-field"><label htmlFor="shop-latitude">Latitude</label><input ref={latitudeInput} id="shop-latitude" inputMode="decimal" placeholder="31.520370" value={latitude} onChange={event => { setLatitude(event.target.value); setLatitudeError(''); setLocationError(''); setLocationMessage('') }} aria-invalid={Boolean(latitudeError)} aria-describedby={latitudeError ? 'shop-latitude-error' : undefined} />{latitudeError && <small className="signup-field-error" id="shop-latitude-error">{latitudeError}</small>}</div><div className="signup-field"><label htmlFor="shop-longitude">Longitude</label><input ref={longitudeInput} id="shop-longitude" inputMode="decimal" placeholder="74.358749" value={longitude} onChange={event => { setLongitude(event.target.value); setLongitudeError(''); setLocationError(''); setLocationMessage('') }} aria-invalid={Boolean(longitudeError)} aria-describedby={longitudeError ? 'shop-longitude-error' : undefined} />{longitudeError && <small className="signup-field-error" id="shop-longitude-error">{longitudeError}</small>}</div></div>
-            <small className="signup-help"><Info size={15} />Click the Google map or drag its pin when available. In the fallback picker, move the map and select its center. Manual coordinates also work.</small>
+            <small className="signup-help"><Info size={15} />Select a point on the Google map or drag its pin. You can also use device location or enter coordinates.</small>
           </section>
 
           <section className="signup-block">

@@ -85,7 +85,11 @@ export function MapPicker({
         </div>
 
         <div className="relative flex-1">
-          {loadError ? (
+          {!GOOGLE_MAPS_API_KEY ? (
+            <div className="grid h-full place-items-center p-6 text-center text-sm text-stone-600" role="alert">
+              Google Maps is not configured for this site. Use your current location or enter the address details manually.
+            </div>
+          ) : loadError ? (
             <div className="grid h-full place-items-center p-6 text-center text-sm text-red-600">
               Couldn’t load the map. Check that the Google Maps key allows this site.
             </div>
@@ -104,10 +108,10 @@ export function MapPicker({
                 }}
                 onLoad={(map) => {
                   mapRef.current = map;
+                  map.addListener('idle', syncCenter);
                 }}
                 onDragEnd={() => { syncCenter(); setChosen(true); }}
                 onClick={(event) => { if (event.latLng) { const next = { lat: event.latLng.lat(), lng: event.latLng.lng() }; mapRef.current?.setCenter(next); setCenter(next); setChosen(true); } }}
-                onIdle={syncCenter}
               />
               {/* Fixed centre pin — its tip points at the map centre. */}
               <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-full text-4xl drop-shadow-md">
@@ -115,19 +119,20 @@ export function MapPicker({
               </div>
               <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/40" />
 
-              <button
-                type="button"
-                aria-label="Use my current location"
-                onClick={recenterToGps}
-                className="absolute bottom-4 right-4 z-10 grid h-11 w-11 place-items-center rounded-full border border-stone-200 bg-white text-lg shadow-lg"
-                title="Use my current location"
-              >
-                {locating ? '…' : <AppIcon name="location" size={20} />}
-              </button>
             </>
           ) : (
             <div className="grid h-full place-items-center text-sm text-stone-500">Loading map…</div>
           )}
+          <button
+            type="button"
+            aria-label="Use my current location"
+            onClick={recenterToGps}
+            disabled={locating}
+            className="absolute bottom-4 right-4 z-10 grid h-11 w-11 place-items-center rounded-full border border-stone-200 bg-white text-lg shadow-lg disabled:opacity-60"
+            title="Use my current location"
+          >
+            {locating ? '…' : <AppIcon name="location" size={20} />}
+          </button>
         </div>
 
         <div className="border-t border-stone-200 p-4">

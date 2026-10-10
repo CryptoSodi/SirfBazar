@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import Image from 'next/image';
 import './globals.css';
-import 'leaflet/dist/leaflet.css';
 import { Header } from '@/components/Header';
 import { ToastHost } from '@/components/Toast';
 

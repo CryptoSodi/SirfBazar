@@ -1,11 +1,6 @@
 import { ToastMessage } from '../components/Toast';
-import { importLibrary, setOptions } from '@googlemaps/js-api-loader'
 import { useEffect, useRef, useState } from 'react'
-
-const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim()
-const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID?.trim() || (import.meta.env.DEV ? 'DEMO_MAP_ID' : '')
-
-if (apiKey) setOptions({ key: apiKey, v: 'weekly', language: 'en', region: 'PK' })
+import { googleMapsApiKey as apiKey, googleMapsMapId as mapId, loadGoogleMaps, loadGoogleMapsMarkers } from './googleMaps'
 
 type Coordinates = { lat: number; lng: number }
 type Props = { latitude: string; longitude: string; onSelect: (coordinates: Coordinates) => void; onError?: () => void }
@@ -39,9 +34,7 @@ export default function GooglePinMap({ latitude, longitude, onSelect, onError }:
 
     async function initialize() {
       try {
-        const [{ Map }, { AdvancedMarkerElement }] = await Promise.all([
-          importLibrary('maps'), importLibrary('marker'),
-        ])
+        const [{ Map }, { AdvancedMarkerElement }] = await Promise.all([loadGoogleMaps(), loadGoogleMapsMarkers()])
         if (cancelled || !elementRef.current) return
         const chosen = validCoordinates(latitude, longitude)
         const map = new Map(elementRef.current, {

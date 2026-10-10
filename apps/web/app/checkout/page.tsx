@@ -12,11 +12,9 @@ import { CheckoutRecovery, clearCheckoutRecovery, isDefinitiveNoWrite, readCheck
 import { formatPKR } from '@/lib/format';
 import { LoginSheet } from '@/components/LoginSheet';
 import { useModalFocus } from '@/components/useModalFocus';
-import { hasMapsKey } from '@/lib/maps';
 import type { PickedPoint } from '@/components/MapPicker';
 
 const MapPicker = dynamic(() => import('@/components/MapPicker').then((module) => module.MapPicker), { ssr: false });
-const OpenMapPicker = dynamic(() => import('@/components/OpenMapPicker').then((module) => module.OpenMapPicker), { ssr: false });
 
 const DRAFT_KEY = 'sb.checkoutDraft';
 type Draft = { contactName: string; contactPhone: string; fullAddress: string; city: string; instructions: string; latitude: number | null; longitude: number | null };
@@ -305,7 +303,7 @@ export default function CheckoutPage() {
       </div>
       <div className="sb-checkout-mobile-action"><span><small>Total to pay</small><strong>{formatPKR(approved?.quote?.totalAmountPaisa ?? cart.totalPaisa)}</strong></span><button className="btn-primary" disabled={busy} onClick={onContinue}>{busy ? 'Please wait…' : !signedIn ? 'Continue to sign in' : !addressId ? 'Save address' : reviewed ? 'Place order' : 'Review order'}&nbsp; <UiIcon name="arrow" size={18} /></button></div>
       {showLogin && <LoginSheet title="Sign in or create an account" description="Continue to review your basket before placing an order. Your delivery details stay here." onClose={() => setShowLogin(false)} onSuccess={() => { setShowLogin(false); setReviewed(false); setNotice('Your basket has been merged. Check the items and total before placing the order.'); void refresh(); }} />}
-      {showMap && (hasMapsKey ? <MapPicker initial={draft.latitude !== null && draft.longitude !== null ? { latitude: draft.latitude, longitude: draft.longitude } : null} onConfirm={pinLocation} onClose={closeMap} returnFocusTo={mapTrigger.current} /> : <OpenMapPicker initial={draft.latitude !== null && draft.longitude !== null ? { latitude: draft.latitude, longitude: draft.longitude } : null} onConfirm={pinLocation} onClose={closeMap} returnFocusTo={mapTrigger.current} />)}
+      {showMap && <MapPicker initial={draft.latitude !== null && draft.longitude !== null ? { latitude: draft.latitude, longitude: draft.longitude } : null} onConfirm={pinLocation} onClose={closeMap} returnFocusTo={mapTrigger.current} />}
       {uncertain && <div className="sb-modal-backdrop"><div ref={uncertainFocus.ref} onKeyDown={uncertainFocus.onKeyDown} tabIndex={-1} className="card sb-modal" role="alertdialog" aria-modal="true" aria-labelledby="order-uncertain-title"><h2 id="order-uncertain-title">We’re checking your order</h2><p>The response didn’t arrive. Your order may already have been created. Do not place it again yet.</p><Link className="btn-primary mt-4 inline-flex w-full justify-center" href="/orders">Check order status</Link><Link className="btn-secondary mt-2 inline-flex w-full justify-center" href="/contact">Contact support</Link></div></div>}
     </div>
   );

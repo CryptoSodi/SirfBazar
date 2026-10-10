@@ -26,7 +26,12 @@ module.exports = async (page, baseUrl) => {
   const trigger = page.locator('.sb-site-location');
   await trigger.click();
   const picker = page.getByRole('dialog', { name: 'Choose your location', exact: true });
-  const map = picker.locator('.leaflet-container');
+  const map = picker.locator('.sb-location-map-canvas');
+  const waitForMapState = async () => page.waitForFunction(() =>
+    Boolean(document.querySelector('.sb-location-map-canvas .gm-style')) ||
+    Boolean(document.querySelector('.sb-location-map-unavailable')?.textContent?.startsWith('Google Maps is not configured')) ||
+    Boolean(document.querySelector('.sb-location-map-unavailable')?.textContent?.startsWith('Google Maps could not load')),
+  );
   const checkContrast = async () => {
     const ratios = await picker.evaluate(root => {
       const luminance = color => {
@@ -42,18 +47,28 @@ module.exports = async (page, baseUrl) => {
     });
     assert.ok(ratios.every(ratio => ratio >= 4.5), 'picker text and controls meet 4.5:1 contrast');
   };
-  await map.waitFor();
+  await waitForMapState();
+  assert.equal(await picker.locator('.leaflet-container').count(), 0, 'location picker must not render a Leaflet fallback');
+  const mapAvailable = await map.locator('.gm-style').count() > 0;
   await checkContrast();
   await picker.getByText(/^(Map centre|Selected): 31\.52040, 74\.35870$/).waitFor();
   await picker.getByRole('heading', { name: 'Pick my area', exact: true }).waitFor();
   await picker.getByRole('button', { name: 'Use my current location', exact: true }).click();
   assert.deepEqual(await page.evaluate(() => window.__fixtureGps.options), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
-  await map.click({ position: { x: 250, y: 80 } });
-  const pinText = await picker.locator('.sb-area-picker-coordinates').textContent();
-  const match = pinText.match(/Selected: (-?\d+\.\d+), (-?\d+\.\d+)/);
-  assert.ok(match, 'a pointer-selected point has visible coordinates');
-  await page.evaluate(() => window.__fixtureGps.success({ coords: { latitude: 32.1, longitude: 75.1 } }));
-  assert.equal(await picker.locator('.sb-area-picker-coordinates').textContent(), pinText, 'late GPS must not replace a newer manually selected pin');
+  let match;
+  if (mapAvailable) {
+    await map.locator('.gm-style').click({ position: { x: 250, y: 80 } });
+    const pinText = await picker.locator('.sb-area-picker-coordinates').textContent();
+    match = pinText.match(/Selected: (-?\d+\.\d+), (-?\d+\.\d+)/);
+    assert.ok(match, 'a pointer-selected Google Maps point has visible coordinates');
+    await page.evaluate(() => window.__fixtureGps.success({ coords: { latitude: 32.1, longitude: 75.1 } }));
+    assert.equal(await picker.locator('.sb-area-picker-coordinates').textContent(), pinText, 'late GPS must not replace a newer manually selected pin');
+  } else {
+    await page.evaluate(() => window.__fixtureGps.success({ coords: { latitude: 32.1, longitude: 75.1 } }));
+    await picker.getByText('Selected: 32.10000, 75.10000', { exact: true }).waitFor();
+    match = ['Selected: 32.10000, 75.10000', '32.10000', '75.10000'];
+    assert.equal(await picker.locator('.sb-location-map-unavailable').isVisible(), true, 'missing Google Maps configuration is explained without a different map provider');
+  }
   await picker.getByRole('button', { name: 'Confirm this location', exact: true }).click();
   await picker.waitFor({ state: 'hidden' });
   await page.locator('[data-toast-host] > div').last().getByText('Location updated. Nearby shops will refresh for this pin.').waitFor();
@@ -65,19 +80,21 @@ module.exports = async (page, baseUrl) => {
   assert.ok(nearby.some(query => Number(query.latitude) === saved.latitude && Number(query.longitude) === saved.longitude), 'nearby shops must refresh using the newly confirmed coordinates');
   await trigger.getByText(/Pinned location/).waitFor();
   await trigger.click();
-  await map.waitFor();
+  await waitForMapState();
   await picker.getByText(`Selected: ${saved.latitude.toFixed(5)}, ${saved.longitude.toFixed(5)}`, { exact: true }).waitFor();
   await picker.getByRole('button', { name: 'Use my current location', exact: true }).click();
   await page.evaluate(() => window.__fixtureGps.success({ coords: { latitude: 31.61, longitude: 74.41 } }));
   await picker.getByText('Selected: 31.61000, 74.41000', { exact: true }).waitFor();
-  await map.focus(); await page.keyboard.press('ArrowRight');
-  await page.waitForFunction(() => !document.querySelector('.sb-area-picker-coordinates').textContent.includes('74.41000'));
+  if (mapAvailable) {
+    await map.locator('.gm-style').focus(); await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => !document.querySelector('.sb-area-picker-coordinates').textContent.includes('74.41000'));
+  }
   await picker.getByRole('button', { name: 'Confirm this location', exact: true }).click();
   await picker.waitFor({ state: 'hidden' });
   assert.equal(await trigger.evaluate(node => node === document.activeElement), true, 'picker restores its header trigger');
   await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
   const beforeStorageFailure = await page.evaluate(() => localStorage.getItem('sb.location'));
-  await trigger.click(); await map.waitFor();
+  await trigger.click(); await waitForMapState();
   await picker.getByRole('button', { name: 'Use my current location', exact: true }).click();
   await page.evaluate(() => window.__fixtureGps.success({ coords: { latitude: 31.62, longitude: 74.42 } }));
   await picker.getByText('Selected: 31.62000, 74.42000', { exact: true }).waitFor();
@@ -105,7 +122,7 @@ module.exports = async (page, baseUrl) => {
   assert.equal(await page.getByText(/Unable to save this location/).count(), 0, 'successful retry replaces its error without requiring manual dismissal');
   await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 720 });
-  await trigger.click(); await map.waitFor();
+  await trigger.click(); await waitForMapState();
   await checkContrast();
   assert.equal(await picker.evaluate(node => node.scrollWidth <= node.clientWidth), true);
   await picker.getByRole('button', { name: 'Confirm this location', exact: true }).scrollIntoViewIfNeeded();
@@ -119,16 +136,16 @@ module.exports = async (page, baseUrl) => {
     const savedOnMobile = await page.evaluate(() => JSON.parse(localStorage.getItem('sb.location')));
     assert.equal(selectedOnMobile, `Selected: ${savedOnMobile.latitude.toFixed(5)}, ${savedOnMobile.longitude.toFixed(5)}`);
     await page.getByRole('button', { name: 'Dismiss notification', exact: true }).click();
-    await trigger.tap(); await map.waitFor();
+  await trigger.tap(); await waitForMapState();
   }
   await page.keyboard.press('Escape'); await picker.waitFor({ state: 'hidden' });
   assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
   await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
-  await trigger.click(); await map.waitFor();
+  await trigger.click(); await waitForMapState();
   await checkContrast();
   assert.equal(await picker.evaluate(node => node.scrollWidth <= node.clientWidth), true);
   await picker.evaluate(node => { node.scrollTop = 0; });
   await page.screenshot({ path: 'output/playwright/location-map-dark-320.png', fullPage: true });
   await page.keyboard.press('Escape'); await picker.waitFor({ state: 'hidden' });
-  return 'PASS inline area map: immediate exact confirmation, nearby refresh, no merchant-area relabelling, storage failure/retry, saved pin, fresh GPS, late-GPS fence, keyboard, focus and 320px reflow';
+  return `PASS Google Maps location picker: ${mapAvailable ? 'map pin interaction' : 'explicit unavailable guidance and GPS fallback'}, immediate exact confirmation, nearby refresh, storage failure/retry, saved pin, fresh GPS, focus, dark mode and 320px reflow`;
 };
