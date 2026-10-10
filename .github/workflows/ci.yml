@@ -73,7 +73,11 @@ jobs:
           tar --hard-dereference -czf "$RUNNER_TEMP/ci-api-release.tar.gz" -C "$RUNNER_TEMP/ci-api-release" .
           python3 -B ../../deploy/api/validate-release.py "$RUNNER_TEMP/ci-api-release.tar.gz" "$RUNNER_TEMP/ci-verified-release" "$GITHUB_SHA"
       - name: Initialize disposable smoke database
-        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f prisma/remediation-disposable-fixture.sql
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f prisma/remediation-disposable-fixture.sql \
+            -f prisma/upgrades/20261011-google-account-profile.sql \
+            -f prisma/upgrades/20261011-merchant-settings-pos-and-order-revisions.sql
       - run: npm run seed
       - name: Run packaged release against the disposable smoke database
         shell: bash
@@ -276,7 +280,11 @@ jobs:
       - run: npx prisma generate
         working-directory: apps/api
       - name: Initialize disposable schema from checked-in fixture
-        run: psql "$REMEDIATION_DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/prisma/remediation-disposable-fixture.sql
+        run: |
+          psql "$REMEDIATION_DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -f apps/api/prisma/remediation-disposable-fixture.sql \
+            -f apps/api/prisma/upgrades/20261011-google-account-profile.sql \
+            -f apps/api/prisma/upgrades/20261011-merchant-settings-pos-and-order-revisions.sql
       - run: node scripts/verify-remediation.mjs --database
 
   release-checks:
