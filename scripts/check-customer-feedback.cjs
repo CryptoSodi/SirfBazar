@@ -19,7 +19,8 @@ module.exports = async (page, baseUrl) => {
     else if (u.pathname.endsWith('/merchants/nearby')) data = { items: [{ id: 'shop-fixture' }], total: 1 };
     await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(data) });
   });
-  await page.context().addInitScript(() => { localStorage.setItem('sb.accessToken','fixture'); localStorage.setItem('sb.user',JSON.stringify({ id:'customer-fixture' })); localStorage.setItem('sb.location',JSON.stringify({ latitude:31.52,longitude:74.35,label:'Test area' })); localStorage.setItem('sb.theme','light'); });
+  const confirmedAt = new Date().toISOString();
+  await page.context().addInitScript(({ confirmedAt }) => { localStorage.setItem('sb.accessToken','fixture'); localStorage.setItem('sb.user',JSON.stringify({ id:'customer-fixture' })); localStorage.setItem('sb.location',JSON.stringify({ latitude:31.52,longitude:74.35,label:'Test area',confirmedAt })); localStorage.setItem('sb.theme','light'); }, { confirmedAt });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${baseUrl}/checkout`);
   const review = page.locator('.sb-checkout-summary').getByRole('button',{name:'Review order',exact:true});
