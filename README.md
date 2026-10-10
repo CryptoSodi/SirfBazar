@@ -6,33 +6,37 @@ Unlike dark-store models, SirfBazar **owns no inventory and no warehouses** — 
 
 ## Android APK downloads
 
-Release-signed **testing builds**, version 1.0.0 (build 2), built on 9 October 2026
-from consolidated `master` commit `3190156`. These connect to the live SirfBazar
-API; they are not a Google Play release.
+Release-signed **testing builds**, version 1.0.0 (Android version code 3), built
+on 9 October 2026 with distinct Customer, Merchant, and Rider launcher icons.
+They connect to the live SirfBazar API; they are not a Google Play release.
+
+Build source snapshot: `47ae4cd` (base `848da0e` plus the icon changes). This
+snapshot predates later mobile source changes now on `master`; these APKs are
+not rebuilt from current `master`.
 
 | App | Package | Download |
 |---|---|---|
-| Customer | `pk.sirfbazar.customer` | [Download customer APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-2026-10-09/sirfbazar-customer-v1.0.0-build2.apk) |
-| Merchant | `pk.sirfbazar.merchant` | [Download merchant APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-2026-10-09/sirfbazar-merchant-v1.0.0-build2.apk) |
-| Rider | `pk.sirfbazar.rider` | [Download rider APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-2026-10-09/sirfbazar-rider-v1.0.0-build2.apk) |
+| Customer | `pk.sirfbazar.customer` | [Download customer APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-icons-build3-2026-10-09/sirfbazar-customer-v1.0.0-build3.apk) |
+| Merchant | `pk.sirfbazar.merchant` | [Download merchant APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-icons-build3-2026-10-09/sirfbazar-merchant-v1.0.0-build3.apk) |
+| Rider | `pk.sirfbazar.rider` | [Download rider APK](https://github.com/CryptoSodi/SirfBazar/releases/download/android-icons-build3-2026-10-09/sirfbazar-rider-v1.0.0-build3.apk) |
 
-The [GitHub prerelease](https://github.com/CryptoSodi/SirfBazar/releases/tag/android-2026-10-09)
-includes all three APKs, `SHA256SUMS.txt` and `build-manifest.json`. These downloads
+The [GitHub testing prerelease](https://github.com/CryptoSodi/SirfBazar/releases/tag/android-icons-build3-2026-10-09)
+includes all three APKs, `SHA256SUMS.txt` and `build-manifest.json`. The downloads
 are hosted on GitHub and do not use expiring Expo artifact links. Package names,
 release signatures, build numbers and checksums passed verification; see the
-[9 October APK report](docs/production-readiness/ANDROID_RELEASE_2026-10-09.md).
+[build 3 report](docs/production-readiness/ANDROID_ICONS_BUILD3_2026-10-09.md).
 
-These APKs include the consolidation and mobile changes through `3190156`.
-Later pushes do not update installed apps or replace these binaries: new mobile
-changes require another build and installation. iOS requires a separate build;
-no iOS download is provided here. Native-device login, checkout, GPS and push
-checks remain pending, and known dependency warnings remain documented in the
-report. Google consent was last recorded as External/Testing; this release does
-not change consent or test-user access.
+Build 3 uses the same per-app SirfBazar release keys as build 2, preserving its
+update signing identity; in-place installation was not device-tested. Later
+mobile changes on `master` require another build and installation. iOS requires
+a separate build; no iOS download is provided here. Native-device login,
+checkout, GPS and push checks remain pending, and known dependency warnings
+remain documented in the report. Google consent was last recorded as
+External/Testing; this release does not change consent or test-user access.
 
-Build 2 uses the same per-app SirfBazar release keys as the 8 October build-1
-APKs, preserving their update signing identity. Older APKs signed with a different
-key cannot be updated in place. Do not uninstall an existing app without first
+The [build 2 prerelease](https://github.com/CryptoSodi/SirfBazar/releases/tag/android-2026-10-09)
+is retained as a historical version. Older APKs signed with a different key
+cannot be updated in place. Do not uninstall an existing app without first
 considering loss of its local data. The [previous build report](docs/production-readiness/ANDROID_LOCAL_RELEASE_CANDIDATES.md)
 is retained as historical evidence.
 
