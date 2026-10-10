@@ -104,7 +104,7 @@ try {
   await firstPage.getByLabel('House / apartment, street & area').fill('Fixture Street 12');
   await firstPage.getByLabel('City').fill('Lahore');
   await firstPage.getByRole('button', { name: 'Pin on map' }).click();
-  const firstPicker = firstPage.getByRole('dialog', { name: 'Choose a delivery location' });
+  const firstPicker = firstPage.getByRole('dialog', { name: 'Pin your exact location' });
   assert.equal(await firstPicker.locator('.leaflet-container').count(), 0, 'checkout picker must not render a Leaflet map');
   await firstPicker.getByRole('button', { name: 'Select map center' }).click();
   await firstPicker.getByRole('button', { name: 'Confirm this location' }).click();
@@ -143,7 +143,7 @@ try {
   await mapPage.getByRole('button', { name: /Add address/ }).click();
   const mapTrigger = mapPage.getByRole('button', { name: 'Pin on map' });
   await mapTrigger.click();
-  const picker = mapPage.getByRole('dialog', { name: 'Choose a delivery location' });
+  const picker = mapPage.getByRole('dialog', { name: 'Pin your exact location' });
   await picker.waitFor();
   await picker.getByRole('button', { name: 'Use current location' }).click();
   await mapPage.getByText(/Location access failed/).waitFor();
