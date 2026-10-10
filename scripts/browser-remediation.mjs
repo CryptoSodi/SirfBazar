@@ -105,17 +105,16 @@ try {
   await firstPage.getByLabel('City').fill('Lahore');
   await firstPage.getByRole('button', { name: 'Pin on map' }).click();
   const firstPicker = firstPage.getByRole('dialog', { name: 'Choose a delivery location' });
-  await firstPicker.locator('.leaflet-container').focus();
-  await firstPage.keyboard.press('ArrowRight');
+  await firstPicker.getByText(/Google Maps is not configured|Couldn’t load the map/).waitFor();
   await firstPicker.getByRole('button', { name: 'Select map center' }).click();
-  await firstPicker.getByRole('button', { name: 'Confirm location' }).click();
+  await firstPicker.getByRole('button', { name: 'Confirm this location' }).click();
   await firstPicker.waitFor({ state: 'hidden' });
   const displayedPin = await firstPage.getByText(/^Pinned: /).textContent();
   await firstPage.getByRole('button', { name: 'Save as new address' }).click();
   await visibleToast(firstPage).getByText('Delivery details saved.').waitFor();
   assert.equal(Number.isFinite(addressPost?.latitude), true, 'first address POST has selected numeric latitude');
   assert.equal(Number.isFinite(addressPost?.longitude), true, 'first address POST has selected numeric longitude');
-  assert.notEqual(addressPost.longitude, 0, 'map keyboard pan selects an actual location');
+  assert.notEqual(addressPost.longitude, 0, 'Google Maps fallback center selects a valid location when the API key is absent');
   assert.equal(displayedPin?.trim(), `Pinned: ${addressPost.latitude.toFixed(5)}, ${addressPost.longitude.toFixed(5)}`, 'submitted coordinates match the selected visible map pin');
   assert.deepEqual({ ...addressResponse, id: undefined }, { ...addressPost, id: undefined }, 'fixture address response echoes exact POST, without injected coordinates');
   await firstPage.getByRole('button', { name: 'Review order' }).first().click();
@@ -149,10 +148,9 @@ try {
   await picker.getByRole('button', { name: 'Use current location' }).click();
   await mapPage.getByText(/Location access failed/).waitFor();
   await picker.getByRole('button', { name: 'Dismiss notification' }).click();
-  await picker.locator('.leaflet-container').focus();
-  await mapPage.keyboard.press('ArrowRight');
+  await picker.getByText(/Google Maps is not configured|Couldn’t load the map/).waitFor();
   await picker.getByRole('button', { name: 'Select map center' }).click();
-  await picker.getByRole('button', { name: 'Confirm location' }).click();
+  await picker.getByRole('button', { name: 'Confirm this location' }).click();
   await picker.waitFor({ state: 'hidden' });
   await mapPage.waitForTimeout(100);
   if (!await mapTrigger.evaluate((node) => node === document.activeElement)) findings.push('map picker did not restore focus after confirmation');
@@ -162,7 +160,7 @@ try {
   await mapPage.waitForTimeout(100);
   if (!await mapTrigger.evaluate((node) => node === document.activeElement)) findings.push('map picker did not restore focus after Escape');
   await mapPage.screenshot({ path: 'output/playwright/customer-map-keyboard.png', fullPage: true });
-  if (!findings.some((finding) => finding.startsWith('map picker'))) console.log('PASS denied GPS to keyboard map-center selection, confirm, Escape and focus restoration');
+  if (!findings.some((finding) => finding.startsWith('map picker'))) console.log('PASS denied GPS to Google Maps fallback center selection, confirm, Escape and focus restoration');
   await mapContext.close();
 
   const pos = await browser.newContext();
