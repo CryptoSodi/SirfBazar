@@ -79,6 +79,8 @@ jobs:
             -f prisma/upgrades/20261011-google-account-profile.sql \
             -f prisma/upgrades/20261011-merchant-settings-pos-and-order-revisions.sql
       - run: npm run seed
+      - name: Keep disposable smoke merchants open regardless of runner time
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'UPDATE "Merchant" SET "openingTime" = $$00:00$$, "closingTime" = $$23:59$$ WHERE "approvalStatus" = $$APPROVED$$'
       - name: Run packaged release against the disposable smoke database
         shell: bash
         run: |
