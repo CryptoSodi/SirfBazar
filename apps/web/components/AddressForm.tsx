@@ -38,7 +38,7 @@ export function AddressForm({
   const [customLabel, setCustomLabel] = useState(preset || !initial ? '' : initial.label ?? '');
   const [fullAddress, setFullAddress] = useState(initial?.fullAddress ?? '');
   const [area, setArea] = useState(initial?.area ?? '');
-  const [city, setCity] = useState(initial?.city ?? 'Lahore');
+  const [city, setCity] = useState(initial?.city ?? '');
   const [contactName, setContactName] = useState(initial?.contactName ?? '');
   const [contactPhone, setContactPhone] = useState(initial?.contactPhone ?? '');
   const [instructions, setInstructions] = useState(initial?.instructions ?? '');
@@ -164,7 +164,7 @@ export function AddressForm({
 
       <input className="input" placeholder="Full address (house, street, block, landmark)" value={fullAddress} onChange={(e) => setFullAddress(e.target.value)} />
       <div className="grid grid-cols-2 gap-2">
-        <input className="input" placeholder="Area (e.g. Gulberg III)" value={area} onChange={(e) => setArea(e.target.value)} />
+        <input className="input" placeholder="Area or neighbourhood" value={area} onChange={(e) => setArea(e.target.value)} />
         <input className="input" placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
       </div>
       <div className="grid grid-cols-2 gap-2">

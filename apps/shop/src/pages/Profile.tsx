@@ -7,6 +7,7 @@ import { useThemeStudio, type ThemeMode } from '../components/ThemeStudio';
 import { ReferenceIcon } from '../components/ReferenceIcon';
 import { PageSkeleton } from '../components/Skeleton';
 import { readMemory, writeMemory } from '../lib/memoryCache';
+import type { MerchantProfile } from '../lib/merchant-contracts';
 import ShopMapPicker from '../components/ShopMapPicker';
 import { GoogleAccountLink } from '../components/GoogleAccountLink';
 
@@ -21,13 +22,36 @@ type Form = {
   latitude: string;
   longitude: string;
   serviceRadiusKm: string;
+  deliveryFeeRupees: string;
   openingTime: string;
   closingTime: string;
+  operatingHours: Array<{ dayOfWeek: number; isClosed: boolean; opensAt: string; closesAt: string; closesNextDay: boolean }>;
   minimumOrderRupees: string;
   averagePreparationMinutes: string;
   logoUrl: string;
   bannerUrl: string;
 };
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function dateLabel(value?: string | null) {
+  return value ? new Intl.DateTimeFormat('en-PK', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Karachi' }).format(new Date(value)) : '—';
+}
+
+function remainingLabel(milliseconds?: number | null) {
+  const minutes = Math.max(0, Math.ceil((milliseconds ?? 0) / 60_000));
+  if (minutes < 60) return `${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  return days ? `${days} days ${hours % 24} hours` : `${hours} hours ${minutes % 60} minutes`;
+}
+
+function posTrialSummary(trial?: NonNullable<MerchantProfile['posTrial']>) {
+  if (trial?.status === 'ACTIVE') return `Started ${dateLabel(trial.startedAt)}. Ends ${dateLabel(trial.endsAt)}. ${remainingLabel(trial.remainingMilliseconds)} remaining.`;
+  if (trial?.status === 'EXPIRED') return `Started ${dateLabel(trial.startedAt)} and ended ${dateLabel(trial.endsAt)}. Sales are disabled; records remain read-only. Renewal is not configured yet; contact support.`;
+  if (trial?.status === 'DECLINED') return 'POS was not enabled during onboarding. Contact support if you want to discuss enabling it.';
+  return 'This shop predates POS trial tracking; current access is preserved.';
+}
 
 const blank: Form = {
   shopName: '',
@@ -39,8 +63,10 @@ const blank: Form = {
   latitude: '',
   longitude: '',
   serviceRadiusKm: '',
+  deliveryFeeRupees: '',
   openingTime: '',
   closingTime: '',
+  operatingHours: DAY_NAMES.map((_, dayOfWeek) => ({ dayOfWeek, isClosed: false, opensAt: '09:00', closesAt: '21:00', closesNextDay: false })),
   minimumOrderRupees: '',
   averagePreparationMinutes: '',
   logoUrl: '',
@@ -48,6 +74,9 @@ const blank: Form = {
 };
 
 function toForm(m: any): Form {
+  const storedHours = Array.isArray(m.operatingHours) && m.operatingHours.length === 7
+    ? m.operatingHours
+    : DAY_NAMES.map((_, dayOfWeek) => ({ dayOfWeek, isClosed: false, opensAt: m.openingTime ?? '09:00', closesAt: m.closingTime ?? '21:00', closesNextDay: false }));
   return {
     shopName: m.shopName ?? '',
     description: m.description ?? '',
@@ -58,8 +87,10 @@ function toForm(m: any): Form {
     latitude: m.latitude != null ? String(m.latitude) : '',
     longitude: m.longitude != null ? String(m.longitude) : '',
     serviceRadiusKm: m.serviceRadiusKm != null ? String(m.serviceRadiusKm) : '',
+    deliveryFeeRupees: m.deliveryFeePaisa != null ? (m.deliveryFeePaisa / 100).toFixed(2) : '0.00',
     openingTime: m.openingTime ?? '',
     closingTime: m.closingTime ?? '',
+    operatingHours: storedHours.map((hours: any) => ({ dayOfWeek: Number(hours.dayOfWeek), isClosed: !!hours.isClosed, opensAt: hours.opensAt ?? '', closesAt: hours.closesAt ?? '', closesNextDay: !!hours.closesNextDay })).sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek),
     minimumOrderRupees: m.minimumOrderValuePaisa != null ? String(Math.round(m.minimumOrderValuePaisa / 100)) : '',
     averagePreparationMinutes: m.averagePreparationMinutes != null ? String(m.averagePreparationMinutes) : '',
     logoUrl: m.logoUrl ?? '',
@@ -131,6 +162,8 @@ export default function Profile() {
         area: form.area.trim() || undefined,
         openingTime: form.openingTime.trim() || undefined,
         closingTime: form.closingTime.trim() || undefined,
+        operatingHours: form.operatingHours,
+        deliveryFeePaisa: Math.round(Number(form.deliveryFeeRupees || 0) * 100),
         logoUrl: form.logoUrl.trim() || undefined,
         bannerUrl: form.bannerUrl.trim() || undefined,
       };
@@ -241,9 +274,10 @@ export default function Profile() {
           <div className="row"><span className="store-monogram" style={{ width: 52, height: 52 }} aria-hidden="true">{String(merchant.shopName || 'SB').slice(0, 2).toUpperCase()}</span><div><h3>{merchant.shopName}</h3><p className="small muted">{[merchant.area, merchant.city].filter(Boolean).join(', ')}</p></div><Badge value={merchant.approvalStatus} /></div>
           <div className="definition" style={{ marginTop: 18 }}><span>Address</span><b>{merchant.address || '—'}</b></div>
           <div className="definition"><span>Contact</span><b>{merchant.phoneNumber || '—'}</b></div>
-          <div className="definition"><span>Opening hours</span><b>{merchant.openingTime && merchant.closingTime ? `${merchant.openingTime} – ${merchant.closingTime}` : 'Not set'}</b></div>
+          <div className="definition"><span>Opening hours</span><b>{(merchant.operatingHours ?? []).length ? 'Weekly schedule set' : merchant.openingTime && merchant.closingTime ? `${merchant.openingTime} – ${merchant.closingTime}` : 'Not set'}</b></div>
           <div className="definition"><span>Preparation time</span><b>{merchant.averagePreparationMinutes ?? '—'} min</b></div>
           <div className="definition"><span>Service radius</span><b>{merchant.serviceRadiusKm ?? '—'} km</b></div>
+          <div className="definition"><span>Delivery fee</span><b>{pkr(merchant.deliveryFeePaisa ?? 0)}</b></div>
           <div className="definition"><span>Minimum order</span><b>{pkr(merchant.minimumOrderValuePaisa)}</b></div>
           <div className="section-divider" /><h2>Appearance</h2><p className="small muted" style={{ marginTop: 6 }}>Choose what feels comfortable. Your shop’s data stays unchanged.</p>
           <div className="swatch-row">{(['light', 'dark', 'system'] as ThemeMode[]).map((choice) => <button type="button" key={choice} className={`theme-swatch ${choice}`} aria-pressed={mode === choice} onClick={() => setMode(choice)}><span aria-hidden="true" /><b>{choice[0].toUpperCase() + choice.slice(1)}</b><small>{choice === 'system' ? 'Follow device' : `Always ${choice}`}</small></button>)}</div>
@@ -253,7 +287,7 @@ export default function Profile() {
           <div className="setting-line"><div><b>Shop availability</b><p>{isOnline ? 'Online' : 'Offline'} in customer-facing availability.</p>{!canEdit && <p>You need shop settings permission to change availability.</p>}</div><AvailabilitySwitch online={isOnline} disabled={!canEdit} busy={stateBusy} onToggle={() => void toggleAvailability()} /></div>
           <p className="small muted" style={{ marginTop: 18 }}>Changing these flags does not record a delivery, cancel an order or prove storefront availability.</p>
           <div className="section-divider" /><h3>Shop access</h3><p className="small muted" style={{ marginTop: 7 }}>New shops start active. Admin can disable or reactivate access.</p><div style={{ marginTop: 12 }}><Badge value={merchant.approvalStatus === 'APPROVED' ? 'ACTIVE' : merchant.approvalStatus === 'SUSPENDED' ? 'DISABLED' : merchant.approvalStatus} /></div>
-          <div className="section-divider" /><h3>One-month trial</h3>{merchant.trial?.endsAt && <p className="small muted" style={{ marginTop: 7 }}>Trial ends {new Intl.DateTimeFormat('en-PK', { dateStyle: 'medium', timeZone: 'Asia/Karachi' }).format(new Date(merchant.trial.endsAt))}.</p>}<p className="small muted" style={{ marginTop: 7 }}>Access continues after the trial unless admin disables your shop. No automatic payment or lockout is enabled.</p>
+          <div className="section-divider" /><h3>POS trial</h3><p className="small muted" style={{ marginTop: 7 }}>{posTrialSummary(merchant.posTrial)}</p>
           <div className="section-divider" /><div className="definition"><span>Rating</span><b>{(merchant.ratingAverage ?? 0).toFixed(1)} / 5 · {merchant.ratingCount ?? 0} reviews</b></div><div className="definition"><span>Commission</span><b>{merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}</b></div><div className="definition"><span>Shop type</span><b>{String(merchant.shopType ?? '—').replace(/_/g, ' ')}</b></div>
         </section>
       </div>
@@ -356,25 +390,30 @@ export default function Profile() {
               <span className="text-xs text-slate-500">{form.latitude && form.longitude ? `Pinned at ${Number(form.latitude).toFixed(5)}, ${Number(form.longitude).toFixed(5)}` : 'No shop location pinned yet'}</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Service radius (km)" hint="Minimum 0.5">
-                <input className={inputCls} type="number" step="0.5" min="0.5" value={form.serviceRadiusKm} onChange={(e) => set('serviceRadiusKm', e.target.value)} />
+              <Field label="Delivery radius (km)" hint="0.5 to 50 km">
+                <input className={inputCls} type="number" step="0.1" min="0.5" max="50" value={form.serviceRadiusKm} onChange={(e) => set('serviceRadiusKm', e.target.value)} />
+              </Field>
+              <Field label="Delivery fee (PKR)" hint="Saved setting; checkout still uses distance-based pricing">
+                <input className={inputCls} type="text" inputMode="decimal" value={form.deliveryFeeRupees} onChange={(e) => set('deliveryFeeRupees', e.target.value)} />
               </Field>
             </div>
           </section>
 
           <section className="space-y-3">
             <h2 className="text-sm font-semibold text-slate-700">Hours &amp; orders</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Opening time" hint="e.g. 09:00">
-                <input className={inputCls} type="time" value={form.openingTime} onChange={(e) => set('openingTime', e.target.value)} />
-              </Field>
-              <Field label="Closing time" hint="e.g. 21:00">
-                <input className={inputCls} type="time" value={form.closingTime} onChange={(e) => set('closingTime', e.target.value)} />
-              </Field>
-            </div>
+            <p className="text-xs text-slate-500">Times use Pakistan local time. Overnight schedules close the following day.</p>
+            <div className="space-y-2">{form.operatingHours.map((hours) => <div key={hours.dayOfWeek} className="grid grid-cols-[1fr_auto] items-center gap-2 border-b border-slate-100 py-2">
+              <b className="text-xs text-slate-700">{DAY_NAMES[hours.dayOfWeek]}</b>
+              <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={hours.isClosed} onChange={(e) => setForm((current) => ({ ...current, operatingHours: current.operatingHours.map((item) => item.dayOfWeek === hours.dayOfWeek ? { ...item, isClosed: e.target.checked, closesNextDay: e.target.checked ? false : item.closesNextDay } : item) }))} />Closed</label>
+              {!hours.isClosed && <div className="col-span-2 grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+                <input className={inputCls} aria-label={`${DAY_NAMES[hours.dayOfWeek]} opens`} type="time" value={hours.opensAt} onChange={(e) => setForm((current) => ({ ...current, operatingHours: current.operatingHours.map((item) => item.dayOfWeek === hours.dayOfWeek ? { ...item, opensAt: e.target.value } : item) }))} />
+                <input className={inputCls} aria-label={`${DAY_NAMES[hours.dayOfWeek]} closes`} type="time" value={hours.closesAt} onChange={(e) => setForm((current) => ({ ...current, operatingHours: current.operatingHours.map((item) => item.dayOfWeek === hours.dayOfWeek ? { ...item, closesAt: e.target.value } : item) }))} />
+                <label className="flex items-center gap-1 whitespace-nowrap text-xs"><input type="checkbox" checked={hours.closesNextDay} onChange={(e) => setForm((current) => ({ ...current, operatingHours: current.operatingHours.map((item) => item.dayOfWeek === hours.dayOfWeek ? { ...item, closesNextDay: e.target.checked } : item) }))} />Next day</label>
+              </div>}
+            </div>)}</div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Minimum order value (Rs)" hint={`Currently ${pkr(merchant.minimumOrderValuePaisa)}`}>
-                <input className={inputCls} type="number" min="0" step="1" value={form.minimumOrderRupees} onChange={(e) => set('minimumOrderRupees', e.target.value)} />
+                <input className={inputCls} type="text" inputMode="decimal" value={form.minimumOrderRupees} onChange={(e) => set('minimumOrderRupees', e.target.value)} />
               </Field>
               <Field label="Avg. preparation (minutes)" hint="Minimum 1">
                 <input className={inputCls} type="number" min="1" step="1" value={form.averagePreparationMinutes} onChange={(e) => set('averagePreparationMinutes', e.target.value)} />

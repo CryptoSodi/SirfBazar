@@ -11,7 +11,7 @@ const benefits: { icon: AppIconName; label: string; description: string }[] = [
 ];
 
 /** Presentation only: discovery keeps the existing location and guest basket. */
-export function GroceryHero({ hasConfirmedLocation }: { hasConfirmedLocation: boolean }) {
+export function GroceryHero({ hasConfirmedLocation, onChooseLocation }: { hasConfirmedLocation: boolean; onChooseLocation: () => void }) {
   return <section className={styles.hero} aria-labelledby="home-hero-title">
     <div className={styles.copy}>
       <p className={styles.eyebrow}>Local shops. A brighter neighbourhood.</p>
@@ -22,7 +22,7 @@ export function GroceryHero({ hasConfirmedLocation }: { hasConfirmedLocation: bo
       <p className={styles.description}>Shop everyday essentials from local stores. They prepare your order and deliver it to your door.</p>
       <div className={styles.actions}>
         <Link href="/search" className={styles.primary}>Shop groceries <AppIcon name="arrow" size={22} /></Link>
-        <Link href="/search?type=shops" className={styles.secondary}>Explore local shops</Link>
+        {hasConfirmedLocation ? <Link href="/search?type=shops" className={styles.secondary}>Explore local shops</Link> : <button type="button" className={styles.secondary} onClick={onChooseLocation}>Set delivery location</button>}
       </div>
       <ul className={styles.benefits} aria-label="Shopping with SirfBazar">
         {benefits.map(({ icon, label, description }) => <li key={label}>

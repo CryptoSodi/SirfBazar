@@ -10,6 +10,11 @@ import { colors, s as sharedStyles } from '../lib/theme';
 const s = { ...sharedStyles, btn: { ...sharedStyles.btn, minHeight: 44 }, btnGhost: { ...sharedStyles.btnGhost, minHeight: 44 }, btnDanger: { ...sharedStyles.btnDanger, minHeight: 44 } };
 
 const PREPARATION = ['MERCHANT_ACCEPTED', 'PREPARING', 'READY_FOR_PICKUP'];
+const PROPOSAL_STATUSES = ['SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING'];
+const uuidV4 = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  const r = Math.floor(Math.random() * 16);
+  return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+});
 
 export default function OrderDetailScreen() {
   const toast = useToast();
@@ -22,10 +27,12 @@ export default function OrderDetailScreen() {
   const [ridersFailed, setRidersFailed] = useState(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [revisionBusy, setRevisionBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [canAssign, setCanAssign] = useState(false);
   const lock = useRef(false);
   const generation = useRef(0);
+  const revisionRequests = useRef(new Map<string, string>());
 
   const load = useCallback(async () => {
     const request = ++generation.current;
@@ -73,6 +80,26 @@ export default function OrderDetailScreen() {
     } finally { lock.current = false; setBusy(false); }
   };
 
+  const proposeChange = async (item: any, action: 'REMOVE' | 'REDUCE') => {
+    if (revisionBusy || order.pendingRevision || uncertain) return;
+    const quantity = action === 'REDUCE' ? item.quantity - 1 : undefined;
+    const key = `${item.id}:${action}:${quantity ?? ''}`;
+    let requestId = revisionRequests.current.get(key);
+    if (!requestId) { requestId = uuidV4(); revisionRequests.current.set(key, requestId); }
+    setRevisionBusy(true);
+    try {
+      await api.post(`/merchant/orders/${id}/revisions`, {
+        requestId,
+        changes: [{ originalItemId: item.id, action, ...(quantity ? { quantity } : {}) }],
+      });
+      revisionRequests.current.delete(key);
+      await load();
+      toast('Sent for customer approval. The original order is unchanged until they approve.');
+    } catch (cause: any) {
+      toast(`${cause.message} Refresh the order before retrying.`, false);
+    } finally { setRevisionBusy(false); }
+  };
+
   if (!order || order.id !== id) return <View style={s.pad}><Text style={s.muted}>{failed ? 'Unable to load this order. Check your connection and retry.' : 'Loading order…'}</Text>{failed && <TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { marginTop: 12 }]} onPress={() => void load().catch(() => setFailed(true))}><Text style={s.btnGhostText}>Retry order</Text></TouchableOpacity>}</View>;
 
   return <ScrollView style={s.screen} contentContainerStyle={[s.pad, { paddingBottom: 32 }]}>
@@ -98,11 +125,18 @@ export default function OrderDetailScreen() {
         {['MERCHANT_ACCEPTED', 'PREPARING'].includes(order.status) && <TouchableOpacity accessibilityRole="button" style={order.rider ? s.btn : s.btnGhost} disabled={busy || uncertain} onPress={() => void act('ready', ['READY_FOR_PICKUP', 'RIDER_ASSIGNED'])}><IconLabel icon="box" style={order.rider ? s.btnText : s.btnGhostText}>Mark ready for pickup</IconLabel></TouchableOpacity>}
       </>}
       {order.status === 'RIDER_ASSIGNED' && <Text style={s.body}>The order is ready. The assigned rider can confirm pickup in the rider app.</Text>}
+      {!!order.pendingRevision && <View style={{ gap: 6, paddingVertical: 10, borderTopWidth: 1, borderColor: colors.border }}><Text style={s.h2}>Waiting for customer approval</Text><Text style={s.muted}>The original order remains unchanged. The proposal expires {new Date(order.pendingRevision.expiresAt).toLocaleTimeString()}.</Text></View>}
       {uncertain && <TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={() => void load().then(() => setUncertain(false)).catch(() => toast('Unable to check the saved order. Retry when connected.', false))}><Text style={s.btnGhostText}>Check saved order</Text></TouchableOpacity>}
     </View>
     <View style={[s.card, { marginTop: 14 }]}>
       <Text style={s.h2}>Items</Text>
-      {(order.items ?? []).map((it: any) => <View key={it.id} style={[s.spread, { marginTop: 8 }]}><Text style={[s.body, { flex: 1 }, it.itemStatus !== 'CONFIRMED' && { textDecorationLine: 'line-through', color: colors.muted }]}>{it.quantity} × {it.productNameSnapshot}</Text><Text style={[s.body, { fontWeight: '700' }]}>{pkr(it.totalPricePaisa)}</Text></View>)}
+      {(order.items ?? []).map((it: any) => <View key={it.id} style={{ marginTop: 10, paddingBottom: 9, borderBottomWidth: 1, borderColor: colors.border }}>
+        <View style={s.spread}><Text style={[s.body, { flex: 1 }, it.itemStatus !== 'CONFIRMED' && { textDecorationLine: 'line-through', color: colors.muted }]}>{it.quantity} × {it.productNameSnapshot}</Text><Text style={[s.body, { fontWeight: '700' }]}>{pkr(it.totalPricePaisa)}</Text></View>
+        {it.itemStatus === 'CONFIRMED' && PROPOSAL_STATUSES.includes(order.status) && order.paymentMethod === 'COD' && !order.rider && !order.pendingRevision && <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: revisionBusy }} disabled={revisionBusy} onPress={() => Alert.alert('Request item removal?', 'The customer will approve or reject this change. The original order remains unchanged until approval.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Send proposal', onPress: () => void proposeChange(it, 'REMOVE') }])} style={[s.btnGhost, { flex: 1, justifyContent: 'center' }]}><Text style={[s.btnGhostText, { fontSize: 11 }]}>{revisionBusy ? 'Sending…' : 'Propose removal'}</Text></TouchableOpacity>
+          {it.quantity > 1 && <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: revisionBusy }} disabled={revisionBusy} onPress={() => Alert.alert('Reduce item quantity?', `Propose ${it.quantity - 1} instead of ${it.quantity}. The customer must approve before it takes effect.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Send proposal', onPress: () => void proposeChange(it, 'REDUCE') }])} style={[s.btnGhost, { flex: 1, justifyContent: 'center' }]}><Text style={[s.btnGhostText, { fontSize: 11 }]}>{revisionBusy ? 'Sending…' : `Propose ${it.quantity - 1} units`}</Text></TouchableOpacity>}
+        </View>}
+      </View>)}
       {order.customerNote && <IconLabel icon="file" style={[s.body, { marginTop: 10 }]}>Customer note: {order.customerNote}</IconLabel>}
     </View>
     <View style={[s.card, { marginTop: 14 }]}>

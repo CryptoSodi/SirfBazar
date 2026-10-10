@@ -14,6 +14,7 @@ test('Google login is public but Google linking requires the existing JWT guard'
   assert.equal(Reflect.getMetadata(IS_PUBLIC_KEY, AuthController.prototype.googleLogin), true);
   assert.notEqual(Reflect.getMetadata(IS_PUBLIC_KEY, AuthController.prototype.googleLink), true);
   assert.notEqual(Reflect.getMetadata(IS_PUBLIC_KEY, AuthController), true);
+  assert.notEqual(Reflect.getMetadata(IS_PUBLIC_KEY, AuthController.prototype.googleAccount), true);
 });
 const keys = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const cert = keys.publicKey.export({ type: 'spki', format: 'pem' });
@@ -100,6 +101,7 @@ function fixture(options = {}) {
   const changes = [], issued = [], locks = [];
   const db = {
     $executeRaw: async (_sql, key) => { locks.push(key); },
+    $queryRaw: async () => options.googleAccountRows || [],
     user: {
       findUnique: async ({ where }) => users.find(u => Object.entries(where).every(([key, value]) => u[key] === value)) || null,
       findMany: async ({ where }) => users.filter(u => u.email?.toLowerCase() === where.email.equals.toLowerCase()),
@@ -133,7 +135,7 @@ for (const [context, expected, options] of [
   const f = fixture({ users: [{ id: 'owner' }], ...options });
   assert.equal((await f.service.googleLogin('token', context)).role, expected);
   assert.deepEqual(f.changes, [{ googleId: 'google-subject', isEmailVerified: true }]);
-  assert.equal(f.locks.length, 2);
+  assert.deepEqual(f.locks.slice(0, 2), ['google:email:owner@gmail.com', 'google:sub:google-subject']);
 });
 test('customer self-registration creates one customer identity and a repeat login reuses its subject', async () => {
   const f = fixture();
@@ -178,6 +180,19 @@ test('authenticated linking preserves phone, email and role and is idempotent', 
   assert.equal(f.users[0].phoneNumber, '+923001234567');
   assert.equal(f.users[0].role, 'CUSTOMER');
   assert.equal(f.issued.length, 0);
+});
+test('Google account status is based on the subject and exposes only its verified profile snapshot', async () => {
+  const linked = fixture({ users: [{ id: 'me', googleId: 'google-subject' }], googleAccountRows: [
+    { displayName: 'Google Name', email: 'verified@gmail.com', avatarUrl: 'https://example.test/avatar.png', linkedAt: new Date('2026-01-01T00:00:00Z') },
+  ] });
+  assert.deepEqual(await linked.service.googleAccount('me'), {
+    linked: true, displayName: 'Google Name', email: 'verified@gmail.com',
+    avatarUrl: 'https://example.test/avatar.png', linkedAt: new Date('2026-01-01T00:00:00Z'),
+  });
+  const unlinked = fixture({ users: [{ id: 'email-match', email: 'owner@gmail.com' }] });
+  assert.deepEqual(await unlinked.service.googleAccount('email-match'), {
+    linked: false, displayName: null, email: null, avatarUrl: null, linkedAt: null,
+  });
 });
 test('authenticated linking cannot steal, replace or link to an inactive account', async () => {
   for (const users of [

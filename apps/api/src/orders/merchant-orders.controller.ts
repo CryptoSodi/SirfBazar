@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { MerchantOrdersService } from './merchant-orders.service';
-import { AssignRiderDto, ItemUnavailableDto, RejectOrderDto } from './orders.dto';
+import { AssignRiderDto, CreateOrderRevisionDto, ItemUnavailableDto, RejectOrderDto } from './orders.dto';
 import { AuthUser, CurrentUser, Roles } from '../common/decorators';
 import { UserRole } from '../common/constants';
 
@@ -58,6 +58,11 @@ export class MerchantOrdersController {
     @Param('itemId') itemId: string,
     @Body() dto: ItemUnavailableDto,
   ) {
-    return this.service.markItemUnavailable(user.userId, id, itemId, dto.replacementMerchantProductId);
+    return this.service.proposeUnavailable(user.userId, id, itemId, dto.replacementMerchantProductId);
+  }
+
+  @Post(':id/revisions')
+  createRevision(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateOrderRevisionDto) {
+    return this.service.createRevision(user.userId, id, dto.requestId, dto.changes);
   }
 }

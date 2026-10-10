@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
 import type { SbLocation } from '@/lib/api';
-import { FALLBACK_LOCATION } from '@/lib/location';
+import { storeLocation } from '@/lib/api';
 import { GOOGLE_MAPS_API_KEY, hasMapsKey } from '@/lib/maps';
 import { isUnnamedLocation, readableGeocodeResult } from '@/lib/location-label';
 import { Icon } from './Icons';
@@ -44,15 +44,19 @@ function GoogleLocationName({ location, onResult }: {
 
 export function LocationControl({ location, onClick }: { location: SbLocation | null; onClick: () => void }) {
   const [namedPin, setNamedPin] = useState<NamedPin | null>(null);
+  const showResolved = (pin: NamedPin | null) => {
+    setNamedPin(pin);
+    if (pin) storeLocation(pin);
+  };
   const unnamed = !!location && isUnnamedLocation(location.label);
   const resolved = unnamed && namedPin?.latitude === location?.latitude && namedPin?.longitude === location?.longitude ? namedPin : null;
   const label = resolved?.label || (unnamed ? 'Pinned location' : location?.label) || 'Choose your area';
   return <>
-    {unnamed && hasMapsKey && <GoogleLocationName location={location!} onResult={setNamedPin} />}
-    <button type="button" onClick={onClick} className="sb-site-location" title={label} aria-label={`${location?.label === FALLBACK_LOCATION.label ? 'Example area' : 'Shops near'} ${label}. Change location`}>
+    {unnamed && hasMapsKey && <GoogleLocationName location={location!} onResult={showResolved} />}
+    <button type="button" onClick={onClick} className="sb-site-location" title={label} aria-label={location ? `Shops near ${label}. Change delivery location` : 'Choose a delivery location to find shops that serve you'}>
       <span className="sb-pin"><Icon name="pin" size={20} /></span>
       <span>
-        {resolved ? <small className={styles.attribution} translate="no">Google Maps</small> : <small>{location?.label === FALLBACK_LOCATION.label ? 'Example area' : 'Shops near'}</small>}
+        {resolved ? <small className={styles.attribution} translate="no">Google Maps</small> : <small>{location ? 'Shops near' : 'Delivery location'}</small>}
         <strong>{label} <Icon name="down" size={16} /></strong>
       </span>
     </button>

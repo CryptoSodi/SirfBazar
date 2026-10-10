@@ -6,8 +6,9 @@ import type { PickedPoint } from './MapPicker';
 import { AppIcon } from './AppIcon';
 
 /** The centre pin, displayed coordinates and submitted coordinates are one value. */
-export function LocationMap({ point, onChange, onError }: {
+export function LocationMap({ point, initialZoom = 16, onChange, onError }: {
   point: PickedPoint;
+  initialZoom?: number;
   onChange: (point: PickedPoint) => void;
   onError: (message: string) => void;
 }) {
@@ -22,7 +23,7 @@ export function LocationMap({ point, onChange, onError }: {
     import('leaflet').then((L) => {
       if (!active || !host.current) return;
       const current = latest.current.point;
-      const instance = L.map(host.current, { zoomControl: true, keyboard: true }).setView([current.latitude, current.longitude], 16);
+      const instance = L.map(host.current, { zoomControl: true, keyboard: true }).setView([current.latitude, current.longitude], initialZoom);
       map.current = instance;
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(instance);
       instance.on('moveend', () => {

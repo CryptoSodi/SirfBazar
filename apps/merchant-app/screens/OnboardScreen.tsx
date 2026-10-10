@@ -16,6 +16,7 @@ const SHOP_TYPES = [
   'GROCERY', 'PHARMACY', 'BAKERY', 'FRUITS_VEGETABLES', 'GENERAL', 'MOBILE_ACCESSORIES',
   'ELECTRONICS', 'COSMETICS', 'STATIONERY', 'PET', 'HOUSEHOLD', 'ORGANIC', 'OTHER',
 ];
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const label = (t: string) => t.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 
 export default function OnboardScreen() {
@@ -27,9 +28,11 @@ export default function OnboardScreen() {
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('Lahore');
   const [area, setArea] = useState('');
-  const [opening, setOpening] = useState('09:00');
-  const [closing, setClosing] = useState('21:00');
   const [minOrder, setMinOrder] = useState('');
+  const [deliveryFee, setDeliveryFee] = useState('0');
+  const [coverageKm, setCoverageKm] = useState('5');
+  const [posOptIn, setPosOptIn] = useState(false);
+  const [hours, setHours] = useState(DAYS.map((_, dayOfWeek) => ({ dayOfWeek, isClosed: false, opensAt: '09:00', closesAt: '21:00', closesNextDay: false })));
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const [locating, setLocating] = useState(false);
@@ -80,12 +83,17 @@ export default function OnboardScreen() {
     if (!address.trim()) return setError('Address is required.');
     if (!city.trim()) return setError('City is required.');
     if (!coords) return setError('Tap “Use my current location” to pin your shop.');
+    const parsedCoverageKm = Number(coverageKm);
+    const parsedDeliveryFee = Number(deliveryFee);
+    if (!Number.isFinite(parsedCoverageKm) || parsedCoverageKm < 0.5 || parsedCoverageKm > 50) return setError('Delivery coverage must be between 0.5 and 50 km.');
+    if (!Number.isFinite(parsedDeliveryFee) || parsedDeliveryFee < 0 || parsedDeliveryFee > 21474836.47) return setError('Enter a valid non-negative delivery fee in PKR.');
 
     setBusy(true);
     setError('');
     try {
       let bannerUrl: string | undefined;
       if (photo) bannerUrl = await uploadImage(photo);
+      const defaultHours = hours.find((entry) => !entry.isClosed);
 
       const res = await api.post('/merchant/onboard', {
         shopName: shopName.trim(),
@@ -96,8 +104,12 @@ export default function OnboardScreen() {
         area: area.trim() || undefined,
         latitude: coords.latitude,
         longitude: coords.longitude,
-        openingTime: opening.trim() || undefined,
-        closingTime: closing.trim() || undefined,
+        serviceRadiusKm: parsedCoverageKm,
+        deliveryFeePaisa: Math.round(parsedDeliveryFee * 100),
+        posOptIn,
+        operatingHours: hours,
+        openingTime: defaultHours?.opensAt ?? '09:00',
+        closingTime: defaultHours?.closesAt ?? '21:00',
         minimumOrderValuePaisa: minOrder.trim() ? Math.round(Number(minOrder) * 100) : undefined,
         bannerUrl,
         logoUrl: bannerUrl,
@@ -121,7 +133,7 @@ export default function OnboardScreen() {
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
         <Text style={s.h1}>Set up your shop</Text>
-        <Text style={[s.muted, { marginTop: 4 }]}>Start your one-month trial with no admin approval. Your shop starts active. Access continues afterward unless admin disables it.</Text>
+        <Text style={[s.muted, { marginTop: 4 }]}>Set your weekly opening hours and delivery coverage. POS is optional; its one-month trial starts only if you choose it.</Text>
 
         {/* Shop front photo */}
         <Text style={[s.h2, { marginTop: 18, marginBottom: 8 }]}>Shop front photo</Text>
@@ -187,17 +199,45 @@ export default function OnboardScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Hours + min order */}
+        {/* Hours + delivery settings */}
+        <Text style={[s.h2, { marginTop: 20, marginBottom: 4 }]}>Weekly opening hours</Text>
+        <Text style={s.faint}>Times use Pakistan local time. Turn on overnight hours when closing after midnight.</Text>
+        {hours.map((day) => <View key={day.dayOfWeek} style={{ marginTop: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <View style={[s.row, { justifyContent: 'space-between', alignItems: 'center' }]}>
+            <Text style={[s.muted, { fontWeight: '700' }]}>{DAYS[day.dayOfWeek]}</Text>
+            <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: day.isClosed }} onPress={() => setHours((current) => current.map((entry) => entry.dayOfWeek === day.dayOfWeek ? { ...entry, isClosed: !entry.isClosed } : entry))}>
+              <Text style={{ color: day.isClosed ? colors.muted : colors.primary, fontWeight: '700' }}>{day.isClosed ? 'Closed' : 'Open'}</Text>
+            </TouchableOpacity>
+          </View>
+          {!day.isClosed && <>
+            <View style={[s.row, { gap: 8, marginTop: 8 }]}>
+              <Field label="Opens" style={{ flex: 1, marginTop: 0 }}><TextInput accessibilityLabel={`${DAYS[day.dayOfWeek]} opening time`} style={s.input} value={day.opensAt} onChangeText={(value) => setHours((current) => current.map((entry) => entry.dayOfWeek === day.dayOfWeek ? { ...entry, opensAt: value } : entry))} placeholder="09:00" placeholderTextColor={colors.faint} /></Field>
+              <Field label="Closes" style={{ flex: 1, marginTop: 0 }}><TextInput accessibilityLabel={`${DAYS[day.dayOfWeek]} closing time`} style={s.input} value={day.closesAt} onChangeText={(value) => setHours((current) => current.map((entry) => entry.dayOfWeek === day.dayOfWeek ? { ...entry, closesAt: value } : entry))} placeholder="21:00" placeholderTextColor={colors.faint} /></Field>
+              <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: day.closesNextDay }} onPress={() => setHours((current) => current.map((entry) => entry.dayOfWeek === day.dayOfWeek ? { ...entry, closesNextDay: !entry.closesNextDay } : entry))} style={{ justifyContent: 'flex-end', paddingBottom: 12 }}>
+                <Text style={{ color: day.closesNextDay ? colors.primary : colors.muted, fontSize: 12, fontWeight: '700' }}>Overnight</Text>
+              </TouchableOpacity>
+            </View>
+          </>}
+        </View>)}
+
         <View style={[s.row, { gap: 8 }]}>
-          <Field label="Opens" style={{ flex: 1 }}>
-            <TextInput style={s.input} value={opening} onChangeText={setOpening} placeholder="09:00" placeholderTextColor={colors.faint} />
+          <Field label="Delivery fee (PKR)" style={{ flex: 1 }}>
+            <TextInput style={s.input} value={deliveryFee} onChangeText={(v) => setDeliveryFee(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.faint} />
           </Field>
-          <Field label="Closes" style={{ flex: 1 }}>
-            <TextInput style={s.input} value={closing} onChangeText={setClosing} placeholder="21:00" placeholderTextColor={colors.faint} />
+          <Field label="Coverage radius (km)" style={{ flex: 1 }}>
+            <TextInput style={s.input} value={coverageKm} onChangeText={(v) => setCoverageKm(v.replace(/[^\d.]/g, ''))} keyboardType="decimal-pad" placeholder="5" placeholderTextColor={colors.faint} />
           </Field>
-          <Field label="Min order (Rs)" style={{ flex: 1 }}>
+          <Field label="Min order (PKR)" style={{ flex: 1 }}>
             <TextInput style={s.input} value={minOrder} onChangeText={(v) => setMinOrder(v.replace(/\D/g, ''))} keyboardType="number-pad" placeholder="0" placeholderTextColor={colors.faint} />
           </Field>
+        </View>
+
+        <Text style={[s.h2, { marginTop: 20, marginBottom: 4 }]}>Point of sale</Text>
+        <Text style={s.faint}>Optional. After one month, new POS sales stop; existing sales remain read-only.</Text>
+        <View style={[s.row, { gap: 8, marginTop: 10 }]}>
+          {[false, true].map((value) => <TouchableOpacity key={String(value)} accessibilityRole="radio" accessibilityState={{ selected: posOptIn === value }} onPress={() => setPosOptIn(value)} style={[s.btnGhost, { flex: 1, borderColor: posOptIn === value ? colors.primary : colors.border, backgroundColor: posOptIn === value ? colors.emeraldBg : colors.card }]}>
+            <Text style={[s.btnGhostText, { color: posOptIn === value ? colors.primary : colors.muted, textAlign: 'center' }]}>{value ? 'Yes, start free trial' : 'No, not now'}</Text>
+          </TouchableOpacity>)}
         </View>
 
         {!!error && <ToastMessage>{error}</ToastMessage>}

@@ -21,12 +21,13 @@ async (page) => {
     const headers = {'access-control-allow-origin':origin,'access-control-allow-headers':'content-type,x-guest-session,authorization','access-control-allow-methods':'GET,POST,PUT,OPTIONS'};
     if(request.method() === 'OPTIONS') return route.fulfill({status:204,headers});
     if(mode === 'loading' && path.startsWith('/products/nearby')) await new Promise(resolve => setTimeout(resolve, 1200));
-    if(mode === 'error' && /products\/nearby|merchants\/nearby/.test(path)) return route.fulfill({status:503,headers,json:{message:'Unavailable'}});
+    if((mode === 'error' && /products\/nearby|merchants\/nearby/.test(path)) || (mode === 'productError' && path.startsWith('/products/nearby'))) return route.fulfill({status:503,headers,json:{message:'Unavailable'}});
     if(path === '/products/categories') body = mode === 'empty' ? [] : categories;
     else if(path === '/merchants/nearby') body = {items:mode === 'empty' ? [] : [merchant],total:mode === 'empty' ? 0 : 1};
     else if(path === '/products/nearby' || path === '/products/search') body = {items:mode === 'empty' ? [] : [product],total:mode === 'empty' ? 0 : 1};
     else if(path === '/guest/session') body = {sessionToken:'fixture-guest'};
-    else if(path === '/guest/cart/items') { count++; body = cart(); }
+    else if(path === '/guest/cart/items' && request.method() === 'POST') { count += request.postDataJSON().quantity; body = cart(); }
+    else if(path.startsWith('/guest/cart/items/') && request.method() === 'PUT') { count = request.postDataJSON().quantity; body = cart(); }
     else if(path === '/guest/cart') body = cart();
     else body = [];
     return route.fulfill({headers,json:body});
@@ -34,14 +35,15 @@ async (page) => {
   await page.evaluate(() => localStorage.clear());
   await page.goto(origin);
   await page.getByRole('heading',{name:'Everyday groceries from local shops.'}).waitFor();
-  await page.getByRole('button',{name:'Add Test milk to basket'}).waitFor();
-  check(await page.getByRole('dialog').count() === 0, 'Home opens without login or location dialog');
+  await page.getByRole('button',{name:'Set delivery location'}).waitFor();
+  check(await page.getByRole('button',{name:'Add Test milk to basket'}).count() === 0, 'Nearby products remain hidden until a delivery location is confirmed');
+  check(await page.getByRole('dialog').count() === 0, 'Home opens without a forced login or location prompt');
   check(await page.evaluate(() => !localStorage.getItem('sb.guestToken')), 'Home browsing does not create a guest session');
   await page.setViewportSize({width:1672,height:941});
   await page.screenshot({path:'output/playwright/grocery-hero-unconfirmed.png'});
   await page.context().grantPermissions(['geolocation'], {origin});
   await page.context().setGeolocation({latitude:31.40981,longitude:74.28032,accuracy:10});
-  await page.getByRole('button',{name:/Example area/}).click();
+  await page.getByRole('button',{name:'Set delivery location'}).click();
   await page.getByRole('button',{name:'Use my current location',exact:true}).click();
   await page.getByRole('button',{name:'Confirm this location',exact:true}).click();
   await page.getByRole('dialog').waitFor({state:'hidden'});
@@ -49,8 +51,14 @@ async (page) => {
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sb.location')));
   check(saved.latitude === 31.40981 && saved.longitude === 74.28032, 'Real location picker saves selected GPS coordinates');
   await page.getByRole('button',{name:'Add Test milk to basket'}).click();
+  await page.getByRole('group',{name:'Test milk quantity'}).waitFor();
+  await page.getByLabel('1 in basket').waitFor();
+  await page.getByRole('button',{name:'Increase Test milk quantity'}).click();
+  await page.getByLabel('2 in basket').waitFor();
+  await page.getByRole('button',{name:'Decrease Test milk quantity'}).click();
+  await page.getByLabel('1 in basket').waitFor();
   await page.getByRole('link',{name:'Basket with 1 items'}).waitFor();
-  check(await page.evaluate(() => !localStorage.getItem('sb.accessToken')), 'Guest Add updates actual header basket without signing in');
+  check(await page.evaluate(() => !localStorage.getItem('sb.accessToken')), 'Guest quantity controls update the real basket without signing in');
   await page.getByRole('link',{name:'Shop groceries',exact:true}).click();
   await page.waitForURL('**/search');
   await page.getByRole('heading',{name:'Find your everyday essentials'}).waitFor();
@@ -142,12 +150,17 @@ async (page) => {
   await page.setViewportSize({width:1672,height:941});
   mode='empty'; await page.reload();
   await page.getByRole('heading',{name:'No shops deliver to this area yet'}).waitFor();
-  check(await page.getByRole('button',{name:'Browse Gulberg example'}).isVisible(),'Empty coverage retains existing recovery action');
+  check(await page.getByRole('button',{name:'Change delivery location'}).isVisible(),'Empty coverage allows choosing another delivery location');
   await page.screenshot({path:'output/playwright/grocery-hero-empty.png'});
   mode='error'; await page.reload();
   await page.getByRole('button',{name:'Try again',exact:true}).waitFor();
   check(await page.getByRole('heading',{name:'No shops deliver to this area yet'}).count()===0,'API failure is not presented as empty coverage');
   await page.screenshot({path:'output/playwright/grocery-hero-error.png'});
+  mode='productError'; await page.reload();
+  await page.getByText('Local test shop',{exact:true}).waitFor();
+  await page.getByText('We couldn’t load products for this delivery area.',{exact:true}).waitFor();
+  check(await page.getByText('Local test shop',{exact:true}).isVisible(),'A product-feed failure does not hide successful nearby shops');
+  await page.screenshot({path:'output/playwright/grocery-hero-product-error.png'});
   mode='loading'; await page.reload();
   await page.getByLabel('Loading products').waitFor();
   await page.screenshot({path:'output/playwright/grocery-hero-loading.png'});

@@ -6,13 +6,14 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import { FALLBACK_LOCATION, locationQuery, useLocation } from '@/lib/location';
+import { locationQuery, useLocation } from '@/lib/location';
 import { ProductCard, ProductCardData } from '@/components/ProductCard';
 import { Icon } from '@/components/Icons';
 import { CoverageNotice } from '@/components/CoverageNotice';
 import { CategoryFilters } from '@/components/CategoryFilters';
 import { categoryPath, flattenCategories } from '@/lib/category-tree';
 import { ShopAvailabilityLink, shopAcceptingOrders, shopStatus } from '@/components/ShopAvailability';
+import { LocationPicker } from '@/components/LocationPicker';
 
 function SearchResults() {
   const params = useSearchParams();
@@ -20,7 +21,7 @@ function SearchResults() {
   const q = params.get('q')?.trim() || '';
   const category = params.get('category') || '';
   const shopsOnly = params.get('type') === 'shops';
-  const { location, resolved, choose } = useLocation();
+  const { location, resolved } = useLocation();
   const [items, setItems] = useState<ProductCardData[]>([]);
   const [shops, setShops] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -30,6 +31,7 @@ function SearchResults() {
   const [noCoverage, setNoCoverage] = useState(false);
   const [reload, setReload] = useState(0);
   const [loadedFor, setLoadedFor] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const resultsKey = JSON.stringify([q, category, shopsOnly, sort, resolved, location?.latitude, location?.longitude, reload]);
   const resultsPending = loading || loadedFor !== resultsKey;
 
@@ -46,6 +48,10 @@ function SearchResults() {
         const selected = flattenCategories(cats ?? []).find(entry => entry.slug === category || entry.id === category);
         if (category && !selected) throw new Error('This category is no longer available. Choose another category.');
         const categoryParam = selected ? `&categoryId=${encodeURIComponent(selected.id)}` : '';
+        if (!location) {
+          if (active) { setItems([]); setShops([]); setNoCoverage(false); }
+          return;
+        }
         let hasResults = false;
         if (shopsOnly) {
           const response = await api.get(`/merchants/nearby?${query}${categoryParam}`);
@@ -89,8 +95,9 @@ function SearchResults() {
     <div className="sb-browse-tabs"><Link href="/search" className={!shopsOnly ? 'active' : ''}>Products</Link><Link href="/search?type=shops" className={shopsOnly ? 'active' : ''}>Local shops</Link></div>
     {section && <section className="sb-category-sections" aria-labelledby="category-section-title"><h2 id="category-section-title">{selectedCategory?.name ?? section.name}</h2><nav aria-label={`Subsections of ${section.name}`}><Link href={filterHref(section.slug)} aria-current={selectedCategory?.id === section.id ? 'page' : undefined}>All {section.name}</Link>{section.children?.map(child => <Link key={child.id} href={filterHref(child.slug)} aria-current={selectedCategory?.id === child.id ? 'page' : undefined}>{child.name}</Link>)}</nav></section>}
     <div className="sb-browse-grid"><aside className="card sb-browse-filters"><h2>Refine your list</h2>{filters}</aside><div className="sb-browse-results"><div className="sb-browse-toolbar"><span role="status" aria-live="polite">{resultsPending ? 'Loading local results…' : error ? 'Results unavailable' : `${shopsOnly ? shops.length : items.length} nearby ${shopsOnly ? 'shops' : 'products'}`}</span><details className="sb-mobile-filters"><summary>Filters</summary>{filters}</details>{!shopsOnly && <><label className="sr-only" htmlFor="browse-sort">Sort products</label><select id="browse-sort" className="input" value={sort} onChange={(event) => changeSort(event.target.value)}><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option><option value="relevance">Most relevant</option><option value="rating">Shop rating</option><option value="distance">Nearest first</option></select></>}</div>
-      {error && !resultsPending ? <div role="alert" className="card p-5"><p>{error}</p><button className="btn-secondary mt-3" onClick={() => setReload((value) => value + 1)}>Try again</button></div> : resultsPending ? <div className="sb-product-grid" aria-label="Loading results">{Array.from({ length:8 }).map((_, index) => <div key={index} className="card sb-product-skeleton" />)}</div> : noCoverage ? <CoverageNotice inExampleArea={location?.label === FALLBACK_LOCATION.label} onBrowseExample={() => choose(FALLBACK_LOCATION)} onRetry={() => setReload((value) => value + 1)} /> : shopsOnly ? shops.length ? <div className="sb-browse-shop-grid">{shops.map((shop) => <ShopAvailabilityLink key={shop.id} shop={shop} className="card sb-browse-shop"><Icon name="shop" size={28} /><strong>{shop.shopName}</strong><small>{shop.city || 'Local shop'}</small><small>{shopStatus(shop)}{shopAcceptingOrders(shop) ? shop.estimatedDeliveryMinutes ? ` · ${shop.estimatedDeliveryMinutes} min estimate` : '' : ' · Not accepting orders'}</small>{shopAcceptingOrders(shop) && <b>View shop&nbsp; <UiIcon name="arrow" size={18} /></b>}</ShopAvailabilityLink>)}</div> : <p className="card p-6">No shops match these filters. Clear filters to see available shops.</p> : items.length ? <div className="sb-product-grid">{items.map((product) => <ProductCard key={product.merchantProductId} card={product} />)}</div> : <div className="card p-6"><h2 className="font-bold">No nearby products found</h2><p className="sb-muted mt-2">Try another search term, category or delivery area.</p><Link className="btn-secondary mt-4 inline-flex" href="/search">Clear filters</Link></div>}
+      {error && !resultsPending ? <div role="alert" className="card p-5"><p>{error}</p><button className="btn-secondary mt-3" onClick={() => setReload((value) => value + 1)}>Try again</button></div> : resultsPending ? <div className="sb-product-grid" aria-label="Loading results">{Array.from({ length:8 }).map((_, index) => <div key={index} className="card sb-product-skeleton" />)}</div> : !location ? <CoverageNotice hasLocation={false} onChooseLocation={() => setPickerOpen(true)} onRetry={() => setReload((value) => value + 1)} /> : noCoverage ? <CoverageNotice hasLocation onChooseLocation={() => setPickerOpen(true)} onRetry={() => setReload((value) => value + 1)} /> : shopsOnly ? shops.length ? <div className="sb-browse-shop-grid">{shops.map((shop) => <ShopAvailabilityLink key={shop.id} shop={shop} className="card sb-browse-shop"><span className="sb-shop-mark">{shop.logoUrl ? <img src={shop.logoUrl} alt={`${shop.shopName} logo`} /> : <Icon name="shop" size={28} />}</span><strong>{shop.shopName}</strong><small>{String(shop.shopType || 'Local shop').replace(/_/g, ' ').toLowerCase()}</small><small>{shopStatus(shop)}{shopAcceptingOrders(shop) ? shop.estimatedDeliveryMinutes ? ` · ${shop.estimatedDeliveryMinutes} min estimate` : '' : ' · Not accepting orders'}</small>{Number.isFinite(shop.distanceKm) && <small>{shop.distanceKm} km away</small>}{shop.deliveryFeePaisa != null && <small>Delivery Rs {(shop.deliveryFeePaisa / 100).toLocaleString('en-PK')}</small>}{shopAcceptingOrders(shop) && <b>View shop&nbsp; <UiIcon name="arrow" size={18} /></b>}</ShopAvailabilityLink>)}</div> : <p className="card p-6">No shops match these filters. Clear filters to see available shops.</p> : items.length ? <div className="sb-product-grid">{items.map((product) => <ProductCard key={product.merchantProductId} card={product} />)}</div> : <div className="card p-6"><h2 className="font-bold">No nearby products found</h2><p className="sb-muted mt-2">Try another search term, category or delivery area.</p><Link className="btn-secondary mt-4 inline-flex" href="/search">Clear filters</Link></div>}
     </div></div>
+    {pickerOpen && <LocationPicker onClose={() => setPickerOpen(false)} />}
   </div>;
 }
 

@@ -1,6 +1,8 @@
 import {
   IsArray,
+  ArrayMinSize,
   ArrayMaxSize,
+  ArrayUnique,
   IsBoolean,
   IsIn,
   IsInt,
@@ -8,6 +10,7 @@ import {
   IsNumber,
   IsObject,
   IsOptional,
+  ValidateIf,
   IsString,
   IsUrl,
   IsUUID,
@@ -21,6 +24,24 @@ import { Type } from 'class-transformer';
 import { ShopType, StaffPermission } from '../common/constants';
 
 const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
+const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export class OperatingHoursDto {
+  @Type(() => Number) @IsInt() @Min(0) @Max(6)
+  dayOfWeek: number;
+
+  @IsBoolean()
+  isClosed: boolean;
+
+  @ValidateIf((value) => !value.isClosed) @IsString() @Matches(TIME_REGEX)
+  opensAt?: string;
+
+  @ValidateIf((value) => !value.isClosed) @IsString() @Matches(TIME_REGEX)
+  closesAt?: string;
+
+  @IsOptional() @IsBoolean()
+  closesNextDay?: boolean;
+}
 
 export class OnboardMerchantDto {
   @IsString()
@@ -51,25 +72,38 @@ export class OnboardMerchantDto {
 
   @Type(() => Number)
   @IsNumber()
+  @Min(-90) @Max(90)
   latitude: number;
 
   @Type(() => Number)
   @IsNumber()
+  @Min(-180) @Max(180)
   longitude: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0.5)
+  @Max(50)
   serviceRadiusKm?: number;
 
   @IsOptional()
-  @IsString()
+  @IsString() @Matches(TIME_REGEX)
   openingTime?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString() @Matches(TIME_REGEX)
   closingTime?: string;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647)
+  deliveryFeePaisa?: number;
+
+  @IsOptional() @IsBoolean()
+  posOptIn?: boolean;
+
+  @IsOptional() @IsArray() @ArrayMinSize(7) @ArrayMaxSize(7) @ArrayUnique((hours: OperatingHoursDto) => hours.dayOfWeek)
+  @ValidateNested({ each: true }) @Type(() => OperatingHoursDto)
+  operatingHours?: OperatingHoursDto[];
 
   @IsOptional()
   @Type(() => Number)
@@ -101,9 +135,12 @@ export class UpdateMerchantProfileDto {
   @IsOptional() @IsString() area?: string;
   @IsOptional() @Type(() => Number) @IsNumber() latitude?: number;
   @IsOptional() @Type(() => Number) @IsNumber() longitude?: number;
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0.5) serviceRadiusKm?: number;
-  @IsOptional() @IsString() openingTime?: string;
-  @IsOptional() @IsString() closingTime?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0.5) @Max(50) serviceRadiusKm?: number;
+  @IsOptional() @IsString() @Matches(TIME_REGEX) openingTime?: string;
+  @IsOptional() @IsString() @Matches(TIME_REGEX) closingTime?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(2147483647) deliveryFeePaisa?: number;
+  @IsOptional() @IsArray() @ArrayMinSize(7) @ArrayMaxSize(7) @ArrayUnique((hours: OperatingHoursDto) => hours.dayOfWeek)
+  @ValidateNested({ each: true }) @Type(() => OperatingHoursDto) operatingHours?: OperatingHoursDto[];
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) minimumOrderValuePaisa?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) averagePreparationMinutes?: number;
   @IsOptional() @IsString() logoUrl?: string;

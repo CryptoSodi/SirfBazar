@@ -9,7 +9,7 @@ import type * as Leaflet from 'leaflet';
 import type { PickedPoint } from './MapPicker';
 import { useModalFocus } from './useModalFocus';
 
-const DEFAULT = { latitude: 31.5204, longitude: 74.3587 };
+const PAKISTAN_CENTER = { latitude: 30.3753, longitude: 69.3451 };
 const TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 /** Key-free local map picker. The visible centre pin is the confirmed point. */
@@ -19,7 +19,7 @@ export function OpenMapPicker({ initial, onConfirm, onClose, returnFocusTo }: {
   onClose: () => void;
   returnFocusTo?: HTMLElement | null;
 }) {
-  const initialPoint = initial ?? DEFAULT;
+  const initialPoint = initial ?? PAKISTAN_CENTER;
   const host = useRef<HTMLDivElement>(null);
   const map = useRef<Leaflet.Map | null>(null);
   const [point, setPoint] = useState<PickedPoint>(initialPoint);
@@ -32,7 +32,7 @@ export function OpenMapPicker({ initial, onConfirm, onClose, returnFocusTo }: {
     let active = true;
     import('leaflet').then((L) => {
       if (!active || !host.current) return;
-      const instance = L.map(host.current, { zoomControl: true }).setView([initialPoint.latitude, initialPoint.longitude], 16);
+      const instance = L.map(host.current, { zoomControl: true }).setView([initialPoint.latitude, initialPoint.longitude], initial ? 16 : 5);
       L.tileLayer(TILES, { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(instance);
       instance.on('moveend', () => {
         const center = instance.getCenter();

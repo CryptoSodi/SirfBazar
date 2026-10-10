@@ -33,6 +33,7 @@ import { Prisma } from '@prisma/client';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { serializable } from '../common/transaction';
 import { lockOwners } from '../common/owner-lock';
+import { isMerchantOpenAt } from '../common/merchant-hours';
 
 export interface PlaceOrderInput {
   requestId: string;
@@ -64,6 +65,7 @@ const CUSTOMER_CANCELLABLE: string[] = [
 export class OrdersService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('Orders');
   private timeoutTimer?: NodeJS.Timeout;
+  private revisionTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -124,7 +126,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     }
     const listings = await db.merchantProduct.findMany({
       where: { id: { in: cart.items.map((item) => item.merchantProductId) } },
-      include: { product: { include: { category: true } }, merchant: true },
+      include: { product: { include: { category: true } }, merchant: { include: { operatingHours: true } } },
     });
     const byId = new Map(listings.map((listing) => [listing.id, listing]));
     const groups = new Map<string, { merchant: (typeof listings)[number]['merchant']; items: Array<{ merchantProductId: string; productId: string; merchantId: string; name: string; quantity: number; unitPricePaisa: number }> }>();
@@ -135,6 +137,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       }
       const merchant = listing.merchant;
       if (merchant.approvalStatus !== MerchantApprovalStatus.APPROVED || !merchant.isOpen || !merchant.isOnline) throw new BadRequestException(`${merchant.shopName} is not accepting orders right now`);
+      if (!isMerchantOpenAt(merchant.operatingHours, merchant.openingTime, merchant.closingTime)) throw new BadRequestException(`${merchant.shopName} is outside its posted delivery hours`);
       if (!Number.isInteger(item.quantity) || item.quantity < 1 || !listing.isAvailable || listing.stockQuantity < item.quantity) throw new BadRequestException(`${listing.product.name} has insufficient stock`);
       if (!Number.isFinite(merchant.latitude) || !Number.isFinite(merchant.longitude) || !Number.isFinite(merchant.serviceRadiusKm) || merchant.serviceRadiusKm <= 0 || haversineKm(address.latitude, address.longitude, merchant.latitude, merchant.longitude) > merchant.serviceRadiusKm) {
         throw new BadRequestException(`${merchant.shopName} does not deliver to this address`);
@@ -230,7 +233,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     // Load and validate every line item against live merchant/product state.
     const merchantProducts = await this.prisma.merchantProduct.findMany({
       where: { id: { in: cart.items.map((i) => i.merchantProductId) } },
-      include: { product: true, merchant: true },
+      include: { product: true, merchant: { include: { operatingHours: true } } },
     });
     const mpById = new Map(merchantProducts.map((mp) => [mp.id, mp]));
 
@@ -246,6 +249,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       const m = mp.merchant;
       if (m.approvalStatus !== MerchantApprovalStatus.APPROVED || !m.isOpen || !m.isOnline) {
         throw new BadRequestException(`${m.shopName} is not accepting orders right now`);
+      }
+      if (!isMerchantOpenAt(m.operatingHours, m.openingTime, m.closingTime)) {
+        throw new BadRequestException(`${m.shopName} is outside its posted delivery hours`);
       }
       if (!mp.isAvailable || mp.stockQuantity < item.quantity) {
         throw new BadRequestException(`${mp.product.name} has insufficient stock at ${m.shopName}`);
@@ -669,7 +675,32 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!order) throw new NotFoundException('Order not found');
+    const orderIds = [order.id, ...(order.children ?? []).map((child) => child.id)];
+    const revisions = await this.prisma.orderRevision.findMany({
+      where: { orderId: { in: orderIds } },
+      orderBy: { createdAt: 'desc' },
+      take: Math.max(orderIds.length * 10, 10),
+      select: { id: true, orderId: true, status: true, originalTotalPaisa: true, proposedTotalPaisa: true, payload: true, createdAt: true, expiresAt: true, resolvedAt: true },
+    });
+    const attach = (target: any) => {
+      const history = revisions.filter((revision) => revision.orderId === target.id).map(({ payload, ...revision }) => ({ ...revision, ...this.publicRevisionPayload(payload) }));
+      return { ...target, orderRevisions: history, pendingRevision: history.find((revision) => revision.status === 'PENDING') ?? null };
+    };
+    order.children = (order.children ?? []).map(attach);
+    Object.assign(order, attach(order));
     return this.redactOtp(order);
+  }
+
+  private publicRevisionPayload(payload: unknown) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { changes: [] };
+    const value = payload as Record<string, any>;
+    return {
+      originalSubtotalPaisa: value.originalSubtotalPaisa ?? null,
+      proposedSubtotalPaisa: value.proposedSubtotalPaisa ?? null,
+      originalParentTotalPaisa: value.originalParentTotalPaisa ?? null,
+      proposedParentTotalPaisa: value.proposedParentTotalPaisa ?? null,
+      changes: Array.isArray(value.changes) ? value.changes : [],
+    };
   }
 
   /** Live tracking payload: status + rider + last known location + OTP when due. */
@@ -992,7 +1023,135 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     return this.detailForCustomer(customerUserId, orderId);
   }
 
+  async respondToRevision(customerUserId: string, orderId: string, revisionId: string, accept: boolean) {
+    const customerId = await this.access.customerId(customerUserId);
+    const result = await serializable(this.prisma, async (tx) => {
+      const revision = await tx.orderRevision.findFirst({
+        where: { id: revisionId, orderId, order: { customerId } },
+        include: { order: { include: { items: true, parent: true, customer: { select: { userId: true } } } } },
+      });
+      if (!revision) throw new NotFoundException('Order revision not found');
+      if (revision.status !== 'PENDING') throw new ConflictException('This order revision has already been resolved.');
+      const now = new Date();
+      if (revision.expiresAt <= now) {
+        const expired = await tx.orderRevision.updateMany({ where: { id: revision.id, status: 'PENDING', expiresAt: { lte: now } }, data: { status: 'EXPIRED', resolvedAt: now } });
+        if (expired.count === 1) await this.statusService.appendTimeline(orderId, 'ORDER_REVISION_EXPIRED', { role: 'SYSTEM', notes: 'Customer approval window elapsed; original order retained' }, tx);
+        return { status: 'EXPIRED', merchantId: revision.order.merchantId, orderNumber: revision.order.orderNumber };
+      }
+
+      const order = revision.order;
+      if (!order.merchantId) throw new ConflictException('Parent orders cannot be revised directly.');
+      const merchantId = order.merchantId;
+      const revisionStatuses: string[] = [OrderStatus.SENT_TO_MERCHANT, OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING];
+      const canResolve = order.paymentMethod === PaymentMethod.COD && !order.riderId &&
+        revisionStatuses.includes(order.status);
+      if (!canResolve) {
+        const closed = await tx.orderRevision.updateMany({ where: { id: revision.id, status: 'PENDING' }, data: { status: 'REJECTED', resolvedAt: now, resolvedByUserId: customerUserId } });
+        if (closed.count !== 1) throw new ConflictException('Order revision changed. Refresh the order.');
+        await this.statusService.appendTimeline(orderId, 'ORDER_REVISION_REJECTED', { userId: customerUserId, role: 'SYSTEM', notes: 'Order state no longer permits the proposed change; original order retained' }, tx);
+        return { status: 'REJECTED', merchantId: order.merchantId, orderNumber: order.orderNumber };
+      }
+
+      if (!accept) {
+        const rejected = await tx.orderRevision.updateMany({ where: { id: revision.id, status: 'PENDING', expiresAt: { gt: now } }, data: { status: 'REJECTED', resolvedAt: now, resolvedByUserId: customerUserId } });
+        if (rejected.count !== 1) throw new ConflictException('Order revision changed. Refresh the order.');
+        await this.statusService.appendTimeline(orderId, 'ORDER_REVISION_REJECTED', { userId: customerUserId, role: 'CUSTOMER', notes: 'Customer rejected the proposed changes; original order retained' }, tx);
+        return { status: 'REJECTED', merchantId: order.merchantId, orderNumber: order.orderNumber };
+      }
+
+      const payload = revision.payload as any;
+      if (!Array.isArray(payload?.changes) || payload.changes.length === 0) throw new ConflictException('Revision details are invalid. Contact support before fulfillment.');
+      for (const change of payload.changes) {
+        const original = order.items.find((item) => item.id === change.originalItemId && item.itemStatus === 'CONFIRMED');
+        if (!original || original.quantity !== change.original?.quantity || original.totalPricePaisa !== change.original?.totalPricePaisa) {
+          throw new ConflictException('Order items changed since this proposal. The original order is unchanged.');
+        }
+        if (change.action === 'REMOVE') {
+          const removed = await tx.orderItem.updateMany({ where: { id: original.id, orderId, itemStatus: 'CONFIRMED', quantity: original.quantity }, data: { itemStatus: 'REMOVED' } });
+          if (removed.count !== 1) throw new ConflictException('Order item changed. Refresh the order.');
+          const stock = await tx.merchantProduct.updateMany({ where: { id: original.merchantProductId, merchantId }, data: { stockQuantity: { increment: original.quantity } } });
+          if (stock.count !== 1) throw new ConflictException('Original inventory changed. Contact support before fulfillment.');
+        } else if (change.action === 'REDUCE') {
+          const proposedQuantity = Number(change.proposed?.quantity);
+          if (!Number.isSafeInteger(proposedQuantity) || proposedQuantity < 1 || proposedQuantity >= original.quantity) throw new ConflictException('Proposed quantity is invalid.');
+          const reduced = await tx.orderItem.updateMany({ where: { id: original.id, orderId, itemStatus: 'CONFIRMED', quantity: original.quantity }, data: { quantity: proposedQuantity, totalPricePaisa: original.unitPricePaisa * proposedQuantity } });
+          if (reduced.count !== 1) throw new ConflictException('Order item changed. Refresh the order.');
+          const stock = await tx.merchantProduct.updateMany({ where: { id: original.merchantProductId, merchantId }, data: { stockQuantity: { increment: original.quantity - proposedQuantity } } });
+          if (stock.count !== 1) throw new ConflictException('Original inventory changed. Contact support before fulfillment.');
+        } else if (change.action === 'REPLACE') {
+          const proposed = change.proposed;
+          const quantity = Number(proposed?.quantity);
+          if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > original.quantity) throw new ConflictException('Replacement quantity is invalid.');
+          const stockClaim = await tx.merchantProduct.updateMany({
+            where: {
+              id: proposed.merchantProductId,
+              merchantId,
+              isAvailable: true,
+              stockQuantity: { gte: quantity },
+              pricePaisa: proposed.pricePaisa,
+              discountPricePaisa: proposed.discountPricePaisa,
+              product: { approvalStatus: 'APPROVED', isRestricted: false, requiresPrescription: false, category: { isRestricted: false, isActive: true } },
+            },
+            data: { stockQuantity: { decrement: quantity } },
+          });
+          if (stockClaim.count !== 1) throw new ConflictException('Replacement stock or price changed. Ask the shop to send a new proposal.');
+          const replaced = await tx.orderItem.updateMany({ where: { id: original.id, orderId, itemStatus: 'CONFIRMED', quantity: original.quantity }, data: { itemStatus: 'REPLACED' } });
+          if (replaced.count !== 1) throw new ConflictException('Order item changed. Refresh the order.');
+          const oldStock = await tx.merchantProduct.updateMany({ where: { id: original.merchantProductId, merchantId }, data: { stockQuantity: { increment: original.quantity } } });
+          if (oldStock.count !== 1) throw new ConflictException('Original inventory changed. Contact support before fulfillment.');
+          await tx.orderItem.create({ data: {
+            orderId,
+            productId: proposed.productId,
+            merchantProductId: proposed.merchantProductId,
+            productNameSnapshot: proposed.name,
+            productImageSnapshot: proposed.imageUrl,
+            unitSnapshot: proposed.unit,
+            quantity,
+            unitPricePaisa: proposed.unitPricePaisa,
+            totalPricePaisa: proposed.totalPricePaisa,
+            itemStatus: 'CONFIRMED',
+            replacementForItemId: original.id,
+          } });
+        } else {
+          throw new ConflictException('Revision contains an unsupported item action.');
+        }
+      }
+
+      const proposedSubtotal = Number(payload.proposedSubtotalPaisa);
+      if (!Number.isSafeInteger(proposedSubtotal) || proposedSubtotal < 0) throw new ConflictException('Revision subtotal is invalid.');
+      if (!order.parentOrderId) await tx.order.update({ where: { id: orderId }, data: { smallOrderFeePaisa: this.pricing.smallOrderFeePaisa(proposedSubtotal) } });
+      await this.recomputeOrderTotals(orderId, tx);
+      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      if (updatedOrder.totalAmountPaisa !== revision.proposedTotalPaisa) throw new ConflictException('Revised total did not match the approved proposal. The original order is unchanged.');
+      if (order.parentOrderId && payload.proposedParentTotalPaisa != null) {
+        const updatedParent = await tx.order.findUniqueOrThrow({ where: { id: order.parentOrderId } });
+        if (updatedParent.totalAmountPaisa !== Number(payload.proposedParentTotalPaisa)) throw new ConflictException('Combined order total changed. The original order is unchanged.');
+      }
+      const approved = await tx.orderRevision.updateMany({ where: { id: revision.id, status: 'PENDING', expiresAt: { gt: now } }, data: { status: 'APPROVED', resolvedAt: now, resolvedByUserId: customerUserId } });
+      if (approved.count !== 1) throw new ConflictException('Revision expired or changed. Refresh the order.');
+      await this.statusService.appendTimeline(orderId, 'ORDER_REVISION_APPROVED', { userId: customerUserId, role: 'CUSTOMER', notes: `Customer approved revised order total ${updatedOrder.totalAmountPaisa} paisa` }, tx);
+      return { status: 'APPROVED', merchantId: order.merchantId, orderNumber: order.orderNumber };
+    });
+
+    if (result.merchantId && result.status !== 'EXPIRED') {
+      const merchantUsers = await this.access.merchantUserIds(result.merchantId);
+      await this.notifications.notifyMany(merchantUsers, {
+        audience: 'MERCHANT', scopeId: result.merchantId,
+        title: result.status === 'APPROVED' ? 'Order revision approved' : 'Order revision rejected',
+        body: `The customer ${result.status === 'APPROVED' ? 'approved' : 'rejected'} the proposed changes for order ${result.orderNumber}.`,
+        type: NotificationType.REPLACEMENT_REQUESTED,
+        referenceId: orderId,
+      }).catch((error) => this.logger.warn(`Post-commit revision response notification failed: ${error}`));
+    }
+    if (result.status === 'EXPIRED') throw new ConflictException('This proposal expired. The original order remains unchanged.');
+    return this.detailForCustomer(customerUserId, orderId);
+  }
+
   /** Re-derives money fields after item-level changes. */
+  smallOrderFeeForSubtotal(subtotalPaisa: number) {
+    return this.pricing.smallOrderFeePaisa(subtotalPaisa);
+  }
+
   async recomputeOrderTotals(orderId: string, db: PrismaService | Prisma.TransactionClient = this.prisma) {
     const order = await db.order.findUnique({
       where: { id: orderId },
@@ -1031,12 +1190,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
           data: {
             subtotalPaisa: subtotalSum,
             deliveryFeePaisa: deliverySum,
+            smallOrderFeePaisa: this.pricing.smallOrderFeePaisa(subtotalSum),
             totalAmountPaisa: Math.max(
               0,
               subtotalSum +
                 deliverySum +
                 parent.serviceFeePaisa +
-                parent.smallOrderFeePaisa -
+                this.pricing.smallOrderFeePaisa(subtotalSum) -
                 parent.discountAmountPaisa,
             ),
           },
@@ -1049,15 +1209,60 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     const minutes = Number(process.env.MERCHANT_ACCEPT_TIMEOUT_MINUTES || 10);
-    if (minutes <= 0) return;
-    this.timeoutTimer = setInterval(() => {
-      this.expireUnacceptedOrders(minutes).catch((err) => this.logger.warn(`Timeout sweep failed: ${err}`));
-    }, 60_000);
-    this.timeoutTimer.unref?.();
+    if (minutes > 0) {
+      this.timeoutTimer = setInterval(() => {
+        this.expireUnacceptedOrders(minutes).catch((err) => this.logger.warn(`Timeout sweep failed: ${err}`));
+      }, 60_000);
+      this.timeoutTimer.unref?.();
+    }
+    this.revisionTimer = setInterval(() => {
+      this.expirePendingOrderRevisions().catch((err) => this.logger.warn(`Order revision expiry sweep failed: ${err}`));
+    }, 15_000);
+    this.revisionTimer.unref?.();
   }
 
   onModuleDestroy() {
     if (this.timeoutTimer) clearInterval(this.timeoutTimer);
+    if (this.revisionTimer) clearInterval(this.revisionTimer);
+  }
+
+  async expirePendingOrderRevisions() {
+    const now = new Date();
+    const stale = await this.prisma.orderRevision.findMany({
+      where: { status: 'PENDING', expiresAt: { lte: now } },
+      include: { order: { select: { id: true, orderNumber: true, merchantId: true, customer: { select: { userId: true } } } } },
+      orderBy: { expiresAt: 'asc' },
+      take: 100,
+    });
+    for (const revision of stale) {
+      try {
+        const expired = await serializable(this.prisma, async (tx) => {
+          const result = await tx.orderRevision.updateMany({ where: { id: revision.id, status: 'PENDING', expiresAt: { lte: now } }, data: { status: 'EXPIRED', resolvedAt: now } });
+          if (result.count !== 1) return false;
+          await this.statusService.appendTimeline(revision.orderId, 'ORDER_REVISION_EXPIRED', { role: 'SYSTEM', notes: 'Customer approval window elapsed; original order retained' }, tx);
+          return true;
+        });
+        if (!expired) continue;
+        await this.notifications.notify({
+          userId: revision.order.customer.userId,
+          audience: 'CUSTOMER', scopeId: revision.order.customer.userId,
+          title: 'Order proposal expired',
+          body: `The proposed changes to order ${revision.order.orderNumber} expired. Your original order remains unchanged.`,
+          type: NotificationType.REPLACEMENT_REQUESTED,
+          referenceId: revision.orderId,
+        }).catch(() => undefined);
+        if (revision.order.merchantId) {
+          const merchantUsers = await this.access.merchantUserIds(revision.order.merchantId);
+          await this.notifications.notifyMany(merchantUsers, {
+            audience: 'MERCHANT', scopeId: revision.order.merchantId,
+            title: 'Order proposal expired', body: `The customer did not respond to the proposal for order ${revision.order.orderNumber}. The original order remains unchanged.`,
+            type: NotificationType.REPLACEMENT_REQUESTED, referenceId: revision.orderId,
+          }).catch(() => undefined);
+        }
+      } catch (error) {
+        this.logger.warn(`Could not expire order revision ${revision.id}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   async expireUnacceptedOrders(timeoutMinutes: number) {

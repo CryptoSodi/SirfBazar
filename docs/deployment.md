@@ -6,16 +6,17 @@
 > the current production API. See [API auto-deployment](API-AUTO-DEPLOYMENT.md)
 > for the active, CI-gated push workflow and verified activation evidence.
 
-Hybrid topology: frontends on Vercel (no cold starts on the free tier),
-backend + database on your own machine.
+Production topology: frontends on Vercel; API and PostgreSQL run on the
+Oracle host. Local Windows setup instructions later in this document are
+development-only and must not be used to reconfigure production.
 
 | Piece | Where | URL |
 |---|---|---|
 | Customer website (`apps/web`) | Vercel | `https://sirfbazar.com` (+ `www`) |
 | Admin dashboard (`apps/admin`) | Vercel | `https://admin.sirfbazar.com` |
-| Backend API (`apps/api`) | **Your machine**, exposed via Cloudflare Tunnel | `https://api.sirfbazar.com` |
-| Database | **Your machine** — native PostgreSQL | local only |
-| DNS / TLS | Cloudflare (`sirfbazar.com` zone) | — |
+| Backend API (`apps/api`) | Oracle host `129.153.16.84`, through Caddy | `https://api.sirfbazar.com` |
+| Database | Existing PostgreSQL on the Oracle host | private to the host |
+| DNS / TLS | Cloudflare direct A record; Caddy terminates HTTPS | — |
 
 Both frontends default to `https://api.sirfbazar.com/api` via their committed
 `.env.production` files — no dashboard env vars needed. **Until the tunnel is
@@ -74,6 +75,16 @@ to `CORS_ORIGINS` in `apps/api/.env` and restart the API.
    npm run seed
    npm run dev        # then: npm run smoke (in a second terminal) → 44 checks green
    ```
+
+The Google account visibility and merchant/POS/order-revision changes require
+the additive SQL upgrades `apps/api/prisma/upgrades/20261011-google-account-profile.sql`
+and `apps/api/prisma/upgrades/20261011-merchant-settings-pos-and-order-revisions.sql`
+before deploying the matching API. They add a verified Google profile snapshot,
+weekly merchant hours, POS trial state, and persistent order revision records.
+`User.googleId` remains the Google-link authority. Apply both through the
+approved database-change process after a verified backup, not `prisma db push`.
+The upgrades are authored but have not been applied to any database. Do not
+deploy the matching API until the migration has been applied and verified.
 
 ## Step 3 — Run the API permanently
 

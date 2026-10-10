@@ -30,19 +30,31 @@ export interface SbLocation {
   latitude: number;
   longitude: number;
   label: string;
+  confirmedAt?: string;
 }
+
+const LOCATION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function getStoredLocation(): SbLocation | null {
   if (typeof window === 'undefined') return null;
   try {
-    return JSON.parse(localStorage.getItem(LS.location) || 'null');
+    const location = JSON.parse(localStorage.getItem(LS.location) || 'null');
+    if (!location || !Number.isFinite(location.latitude) || Math.abs(location.latitude) > 90 ||
+      !Number.isFinite(location.longitude) || Math.abs(location.longitude) > 180 ||
+      typeof location.label !== 'string' || !location.confirmedAt || !Number.isFinite(Date.parse(location.confirmedAt)) ||
+      Date.now() - Date.parse(location.confirmedAt) > LOCATION_MAX_AGE_MS || Date.parse(location.confirmedAt) > Date.now() + 60_000) {
+      localStorage.removeItem(LS.location);
+      return null;
+    }
+    return location as SbLocation;
   } catch {
+    localStorage.removeItem(LS.location);
     return null;
   }
 }
 
 export function storeLocation(loc: SbLocation) {
-  localStorage.setItem(LS.location, JSON.stringify(loc));
+  localStorage.setItem(LS.location, JSON.stringify({ ...loc, confirmedAt: new Date().toISOString() }));
 }
 
 export function getStoredUser(): any | null {
@@ -83,7 +95,6 @@ async function ensureGuestToken(): Promise<string> {
     body: JSON.stringify({
       latitude: loc?.latitude,
       longitude: loc?.longitude,
-      city: 'Lahore',
     }),
   });
   const data = await res.json();

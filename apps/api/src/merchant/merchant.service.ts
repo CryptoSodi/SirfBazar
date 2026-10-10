@@ -9,7 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthService } from '../auth/auth.service';
-import { merchantTrial } from '../common/merchant-access-policy';
+import { addCalendarMonthUtc, merchantPosTrialView, merchantTrial } from '../common/merchant-access-policy';
 import {
   ACTIVE_ORDER_STATUSES,
   MerchantApprovalStatus,
@@ -31,9 +31,21 @@ export class MerchantService {
 
   // ── Onboarding ─────────────────────────────────────────────────────────────
 
+  private assertOperatingHours(hours?: OnboardMerchantDto['operatingHours']) {
+    for (const day of hours ?? []) {
+      if (day.isClosed) continue;
+      const crossesMidnight = day.closesAt! <= day.opensAt!;
+      if (crossesMidnight !== (day.closesNextDay === true)) {
+        throw new BadRequestException(`Day ${day.dayOfWeek}: mark overnight hours only when closing time is at or before opening time.`);
+      }
+    }
+  }
+
   async onboard(userId: string, dto: OnboardMerchantDto) {
+    this.assertOperatingHours(dto.operatingHours);
     const existing = await this.prisma.merchant.findUnique({ where: { userId } });
     if (existing) throw new BadRequestException('This account already has a shop');
+    const posTrialStartedAt = dto.posOptIn ? new Date() : null;
 
     const merchant = await this.prisma.$transaction(async (tx) => {
       const created = await tx.merchant.create({
@@ -49,6 +61,7 @@ export class MerchantService {
           latitude: dto.latitude,
           longitude: dto.longitude,
           serviceRadiusKm: dto.serviceRadiusKm ?? 5,
+          deliveryFeePaisa: dto.deliveryFeePaisa ?? 0,
           openingTime: dto.openingTime ?? '09:00',
           closingTime: dto.closingTime ?? '21:00',
           minimumOrderValuePaisa: dto.minimumOrderValuePaisa ?? 0,
@@ -58,6 +71,26 @@ export class MerchantService {
           approvalStatus: MerchantApprovalStatus.APPROVED,
           isOnline: true,
           isOpen: true,
+        },
+      });
+      if (dto.operatingHours) {
+        await tx.merchantOperatingHours.createMany({
+          data: dto.operatingHours.map((hours) => ({
+            merchantId: created.id,
+            dayOfWeek: hours.dayOfWeek,
+            isClosed: hours.isClosed,
+            opensAt: hours.isClosed ? null : hours.opensAt,
+            closesAt: hours.isClosed ? null : hours.closesAt,
+            closesNextDay: hours.isClosed ? false : hours.closesNextDay ?? false,
+          })),
+        });
+      }
+      await tx.merchantPosTrial.create({
+        data: {
+          userId,
+          optedIn: dto.posOptIn ?? false,
+          startedAt: posTrialStartedAt,
+          endsAt: posTrialStartedAt ? addCalendarMonthUtc(posTrialStartedAt) : null,
         },
       });
       // Don't overwrite User.role — the account keeps any customer/rider access.
@@ -77,7 +110,20 @@ export class MerchantService {
 
     // Role changed — the old token is stale, hand back a fresh pair.
     const tokens = await this.auth.issueTokens(userId, UserRole.MERCHANT_OWNER);
-    return { merchant: { ...merchant, trial: merchantTrial(merchant.createdAt) }, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: tokens.user };
+    return {
+      merchant: {
+        ...merchant,
+        trial: merchantTrial(merchant.createdAt),
+        posTrial: merchantPosTrialView({
+          optedIn: dto.posOptIn ?? false,
+          startedAt: posTrialStartedAt,
+          endsAt: posTrialStartedAt ? addCalendarMonthUtc(posTrialStartedAt) : null,
+        }),
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: tokens.user,
+    };
   }
 
   async addDocument(userId: string, dto: AddDocumentDto) {
@@ -157,35 +203,58 @@ export class MerchantService {
     const ctx = await this.access.merchantContext(userId, { allowDisabled: true });
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: ctx.merchantId },
-      include: { documents: true },
+      include: { documents: true, operatingHours: { orderBy: { dayOfWeek: 'asc' } } },
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
-    return { ...merchant, trial: merchantTrial(merchant.createdAt), isOwner: ctx.isOwner, permissions: ctx.permissions };
+    const posTrial = await this.prisma.merchantPosTrial.findUnique({ where: { userId: merchant.userId } });
+    return { ...merchant, trial: merchantTrial(merchant.createdAt), posTrial: merchantPosTrialView(posTrial), isOwner: ctx.isOwner, permissions: ctx.permissions };
   }
 
   async updateProfile(userId: string, dto: UpdateMerchantProfileDto) {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.STORE);
-    return this.prisma.merchant.update({
-      where: { id: ctx.merchantId },
-      data: {
-        shopName: dto.shopName ?? undefined,
-        description: dto.description ?? undefined,
-        phoneNumber: dto.phoneNumber ?? undefined,
-        address: dto.address ?? undefined,
-        city: dto.city ?? undefined,
-        area: dto.area ?? undefined,
-        latitude: dto.latitude ?? undefined,
-        longitude: dto.longitude ?? undefined,
-        serviceRadiusKm: dto.serviceRadiusKm ?? undefined,
-        openingTime: dto.openingTime ?? undefined,
-        closingTime: dto.closingTime ?? undefined,
-        minimumOrderValuePaisa: dto.minimumOrderValuePaisa ?? undefined,
-        averagePreparationMinutes: dto.averagePreparationMinutes ?? undefined,
-        logoUrl: dto.logoUrl ?? undefined,
-        bannerUrl: dto.bannerUrl ?? undefined,
-      },
+    this.assertOperatingHours(dto.operatingHours);
+    const merchant = await this.prisma.$transaction(async (tx) => {
+      await tx.merchant.update({
+        where: { id: ctx.merchantId },
+        data: {
+          shopName: dto.shopName ?? undefined,
+          description: dto.description ?? undefined,
+          phoneNumber: dto.phoneNumber ?? undefined,
+          address: dto.address ?? undefined,
+          city: dto.city ?? undefined,
+          area: dto.area ?? undefined,
+          latitude: dto.latitude ?? undefined,
+          longitude: dto.longitude ?? undefined,
+          serviceRadiusKm: dto.serviceRadiusKm ?? undefined,
+          deliveryFeePaisa: dto.deliveryFeePaisa ?? undefined,
+          openingTime: dto.openingTime ?? undefined,
+          closingTime: dto.closingTime ?? undefined,
+          minimumOrderValuePaisa: dto.minimumOrderValuePaisa ?? undefined,
+          averagePreparationMinutes: dto.averagePreparationMinutes ?? undefined,
+          logoUrl: dto.logoUrl ?? undefined,
+          bannerUrl: dto.bannerUrl ?? undefined,
+        },
+      });
+      if (dto.operatingHours) {
+        await tx.merchantOperatingHours.deleteMany({ where: { merchantId: ctx.merchantId } });
+        await tx.merchantOperatingHours.createMany({
+          data: dto.operatingHours.map((hours) => ({
+            merchantId: ctx.merchantId,
+            dayOfWeek: hours.dayOfWeek,
+            isClosed: hours.isClosed,
+            opensAt: hours.isClosed ? null : hours.opensAt,
+            closesAt: hours.isClosed ? null : hours.closesAt,
+            closesNextDay: hours.isClosed ? false : hours.closesNextDay ?? false,
+          })),
+        });
+      }
+      return tx.merchant.findUniqueOrThrow({
+        where: { id: ctx.merchantId },
+        include: { operatingHours: { orderBy: { dayOfWeek: 'asc' } } },
+      });
     });
+    return merchant;
   }
 
   async setOnline(userId: string, online: boolean) {

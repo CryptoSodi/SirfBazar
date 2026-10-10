@@ -11,7 +11,7 @@ import { createPortal } from 'react-dom';
 import { GOOGLE_MAPS_API_KEY } from '@/lib/maps';
 import { useModalFocus } from './useModalFocus';
 
-const FALLBACK = { lat: 31.5204, lng: 74.3587 }; // Gulberg, Lahore
+const PAKISTAN_CENTER = { lat: 30.3753, lng: 69.3451 };
 const GPS_OPTS: PositionOptions = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
 
 export interface PickedPoint {
@@ -39,7 +39,7 @@ export function MapPicker({
   });
   const mapRef = useRef<google.maps.Map | null>(null);
   const [center, setCenter] = useState(
-    initial ? { lat: initial.latitude, lng: initial.longitude } : FALLBACK,
+    initial ? { lat: initial.latitude, lng: initial.longitude } : PAKISTAN_CENTER,
   );
   const [locating, setLocating] = useState(false);
   const [chosen, setChosen] = useState(Boolean(initial));
@@ -94,7 +94,7 @@ export function MapPicker({
               <GoogleMap
                 mapContainerStyle={{ width: '100%', height: '100%' }}
                 center={center}
-                zoom={17}
+                zoom={initial ? 17 : 5}
                 options={{
                   streetViewControl: false,
                   mapTypeControl: false,

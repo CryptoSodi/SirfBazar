@@ -216,7 +216,10 @@ export class AuthService {
           await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
         }
         const linked = await db.user.findUnique({ where: { googleId: profile.googleId } });
-        if (linked) return linked;
+        if (linked) {
+          await this.saveGoogleAccountProfile(db, linked.id, profile);
+          return linked;
+        }
         const matches = await db.user.findMany({ where: { email: { equals: profile.email, mode: 'insensitive' } }, take: 2 });
         if (matches.length > 1) throw new UnauthorizedException('Account email is ambiguous. Contact support.');
         const existing = matches[0];
@@ -232,17 +235,20 @@ export class AuthService {
             data: { googleId: profile.googleId, isEmailVerified: true },
           });
           if (changed.count !== 1) throw new UnauthorizedException('Account changed. Please sign in again.');
+          await this.saveGoogleAccountProfile(db, existing.id, profile);
           return existing;
         }
         if (context !== 'customer') {
           const what = context === 'admin' ? 'an authorised admin' : context === 'rider' ? 'a registered rider' : 'a registered merchant';
           throw new UnauthorizedException(`This Google account is not ${what}.`);
         }
-        return db.user.create({ data: {
+        const created = await db.user.create({ data: {
           googleId: profile.googleId, email: profile.email,
           fullName: profile.name || null, profileImageUrl: profile.picture || null,
           role: UserRole.CUSTOMER, isEmailVerified: true,
         } });
+        await this.saveGoogleAccountProfile(db, created.id, profile);
+        return created;
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -285,6 +291,7 @@ export class AuthService {
           data: { googleId: profile.googleId },
         });
         if (changed.count !== 1) throw new BadRequestException('Account changed. Please sign in again.');
+        await this.saveGoogleAccountProfile(db, userId, profile);
         return { linked: true, email: profile.email };
       });
     } catch (error) {
@@ -293,6 +300,40 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  async googleAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { googleId: true },
+    });
+    if (!user) throw new UnauthorizedException('Account is not available');
+    if (!user.googleId) return { linked: false, displayName: null, email: null, avatarUrl: null, linkedAt: null };
+    const records = await this.prisma.$queryRaw<Array<{
+      email: string; displayName: string | null; avatarUrl: string | null; linkedAt: Date;
+    }>>`SELECT "email", "displayName", "avatarUrl", "linkedAt"
+      FROM "GoogleAccountProfile" WHERE "userId" = ${userId} LIMIT 1`;
+    const profile = records[0];
+    return {
+      linked: true,
+      displayName: profile?.displayName ?? null,
+      email: profile?.email ?? null,
+      avatarUrl: profile?.avatarUrl ?? null,
+      linkedAt: profile?.linkedAt ?? null,
+    };
+  }
+
+  private async saveGoogleAccountProfile(
+    db: Prisma.TransactionClient,
+    userId: string,
+    profile: { email: string; name?: string; picture?: string },
+  ) {
+    await db.$executeRaw`INSERT INTO "GoogleAccountProfile" ("userId", "email", "displayName", "avatarUrl")
+      VALUES (${userId}, ${profile.email}, ${profile.name ?? null}, ${profile.picture ?? null})
+      ON CONFLICT ("userId") DO UPDATE SET
+        "email" = EXCLUDED."email",
+        "displayName" = EXCLUDED."displayName",
+        "avatarUrl" = EXCLUDED."avatarUrl"`;
   }
 
   // ── Admin email/password ──────────────────────────────────────────────────
