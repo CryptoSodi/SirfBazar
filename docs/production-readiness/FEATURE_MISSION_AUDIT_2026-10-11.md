@@ -1,7 +1,7 @@
 # SirfBazar Feature Mission - Phase 0 Audit
 
 Audit date: 2026-10-11
-Checkout: `CryptoSodi/SirfBazar`, branch `codex/publish-android-icons-build3`, commit `0fa5bdd`
+Integration base: `CryptoSodi/SirfBazar` `master` at `55b335a` (before this implementation)
 Initial Phase 0 scope: source and tests in this checkout; no production mutation, database migration, deployment, load test, or security test. The later local implementation added the documented XLSX parser dependency; it did not install anything on production.
 
 ## Executive Summary
