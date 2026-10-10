@@ -17,8 +17,8 @@ files. All were rechecked unchanged after submission. See
 
 Existing remote version codes were explicitly advanced from 2 to 3. All builds
 used the existing `release-keystore` profile on the `tassaduq` EAS account and
-target `https://api.sirfbazar.com/api`. No API deployment, source push, GitHub
-release publication, Google Play submission or phone installation occurred.
+target `https://api.sirfbazar.com/api`. The builds did not deploy the API,
+submit to Google Play, or install on a phone.
 
 ## APKs
 
@@ -38,6 +38,19 @@ Expo artifact URLs are not a permanent GitHub release.
 | Customer | `1bbb4d5daaf83ea7927fee828205a714a1bea33adaddd3f04b45136d02b8480a` |
 | Merchant | `83808888fb4fbbcca425514d477addf91a98f3fe6cb316da1cdf5d4761f6af3d` |
 | Rider | `61172b16d66186877c686596a16b46678078a927db94a8dc60659037b7347dc8` |
+
+## GitHub Publication
+
+Published 10 October 2026 as the [GitHub testing prerelease](https://github.com/CryptoSodi/SirfBazar/releases/tag/android-icons-build3-2026-10-09),
+tagged from source snapshot `47ae4cd` (`codex/android-app-icons-build3`). The
+release contains all three APKs, `SHA256SUMS.txt` and the sanitized
+`build-manifest.json`. GitHub's uploaded APK SHA-256 digests match the values
+above. The earlier [build 2 prerelease](https://github.com/CryptoSodi/SirfBazar/releases/tag/android-2026-10-09)
+is retained unchanged.
+
+This build-3 source snapshot predates later mobile source changes now present on
+`master`; it is not a rebuild of current `master`. Build and device-test a newer
+version before treating it as the latest mobile application release.
 
 ## Executed Verification
 
