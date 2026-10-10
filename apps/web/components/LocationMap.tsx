@@ -29,14 +29,17 @@ function GoogleLocationMap({ point, onChange }: {
   };
 
   useEffect(() => {
+    const next = { lat: point.latitude, lng: point.longitude };
+    // Keep the controlled centre current even before Google Maps has finished
+    // loading. Otherwise a GPS result can arrive first and the map's initial
+    // idle event will report the stale centre back to the picker.
+    setCenter(previous => previous.lat === next.lat && previous.lng === next.lng ? previous : next);
     const instance = map.current;
     const current = instance?.getCenter();
-    if (instance && current && (Math.abs(current.lat() - point.latitude) > 1e-9 || Math.abs(current.lng() - point.longitude) > 1e-9)) {
+    if (instance && current && (Math.abs(current.lat() - next.lat) > 1e-9 || Math.abs(current.lng() - next.lng) > 1e-9)) {
       syncing.current = true;
       try {
-        const next = { lat: point.latitude, lng: point.longitude };
         instance.setCenter(next);
-        setCenter(next);
       } finally { syncing.current = false; }
     }
   }, [point.latitude, point.longitude]);
