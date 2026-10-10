@@ -145,7 +145,7 @@ try {
   await mapTrigger.click();
   const picker = mapPage.getByRole('dialog', { name: 'Pin your exact location' });
   await picker.waitFor();
-  await picker.getByRole('button', { name: 'Use current location' }).click();
+  await picker.getByRole('button', { name: 'Use my current location' }).click();
   await mapPage.getByText(/Location access failed/).waitFor();
   await picker.getByRole('button', { name: 'Dismiss notification' }).click();
   assert.equal(await picker.locator('.leaflet-container').count(), 0, 'saved-address picker must not render a Leaflet map');
