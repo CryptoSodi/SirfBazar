@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, storeAuth } from '../lib/api';
@@ -107,9 +108,17 @@ export default function LoginScreen() {
               {busy && <ActivityIndicator color="#fff" />}<Text style={s.btnText}>Send verification code</Text>
             </TouchableOpacity>
             <Text style={[s.muted, { textAlign: 'center' }]}>or</Text>
-            <TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { minHeight: 48 }]} onPress={google} disabled={busy}>
-              <Text style={[s.btnGhostText, { textAlign: 'center' }]}>{signup ? 'Sign up with Google' : 'Sign in with Google'}</Text>
-            </TouchableOpacity>
+            {!signup && <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}
+              style={[s.btnGhost, { minHeight: 48, flexDirection: 'row', justifyContent: 'center', gap: 10, borderColor: '#DADCE0', borderRadius: 8 }]}
+              onPress={google} disabled={busy}>
+              {busy ? <ActivityIndicator color={colors.primary} /> : <Svg width={19} height={19} viewBox="0 0 24 24" accessible={false}>
+                <Path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.23c1.89-1.74 2.99-4.3 2.99-7.36Z" />
+                <Path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.41l-3.23-2.51c-.9.6-2.05.97-3.38.97-2.61 0-4.82-1.77-5.62-4.15H3.04v2.59A10 10 0 0 0 12 22Z" />
+                <Path fill="#FBBC05" d="M6.38 13.9a6 6 0 0 1 0-3.8V7.51H3.04a10 10 0 0 0 0 8.98l3.34-2.59Z" />
+                <Path fill="#EA4335" d="M12 5.95c1.47 0 2.79.51 3.83 1.5l2.87-2.87A9.64 9.64 0 0 0 12 2a10 10 0 0 0-8.96 5.51l3.34 2.59A5.99 5.99 0 0 1 12 5.95Z" />
+              </Svg>}
+              <Text style={[s.btnGhostText, { textAlign: 'center', color: '#3C4043', fontSize: 14 }]}>{busy ? 'Continuing with Google…' : 'Continue with Google'}</Text>
+            </TouchableOpacity>}
           </> : <>
             <Text accessibilityLiveRegion="polite" style={[s.muted, { lineHeight: 21 }]}>{notice} Number: {phone}</Text>
             <Text nativeID="merchant-code-label" style={s.h2}>Verification code</Text>

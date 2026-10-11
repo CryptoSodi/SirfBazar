@@ -5,10 +5,11 @@ module.exports = async (page, baseUrl) => {
   const closed = { ...online, id: 'closed-shop', shopName: 'Closed Fixture Shop', isOpen: false };
   let productReads = 0;
   const cart = { id: 'cart', itemCount: 2, groups: [{ merchant: shop, items: [{ id: 'item', productId: 'milk', name: 'Saved fixture milk', quantity: 2, inStock: true, stockQuantity: 5, totalPaisa: 20000 }], subtotalPaisa: 20000, deliveryFeePaisa: 0 }], subtotalPaisa: 20000, totalPaisa: 20000, serviceFeePaisa: 0 };
-  await page.context().addInitScript(() => {
-    localStorage.setItem('sb.location', JSON.stringify({ latitude: 0, longitude: 0, label: 'Fixture area' }));
+  const confirmedAt = new Date().toISOString();
+  await page.context().addInitScript(({ confirmedAt }) => {
+    localStorage.setItem('sb.location', JSON.stringify({ latitude: 0, longitude: 0, label: 'Fixture area', confirmedAt }));
     localStorage.setItem('sb.guestToken', 'fixture-only-guest');
-  });
+  }, { confirmedAt });
   await page.context().route('**/api/**', route => {
     const url = new URL(route.request().url()), path = url.pathname.replace(/^\/api/, '');
     assert.equal(route.request().method(), 'GET', 'availability fixture never places an order or changes a shop');

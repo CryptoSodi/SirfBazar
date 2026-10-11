@@ -15,6 +15,7 @@ import { OrderStatusService } from './order-status.service';
 import { NotificationType, OrderStatus, RiderStatus, StaffPermission } from '../common/constants';
 import { PageQuery, paged, parsePage } from '../common/utils/pagination';
 import { serializable } from '../common/transaction';
+import { createHash, randomUUID } from 'node:crypto';
 
 @Injectable()
 export class MerchantOrdersService {
@@ -71,7 +72,7 @@ export class MerchantOrdersService {
 
   async detail(userId: string, orderId: string) {
     const { order } = await this.ownedOrder(userId, orderId);
-    return this.prisma.order.findUnique({
+    const detail = await this.prisma.order.findUnique({
       where: { id: order.id },
       include: {
         items: true,
@@ -81,6 +82,14 @@ export class MerchantOrdersService {
         customer: { include: { user: { select: { fullName: true, phoneNumber: true } } } },
       },
     });
+    if (!detail) throw new NotFoundException('Order not found for your shop');
+    const orderRevisions = await this.prisma.orderRevision.findMany({
+      where: { orderId: order.id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: { id: true, status: true, originalTotalPaisa: true, proposedTotalPaisa: true, payload: true, createdAt: true, expiresAt: true, resolvedAt: true },
+    });
+    return { ...detail, orderRevisions, pendingRevision: orderRevisions.find((revision) => revision.status === 'PENDING') ?? null };
   }
 
   async accept(userId: string, orderId: string) {
@@ -168,6 +177,9 @@ export class MerchantOrdersService {
     }
 
     const changed = await serializable(this.prisma, async (tx) => {
+      if (tx.orderRevision?.findFirst && await tx.orderRevision.findFirst({ where: { orderId: order.id, status: 'PENDING' }, select: { id: true } })) {
+        throw new ConflictException('A rider cannot be assigned while a customer revision is awaiting approval.');
+      }
       const current = await tx.order.findFirst({ where: { id: order.id, merchantId: ctx.merchantId, riderId: null, status: { in: assignableStatuses } }, select: { status: true } });
       if (!current) throw new ConflictException('This order already has a rider or has changed. Refresh the order.');
       const claimed = await tx.rider.updateMany({ where: { id: rider.id, merchantId: ctx.merchantId, isActive: true, approvalStatus: 'APPROVED', currentStatus: RiderStatus.IDLE, currentOrderId: null }, data: { currentStatus: RiderStatus.ASSIGNED, currentOrderId: order.id } });
@@ -203,40 +215,161 @@ export class MerchantOrdersService {
     return { ok: true, status: changed.order.status, rider: { id: rider.id, fullName: rider.fullName } };
   }
 
-  /** Mark an item unavailable, optionally suggesting a replacement product. */
-  async markItemUnavailable(
+  async proposeUnavailable(userId: string, orderId: string, itemId: string, replacementMerchantProductId?: string) {
+    const action = replacementMerchantProductId ? 'REPLACE' : 'REMOVE';
+    return this.createRevision(userId, orderId, randomUUID(), [{
+      originalItemId: itemId,
+      action,
+      ...(replacementMerchantProductId ? { replacementMerchantProductId } : {}),
+    }]);
+  }
+
+  async createRevision(
     userId: string,
     orderId: string,
-    itemId: string,
-    replacementMerchantProductId?: string,
+    requestId: string,
+    changes: Array<{ originalItemId: string; action: 'REMOVE' | 'REDUCE' | 'REPLACE'; quantity?: number; replacementMerchantProductId?: string }>,
   ) {
     const { ctx } = await this.ownedOrder(userId, orderId);
-    const result = await serializable(this.prisma, async (tx) => {
-      const order = await tx.order.findFirst({ where: { id: orderId, merchantId: ctx.merchantId, status: { in: [OrderStatus.SENT_TO_MERCHANT, OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING] } }, include: { customer: { select: { userId: true } } } });
-      if (!order) throw new BadRequestException('Order changed. Refresh before editing items.');
-      const item = await tx.orderItem.findFirst({ where: { id: itemId, orderId, itemStatus: 'CONFIRMED' } });
-      if (!item) throw new NotFoundException('Order item is no longer available');
-      let replacementName: string | null = null;
-      if (replacementMerchantProductId) {
-        const replacement = await tx.merchantProduct.findFirst({ where: { id: replacementMerchantProductId, merchantId: ctx.merchantId, isAvailable: true }, include: { product: { include: { category: true } } } });
-        if (!replacement || replacement.product.approvalStatus !== 'APPROVED' || replacement.product.isRestricted || replacement.product.requiresPrescription || replacement.product.category.isRestricted) throw new BadRequestException('Replacement product is unavailable');
-        if (replacement.id === item.merchantProductId) throw new BadRequestException('Choose a different replacement product');
-        const claimed = await tx.merchantProduct.updateMany({ where: { id: replacement.id, stockQuantity: { gte: item.quantity }, isAvailable: true }, data: { stockQuantity: { decrement: item.quantity } } });
-        if (claimed.count !== 1) throw new BadRequestException('Replacement product has insufficient stock');
-        const unitPrice = replacement.discountPricePaisa ?? replacement.pricePaisa;
-        if (!Number.isSafeInteger(unitPrice * item.quantity) || unitPrice < 1) throw new BadRequestException('Replacement price is invalid');
-        await tx.orderItem.create({ data: { orderId, productId: replacement.productId, merchantProductId: replacement.id, productNameSnapshot: replacement.product.name, productImageSnapshot: replacement.product.imageUrl, unitSnapshot: replacement.product.unit, quantity: item.quantity, unitPricePaisa: unitPrice, totalPricePaisa: unitPrice * item.quantity, itemStatus: 'REPLACEMENT_SUGGESTED', replacementForItemId: item.id } });
-        replacementName = replacement.product.name;
+    if (!changes.length || changes.length > 100 || new Set(changes.map((change) => change.originalItemId)).size !== changes.length) {
+      throw new BadRequestException('Choose one to 100 distinct order items to revise.');
+    }
+    const fingerprint = createHash('sha256').update(JSON.stringify([...changes].sort((a, b) => a.originalItemId.localeCompare(b.originalItemId)))).digest('hex');
+    let result: any;
+    try {
+      result = await serializable(this.prisma, async (tx) => {
+      const replay = await tx.orderRevision.findUnique({ where: { requestId } });
+      if (replay) {
+        const payload = replay.payload as any;
+        if (replay.orderId !== orderId || replay.createdByUserId !== userId || payload?.requestHash !== fingerprint) {
+          throw new ConflictException('Revision reference is already in use. Refresh the order.');
+        }
+        return { revision: replay, customerUserId: undefined, orderNumber: undefined };
       }
-      const changed = await tx.orderItem.updateMany({ where: { id: item.id, itemStatus: 'CONFIRMED' }, data: { itemStatus: 'UNAVAILABLE' } });
-      if (changed.count !== 1) throw new BadRequestException('Item changed. Refresh this order.');
-      await tx.merchantProduct.update({ where: { id: item.merchantProductId }, data: { stockQuantity: { increment: item.quantity } } });
-      await this.orders.recomputeOrderTotals(order.id, tx);
-      await this.statusService.appendTimeline(order.id, replacementName ? 'REPLACEMENT_SUGGESTED' : 'ITEM_UNAVAILABLE', { userId, role: 'MERCHANT', notes: replacementName ? `${item.productNameSnapshot} -> ${replacementName}` : item.productNameSnapshot }, tx);
-      return { order, item, replacementName };
-    });
-    await this.notifications.notify({ userId: result.order.customer.userId, audience: 'CUSTOMER', scopeId: result.order.customer.userId, title: result.replacementName ? 'Replacement suggested' : 'Item unavailable', body: result.replacementName ? `The shop suggests ${result.replacementName} instead of ${result.item.productNameSnapshot} on order ${result.order.orderNumber}. Open the order to accept or reject.` : `${result.item.productNameSnapshot} is unavailable for order ${result.order.orderNumber}; it was removed from your bill.`, type: NotificationType.REPLACEMENT_REQUESTED, referenceId: orderId }).catch(() => undefined);
-    return { ok: true, itemStatus: result.replacementName ? 'REPLACEMENT_SUGGESTED' : 'UNAVAILABLE' };
+
+      const order = await tx.order.findFirst({
+        where: { id: orderId, merchantId: ctx.merchantId, channel: 'ONLINE' },
+        include: { items: true, parent: true, customer: { select: { userId: true } } },
+      });
+      if (!order) throw new NotFoundException('Order not found for your shop');
+      if (!order.merchantId) throw new ConflictException('Parent orders cannot be revised directly.');
+      if (order.paymentMethod !== 'COD') throw new BadRequestException('Order revisions currently support cash on delivery only. Digital payment adjustment is unavailable.');
+      const revisionStatuses: string[] = [OrderStatus.SENT_TO_MERCHANT, OrderStatus.MERCHANT_ACCEPTED, OrderStatus.PREPARING];
+      if (order.status === OrderStatus.READY_FOR_PICKUP || order.riderId || !revisionStatuses.includes(order.status)) {
+        throw new ConflictException('This order can no longer be revised before fulfillment.');
+      }
+      if (order.couponCode || order.discountAmountPaisa > 0 || order.parent?.couponCode || (order.parent?.discountAmountPaisa ?? 0) > 0) {
+        throw new BadRequestException('This order has a coupon or discount that cannot yet be safely recalculated after an item revision.');
+      }
+      if (order.items.some((item) => !['CONFIRMED', 'REPLACED', 'REMOVED'].includes(item.itemStatus))) {
+        throw new ConflictException('Resolve the existing item request before proposing another revision.');
+      }
+      const existingPending = await tx.orderRevision.findFirst({ where: { orderId, status: 'PENDING' } });
+      if (existingPending) throw new ConflictException('A revision is already waiting for customer approval.');
+
+      const activeItems = order.items.filter((item) => item.itemStatus === 'CONFIRMED');
+      const byId = new Map(activeItems.map((item) => [item.id, item]));
+      const changeSnapshots: any[] = [];
+      for (const change of changes) {
+        const original = byId.get(change.originalItemId);
+        if (!original) throw new BadRequestException('One selected order item is no longer available for revision.');
+        if (change.action === 'REMOVE') {
+          if (change.quantity !== undefined || change.replacementMerchantProductId) throw new BadRequestException('Remove a line without quantity or replacement fields.');
+          changeSnapshots.push({ originalItemId: original.id, action: 'REMOVE', original: this.itemSnapshot(original), proposed: null });
+          continue;
+        }
+        const quantity = change.quantity ?? original.quantity;
+        if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > original.quantity) throw new BadRequestException('Revised quantities must be positive and cannot exceed the confirmed quantity.');
+        if (change.action === 'REDUCE') {
+          if (quantity >= original.quantity || change.replacementMerchantProductId) throw new BadRequestException('A quantity change must reduce the existing line without a replacement.');
+          changeSnapshots.push({ originalItemId: original.id, action: 'REDUCE', original: this.itemSnapshot(original), proposed: { quantity, unitPricePaisa: original.unitPricePaisa, totalPricePaisa: original.unitPricePaisa * quantity } });
+          continue;
+        }
+        if (!change.replacementMerchantProductId) throw new BadRequestException('Choose a replacement product for this line.');
+        const replacement = await tx.merchantProduct.findFirst({ where: { id: change.replacementMerchantProductId, merchantId: ctx.merchantId, isAvailable: true }, include: { product: { include: { category: true } } } });
+        if (!replacement || replacement.id === original.merchantProductId || replacement.stockQuantity < quantity || replacement.product.approvalStatus !== 'APPROVED' || replacement.product.isRestricted || replacement.product.requiresPrescription || replacement.product.category.isRestricted || !replacement.product.category.isActive) {
+          throw new BadRequestException('The proposed replacement is unavailable or does not have enough stock.');
+        }
+        const unitPricePaisa = replacement.discountPricePaisa ?? replacement.pricePaisa;
+        const totalPricePaisa = unitPricePaisa * quantity;
+        if (!Number.isSafeInteger(totalPricePaisa) || unitPricePaisa < 0 || totalPricePaisa > 2147483647) throw new BadRequestException('Replacement price exceeds the supported order amount.');
+        changeSnapshots.push({
+          originalItemId: original.id,
+          action: 'REPLACE',
+          original: this.itemSnapshot(original),
+          proposed: { merchantProductId: replacement.id, productId: replacement.productId, name: replacement.product.name, imageUrl: replacement.product.imageUrl, unit: replacement.product.unit, quantity, unitPricePaisa, pricePaisa: replacement.pricePaisa, discountPricePaisa: replacement.discountPricePaisa, totalPricePaisa },
+        });
+      }
+
+      const remainingItems = activeItems.filter((item) => {
+        const change = changeSnapshots.find((entry) => entry.originalItemId === item.id);
+        return !change || (change.action !== 'REMOVE' && Number(change.proposed?.quantity) > 0);
+      });
+      if (remainingItems.length === 0) throw new BadRequestException('An order revision must leave at least one product in the order.');
+
+      const proposedSubtotalPaisa = activeItems.reduce((sum, item) => {
+        const change = changeSnapshots.find((entry) => entry.originalItemId === item.id);
+        return sum + (change ? change.proposed?.totalPricePaisa ?? 0 : item.totalPricePaisa);
+      }, 0);
+      if (!Number.isSafeInteger(proposedSubtotalPaisa) || proposedSubtotalPaisa > 2147483647) throw new BadRequestException('Revised subtotal exceeds the supported order amount.');
+      const singleShopFee = order.parentOrderId ? 0 : this.orders.smallOrderFeeForSubtotal(proposedSubtotalPaisa);
+      const proposedTotalPaisa = Math.max(0, proposedSubtotalPaisa + order.deliveryFeePaisa + order.serviceFeePaisa + singleShopFee - order.discountAmountPaisa);
+      const parentSnapshot = order.parentOrderId ? await tx.order.findUnique({ where: { id: order.parentOrderId } }) : null;
+      let proposedParentTotalPaisa: number | null = null;
+      if (parentSnapshot) {
+        const siblings = await tx.order.findMany({ where: { parentOrderId: parentSnapshot.id } });
+        const subtotal = siblings.reduce((sum, sibling) => sum + (sibling.id === order.id ? proposedSubtotalPaisa : sibling.subtotalPaisa), 0);
+        const smallFee = this.orders.smallOrderFeeForSubtotal(subtotal);
+        proposedParentTotalPaisa = Math.max(0, subtotal + siblings.reduce((sum, sibling) => sum + sibling.deliveryFeePaisa, 0) + parentSnapshot.serviceFeePaisa + smallFee - parentSnapshot.discountAmountPaisa);
+      }
+      const configuredMinutes = Number(process.env.ORDER_REVISION_APPROVAL_MINUTES || 30);
+      const minutes = Number.isFinite(configuredMinutes) ? Math.max(1, Math.min(24 * 60, Math.floor(configuredMinutes))) : 30;
+      const createdAt = new Date();
+      const expiresAt = new Date(createdAt.getTime() + minutes * 60_000);
+      const revision = await tx.orderRevision.create({
+        data: {
+          orderId,
+          requestId,
+          createdByUserId: userId,
+          originalTotalPaisa: order.totalAmountPaisa,
+          proposedTotalPaisa,
+          expiresAt,
+          payload: { requestHash: fingerprint, changes: changeSnapshots, originalSubtotalPaisa: order.subtotalPaisa, proposedSubtotalPaisa, originalParentTotalPaisa: parentSnapshot?.totalAmountPaisa ?? null, proposedParentTotalPaisa },
+        },
+      });
+      await this.statusService.appendTimeline(orderId, 'ORDER_REVISION_PROPOSED', { userId, role: 'MERCHANT', notes: `Customer approval requested: ${order.totalAmountPaisa} to ${proposedTotalPaisa} paisa; expires ${expiresAt.toISOString()}` }, tx);
+      return { revision, customerUserId: order.customer.userId, orderNumber: order.orderNumber };
+      });
+    } catch (error: any) {
+      if (error?.code !== 'P2002') throw error;
+      const replay = await this.prisma.orderRevision.findUnique({ where: { requestId } });
+      if (replay) {
+        const payload = replay.payload as any;
+        if (replay.orderId !== orderId || replay.createdByUserId !== userId || payload?.requestHash !== fingerprint) {
+          throw new ConflictException('Revision reference is already in use. Refresh the order.');
+        }
+        return replay;
+      }
+      const pending = await this.prisma.orderRevision.findFirst({ where: { orderId, status: 'PENDING' } });
+      if (pending) throw new ConflictException('A revision is already waiting for customer approval.');
+      throw error;
+    }
+    if (result.customerUserId) {
+      await this.notifications.notify({
+        userId: result.customerUserId,
+        audience: 'CUSTOMER',
+        scopeId: result.customerUserId,
+        title: 'Order revision needs your approval',
+        body: `The shop proposed changes to order ${result.orderNumber}. Review them within ${Math.max(1, Math.ceil((result.revision.expiresAt.getTime() - result.revision.createdAt.getTime()) / 60_000))} minutes; nothing changes until you approve.`,
+        type: NotificationType.REPLACEMENT_REQUESTED,
+        referenceId: orderId,
+      }).catch((error) => this.logger.warn(`Post-commit revision notification failed: ${error}`));
+    }
+    return result.revision;
+  }
+
+  private itemSnapshot(item: { id: string; productId: string; merchantProductId: string; productNameSnapshot: string; productImageSnapshot: string | null; unitSnapshot: string | null; quantity: number; unitPricePaisa: number; totalPricePaisa: number }) {
+    return { id: item.id, productId: item.productId, merchantProductId: item.merchantProductId, name: item.productNameSnapshot, imageUrl: item.productImageSnapshot, unit: item.unitSnapshot, quantity: item.quantity, unitPricePaisa: item.unitPricePaisa, totalPricePaisa: item.totalPricePaisa };
   }
 
   private requireStatus(current: string, allowed: string[]) {

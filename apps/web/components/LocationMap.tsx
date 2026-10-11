@@ -6,8 +6,9 @@ import type { PickedPoint } from './MapPicker';
 import { AppIcon } from './AppIcon';
 import { GOOGLE_MAPS_API_KEY, hasMapsKey } from '@/lib/maps';
 
-function GoogleLocationMap({ point, onChange }: {
+function GoogleLocationMap({ point, initialZoom = 16, onChange }: {
   point: PickedPoint;
+  initialZoom?: number;
   onChange: (point: PickedPoint) => void;
 }) {
   const map = useRef<google.maps.Map | null>(null);
@@ -48,7 +49,7 @@ function GoogleLocationMap({ point, onChange }: {
     {loadError ? <div className="sb-location-map-unavailable" role="alert">Google Maps could not load. Check your connection and try again.</div> : isLoaded ? <GoogleMap
       mapContainerClassName="sb-location-map-canvas"
       center={center}
-      zoom={16}
+      zoom={initialZoom}
       options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false, clickableIcons: false, gestureHandling: 'greedy', keyboardShortcuts: true }}
       onLoad={instance => { map.current = instance; instance.addListener('idle', syncCenter); }}
       onClick={event => {
@@ -64,11 +65,12 @@ function GoogleLocationMap({ point, onChange }: {
 }
 
 /** The selected point stays at Google's map centre below the fixed pin. */
-export function LocationMap({ point, onChange }: {
+export function LocationMap({ point, initialZoom = 16, onChange }: {
   point: PickedPoint;
+  initialZoom?: number;
   onChange: (point: PickedPoint) => void;
 }) {
   return <div className="sb-location-map">
-    {!hasMapsKey ? <div className="sb-location-map-unavailable" role="status">Google Maps is not configured. You can still use your current location or enter an area name.</div> : <GoogleLocationMap point={point} onChange={onChange} />}
+    {!hasMapsKey ? <div className="sb-location-map-unavailable" role="status">Google Maps is not configured. You can still use your current location or enter an area name.</div> : <GoogleLocationMap point={point} initialZoom={initialZoom} onChange={onChange} />}
   </div>;
 }

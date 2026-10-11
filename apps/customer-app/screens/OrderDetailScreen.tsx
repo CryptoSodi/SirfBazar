@@ -44,6 +44,37 @@ function Timeline({ delivery }: { delivery: any }) {
   </View>;
 }
 
+function OrderRevisionPanel({ orderId, revision, onDone }: { orderId: string; revision: any; onDone: () => void }) {
+  const { colors, s } = useTheme();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const respond = async (accept: boolean) => {
+    setBusy(true); setError('');
+    try {
+      await api.post(`/orders/${orderId}/revisions/${revision.id}/respond`, { accept });
+      onDone(); refreshBadges(); publishCustomerEvent('orders');
+    } catch (cause: any) { setError(`${cause.message} Refresh the order before retrying.`); }
+    finally { setBusy(false); }
+  };
+  return <View style={{ marginBottom: 16, paddingVertical: 14, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.amber, gap: 10 }}>
+    <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 15, fontWeight: '700' }}>Order changes need your approval</Text>
+    <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>Review by {formatOrderTime(revision.expiresAt)}. Nothing changes unless you approve.</Text>
+    {(revision.changes ?? []).map((change: any) => <View key={change.originalItemId} style={{ flexDirection: 'row', gap: 12, justifyContent: 'space-between' }}>
+      <View style={{ flex: 1 }}><Text style={s.faint}>Current</Text><Text style={[s.body, { fontSize: 12 }]}>{change.original?.quantity} × {change.original?.name}</Text><Text style={s.faint}>{pkr(change.original?.totalPricePaisa ?? 0)}</Text></View>
+      <View style={{ flex: 1, alignItems: 'flex-end' }}><Text style={s.faint}>Proposed</Text><Text style={[s.body, { fontSize: 12, textAlign: 'right' }]}>{change.proposed ? `${change.proposed.quantity} × ${change.proposed.name ?? change.original?.name}` : 'Remove item'}</Text><Text style={s.faint}>{change.proposed ? pkr(change.proposed.totalPricePaisa) : pkr(0)}</Text></View>
+    </View>)}
+    <View style={{ borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.control, paddingTop: 9, gap: 4 }}>
+      <View style={[s.spread, { gap: 12 }]}><Text style={s.muted}>Current order total</Text><Text style={[s.body, { fontWeight: '700' }]}>{pkr(revision.originalTotalPaisa)}</Text></View>
+      <View style={[s.spread, { gap: 12 }]}><Text style={s.muted}>Proposed order total</Text><Text style={[s.body, { fontWeight: '700' }]}>{pkr(revision.proposedTotalPaisa)}</Text></View>
+    </View>
+    {!!error && <Notice danger>{error}</Notice>}
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => void respond(false)} style={[s.btnGhost, { flex: 1, justifyContent: 'center' }]}><Text style={s.btnGhostText}>{busy ? 'Please wait…' : 'Reject'}</Text></TouchableOpacity>
+      <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => void respond(true)} style={[s.btn, { flex: 1, justifyContent: 'center' }]}><Text style={[s.btnText, { fontSize: 12 }]}>{busy ? 'Please wait…' : 'Approve changes'}</Text></TouchableOpacity>
+    </View>
+  </View>;
+}
+
 export default function OrderDetailScreen() {
   const navigation = useNavigation<any>(); const route = useRoute<any>(); const mode = route.params.mode ?? 'tracking';
   const { colors, s } = useTheme(); const inset = usePageInset();
@@ -83,6 +114,8 @@ export default function OrderDetailScreen() {
           <Text accessibilityRole="header" style={s.h2}>{delivery.merchant?.shopName ?? 'Your local shop'}</Text>
           <Text style={[s.muted, { marginTop: 8 }]}>{formatOrderTime(delivery.createdAt ?? order.createdAt)}</Text>
           {multi && <View style={{ marginTop: 8 }}><OrderStatusBadge status={delivery.status} /></View>}
+          {!!delivery.pendingRevision && <View style={{ marginTop: 15 }}><OrderRevisionPanel orderId={delivery.id} revision={delivery.pendingRevision} onDone={load} /></View>}
+          {!!delivery.orderRevisions?.length && <View style={{ marginBottom: 12 }}><Text style={s.faint}>Revision history</Text>{delivery.orderRevisions.filter((revision: any) => revision.status !== 'PENDING').map((revision: any) => <Text key={revision.id} style={[s.faint, { marginTop: 4 }]}>{revision.status.toLowerCase()} · {formatOrderTime(revision.resolvedAt ?? revision.expiresAt)}</Text>)}</View>}
           <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 16 }} />
           {visibleOrderItems(delivery).map((item) => <View key={item.id} style={[s.spread, { alignItems: 'flex-start', gap: 15, marginBottom: 12 }]}><View style={{ flex: 1 }}><Text style={{ fontSize: 12, lineHeight: 18, color: colors.text }}>{item.quantity} × {item.productNameSnapshot}</Text>{!!item.unitSnapshot && <Text style={s.faint}>{item.unitSnapshot}</Text>}{item.itemStatus === 'UNAVAILABLE' && <Text style={[s.faint, { color: colors.amber }]}>Unavailable — check the confirmed total</Text>}</View><Text style={{ color: colors.text, fontSize: 12, lineHeight: 18, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{pkr(item.totalPricePaisa)}</Text></View>)}
           <View style={{ borderTopWidth: 1, borderStyle: 'dashed', borderColor: colors.control, marginTop: 9, marginBottom: 14 }} />

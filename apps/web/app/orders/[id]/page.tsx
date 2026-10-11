@@ -196,6 +196,8 @@ function OrderTracking() {
         {(track.deliveries.length > 1 ? detail.children : [detail]).map((o: any) => (
           <div key={o.id} className="mb-2">
             {track.deliveries.length > 1 && <div className="text-xs font-semibold text-stone-400">{o.merchant?.shopName}</div>}
+            {o.pendingRevision && <OrderRevisionPrompt orderId={o.id} revision={o.pendingRevision} onDone={load} />}
+            {Array.isArray(o.orderRevisions) && o.orderRevisions.length > 0 && <details className="my-3 border-y border-stone-100 py-2 text-xs text-stone-500"><summary className="cursor-pointer font-semibold">Revision history</summary><ul className="mt-2 space-y-1">{o.orderRevisions.map((revision: any) => <li key={revision.id}>{revision.status.toLowerCase()} · {new Date(revision.createdAt).toLocaleString('en-PK')}{revision.resolvedAt ? ` · resolved ${new Date(revision.resolvedAt).toLocaleString('en-PK')}` : ` · expires ${new Date(revision.expiresAt).toLocaleTimeString('en-PK')}`}</li>)}</ul></details>}
             <ul className="divide-y divide-stone-100 text-sm">
               {(o.items ?? []).map((it: any) => (
                 <li key={it.id} className="flex justify-between py-1.5">
@@ -237,6 +239,28 @@ function OrderTracking() {
       </div>
     </div>
   );
+}
+
+function OrderRevisionPrompt({ orderId, revision, onDone }: { orderId: string; revision: any; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const respond = async (accept: boolean) => {
+    setBusy(true); setError('');
+    try { await api.post(`/orders/${orderId}/revisions/${revision.id}/respond`, { accept }); onDone(); }
+    catch (cause: any) { setError(cause.message || 'Unable to save your decision. Reload the order and try again.'); }
+    finally { setBusy(false); }
+  };
+  return <section className="my-3 border-y border-amber-200 bg-amber-50/70 p-3" aria-label="Order revision proposal">
+    <h3 className="font-semibold text-amber-950">The shop proposed an order change</h3>
+    <p className="mt-1 text-xs text-amber-900">Review and decide by {new Date(revision.expiresAt).toLocaleTimeString('en-PK')}. The original order stays in place unless you approve.</p>
+    <div className="mt-3 space-y-2">{(revision.changes ?? []).map((change: any) => <div key={change.originalItemId} className="grid grid-cols-[1fr_auto] gap-x-3 text-sm">
+      <div><span className="block text-xs text-stone-500">Original</span><strong>{change.original?.quantity} × {change.original?.name}</strong><span className="ml-2 text-stone-600">{formatPKR(change.original?.totalPricePaisa ?? 0)}</span></div>
+      <div className="text-right"><span className="block text-xs text-stone-500">Proposed</span>{change.proposed ? <><strong>{change.proposed.quantity} × {change.proposed.name ?? change.original?.name}</strong><span className="ml-2 text-stone-600">{formatPKR(change.proposed.totalPricePaisa)}</span></> : <strong>Remove</strong>}</div>
+    </div>)}</div>
+    <div className="mt-3 border-t border-amber-200 pt-2 text-sm"><div className="flex justify-between"><span>Current total</span><strong>{formatPKR(revision.originalTotalPaisa)}</strong></div><div className="flex justify-between"><span>Proposed total</span><strong>{formatPKR(revision.proposedTotalPaisa)}</strong></div></div>
+    {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
+    <div className="mt-3 flex flex-wrap gap-2"><button className="btn-secondary text-sm" disabled={busy} onClick={() => void respond(false)}>Reject changes</button><button className="btn-primary text-sm" disabled={busy} onClick={() => void respond(true)}>{busy ? 'Saving…' : 'Approve revised order'}</button></div>
+  </section>;
 }
 
 function ReplacementPrompt({ orderId, item, original, onDone }: { orderId: string; item: any; original?: any; onDone: () => void }) {

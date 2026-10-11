@@ -16,6 +16,7 @@ export type MerchantProfile = {
   isOpen: boolean;
   approvalStatus: string;
   trial?: { startedAt: string; endsAt: string; isInTrial: boolean; accessContinuesAfterTrial: boolean };
+  posTrial?: { status: 'ACTIVE' | 'EXPIRED' | 'DECLINED' | 'LEGACY'; optedIn: boolean | null; salesEnabled: boolean; startedAt: string | null; endsAt: string | null; remainingMilliseconds: number | null };
 };
 
 export function readProfile(value: unknown): MerchantProfile {

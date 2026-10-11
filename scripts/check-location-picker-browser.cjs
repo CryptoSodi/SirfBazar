@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 
 module.exports = async (page, baseUrl) => {
-  const original = { latitude: 31.5204, longitude: 74.3587, label: 'Original fixture area' };
+  const original = { latitude: 31.5204, longitude: 74.3587, label: 'Original fixture area', confirmedAt: new Date().toISOString() };
   const lookups = [];
   const nearby = [];
   await page.context().addInitScript(({ original }) => {

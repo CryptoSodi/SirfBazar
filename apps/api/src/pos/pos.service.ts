@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
 import { OrderStatus, PaymentStatus, ProductApprovalStatus, StaffPermission, UserRole } from '../common/constants';
 import { generateOrderNumber } from '../common/utils/ids';
+import { merchantPosTrialView } from '../common/merchant-access-policy';
 
 interface SaleItemInput {
   merchantProductId: string;
@@ -37,7 +38,34 @@ export class PosService {
   async capabilities(userId: string) {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.POS);
-    return { version: 2, merchantId: ctx.merchantId, idempotentSales: true, barcodeLookup: true, paymentMethods: ['CASH'], offlineSales: false };
+    const posTrial = await this.posTrial(ctx.merchantId);
+    return {
+      version: 3,
+      merchantId: ctx.merchantId,
+      idempotentSales: true,
+      barcodeLookup: true,
+      paymentMethods: ['CASH'],
+      offlineSales: false,
+      trial: posTrial,
+      salesEnabled: posTrial.salesEnabled,
+      readOnly: !posTrial.salesEnabled,
+    };
+  }
+
+  private async posTrial(merchantId: string) {
+    const merchant = await this.prisma.merchant.findUnique({ where: { id: merchantId }, select: { userId: true } });
+    if (!merchant) throw new NotFoundException('Merchant not found');
+    const trial = await this.prisma.merchantPosTrial.findUnique({ where: { userId: merchant.userId } });
+    return merchantPosTrialView(trial);
+  }
+
+  private async requireSalesEnabled(merchantId: string) {
+    const trial = await this.posTrial(merchantId);
+    if (!trial.salesEnabled) {
+      throw new ForbiddenException(trial.status === 'EXPIRED'
+        ? 'The POS trial has ended. Sales are disabled; existing POS records remain read-only.'
+        : 'POS sales are disabled for this shop.');
+    }
   }
 
   private productView(row: any) {
@@ -105,6 +133,7 @@ export class PosService {
     };
     const saved = await replay();
     if (saved) return saved;
+    await this.requireSalesEnabled(ctx.merchantId);
 
     try {
     const ids = dto.items.map((i) => i.merchantProductId);

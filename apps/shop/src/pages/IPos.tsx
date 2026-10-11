@@ -14,8 +14,17 @@ import './ipos.css';
 type View = 'register' | 'held' | 'sales' | 'settings';
 type Dialog = 'payment' | 'discard' | 'help' | 'quantity' | 'multi' | 'exit' | null;
 
+function formatTrialRemaining(milliseconds?: number | null) {
+  const minutes = Math.max(0, Math.ceil((milliseconds ?? 0) / 60_000));
+  if (minutes < 60) return `${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  return days ? `${days} days ${hours % 24} hours` : `${hours} hours ${minutes % 60} minutes`;
+}
+
 export default function IPos() {
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
+  const [posCapabilities, setPosCapabilities] = useState<any>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const user = getUser();
@@ -30,21 +39,31 @@ export default function IPos() {
     void Promise.all([api.get('/merchant/profile'), api.get('/pos/capabilities')]).then(([raw, capabilities]) => {
       const p = readProfile(raw);
       if (!p.isOwner && !p.permissions.includes('POS')) throw Error('Ask the shop owner to grant POS permission to your staff account.');
-      if (capabilities?.version !== 2 || !capabilities.idempotentSales || !capabilities.barcodeLookup || capabilities.merchantId !== p.id) {
+      if (capabilities?.version < 2 || !capabilities.idempotentSales || !capabilities.barcodeLookup || capabilities.merchantId !== p.id) {
         throw Error('This counter needs the updated POS API. Ask your administrator to deploy the matching backend, then retry.');
       }
-      if (active) setProfile(p);
+      if (active) { setProfile(p); setPosCapabilities(capabilities); }
     }).catch((cause) => { if (active) setError(cause instanceof ApiError && cause.status === 404
       ? 'The running API does not yet include the iPOS update. Deploy the updated POS backend, then retry.' : `${errorMessage(cause)} Check API access or ask the shop owner for POS permission.`); });
     return () => { active = false; };
   }, [attempt, user?.id]);
   if (error) return <section className="ops-panel"><h1 className="ops-page-title">iPOS</h1><p className="ipos-error" role="alert">{error}</p><button className="ops-button" onClick={() => setAttempt((v) => v + 1)}>Retry connection</button></section>;
-  if (!profile || !user?.id) return <section className="ops-panel" role="status">Loading iPOS and checking cashier access…</section>;
-  return <Counter key={`${profile.id}:${user.id}`} profile={profile} userId={user.id} cashier={user.fullName || user.phoneNumber || 'Cashier'} />;
+  if (!profile || !user?.id || !posCapabilities) return <section className="ops-panel" role="status">Loading iPOS and checking cashier access…</section>;
+  return <Counter key={`${profile.id}:${user.id}`} profile={profile} userId={user.id} cashier={user.fullName || user.phoneNumber || 'Cashier'} salesEnabled={posCapabilities.salesEnabled !== false} trial={posCapabilities.trial} />;
 }
 
-function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userId: string; cashier: string }) {
+function Counter({ profile, userId, cashier, salesEnabled, trial }: { profile: MerchantProfile; userId: string; cashier: string; salesEnabled: boolean; trial?: { status?: string; startedAt?: string | null; endsAt?: string | null; remainingMilliseconds?: number | null } }) {
   const navigate = useNavigate();
+  const [trialExpired, setTrialExpired] = useState(false);
+  useEffect(() => {
+    setTrialExpired(false);
+    if (!salesEnabled || !trial?.endsAt) return;
+    const expiresAt = Date.parse(trial.endsAt);
+    if (!Number.isFinite(expiresAt)) return;
+    const timeout = window.setTimeout(() => setTrialExpired(true), Math.max(0, expiresAt - Date.now()));
+    return () => window.clearTimeout(timeout);
+  }, [salesEnabled, trial?.endsAt]);
+  const canSell = salesEnabled && !trialExpired;
   const storageKey = counterKey(profile.id, userId);
   const [state, setState] = useState<CounterState | null>(null);
   const stateRef = useRef<CounterState | null>(null);
@@ -167,7 +186,7 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
     return () => { window.removeEventListener('beforeunload', warn); document.removeEventListener('click', leaving, true); };
   }, []);
 
-  const locked = !ownsCounter || busy || !!state?.pending || scanCount > 0;
+  const locked = !ownsCounter || busy || !!state?.pending || scanCount > 0 || !canSell;
   function resetEntry() { setVoidMode(false); setNextQuantity(1); setSelectedId(''); setCash(''); setScan(''); }
   function toggleAppearance() {
     const current = stateRef.current;
@@ -336,6 +355,8 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
     ] as const).map(([id, label, Icon]) => <button type="button" key={id} aria-pressed={view === id} onClick={() => changeView(id)}><Icon size={17} aria-hidden="true" />{label}</button>)}</nav>
     <div className="ipos-statusbar"><span><strong>Cashier</strong> {cashier}</span><span><strong>Date</strong> {new Date().toLocaleDateString('en-PK')}</span><span><strong>Mode</strong> {voidMode ? 'VOID · unpaid items only' : 'SALE · cash'}</span><span><strong>Connection</strong> {online ? 'Browser online · API required' : 'Offline · checkout unavailable'}</span><span><strong>Keys</strong> {state.settings.shortcuts ? shortcutProfiles.find((p) => p.id === state.settings.shortcutProfile)?.label : 'Disabled'}</span></div>
     {!ownsCounter && <div className="ipos-notice" role="status"><strong>Read-only counter</strong><p>Another tab may be using this cashier’s counter. Close it before continuing here.</p><button className="ops-button" onClick={() => setLockAttempt((v) => v + 1)}>Use this tab</button></div>}
+    {!canSell && <div className="ipos-notice" role="status"><strong>{trial?.status === 'EXPIRED' || trialExpired ? 'POS trial ended' : 'POS sales are disabled'}</strong><p>{trial?.status === 'EXPIRED' || trialExpired ? `Sales are disabled. Existing products, receipts and POS records remain read-only${trial?.endsAt ? `; trial ended ${new Date(trial.endsAt).toLocaleDateString('en-PK')}` : ''}. Renewal is not configured yet; contact support.` : 'This shop did not enable the POS trial. Existing POS records remain read-only.'}</p></div>}
+    {canSell && trial?.status === 'ACTIVE' && trial.endsAt && <div className="ipos-notice" role="status"><strong>POS trial active</strong><p>Started {trial.startedAt ? new Date(trial.startedAt).toLocaleString('en-PK') : 'today'}; ends {new Date(trial.endsAt).toLocaleString('en-PK')}. {formatTrialRemaining(trial.remainingMilliseconds)} remaining. After expiry, sales stop and records remain read-only.</p></div>}
     {state.pending && <section className="ipos-notice ipos-pending"><h2>Sale result needs confirmation</h2><p>Do not charge again or create another bill. This request is saved in this browser.</p><p className="ipos-code">Reference: {state.pending.requestId}</p><div className="ipos-actions"><button className="ops-button ops-button-primary" disabled={busy || !ownsCounter} onClick={() => void checkPending()}>Check saved sale</button><button className="ops-button" disabled={busy || !ownsCounter} onClick={() => void sendSale(state.pending!)}>Retry same request</button></div></section>}
     {error && recoveryError && <div className="ipos-error" role="alert">{error}</div>}
     <p className="ipos-feedback" role="status">{scanCount ? `Looking up ${scanCount} scan${scanCount === 1 ? '' : 's'}…` : ''}</p>
@@ -371,7 +392,7 @@ function Counter({ profile, userId, cashier }: { profile: MerchantProfile; userI
 
     {view === 'settings' && <IPosSettings settings={state.settings} disabled={locked} cashier={cashier} isOwner={profile.isOwner} onDirty={markSettingsDirty} onSave={(settings) => commit({ ...state, settings })} />}
 
-    {dialog === 'payment' && <Modal title="Cash payment" onClose={() => { if (!busy) setDialog(null); }}><div className="ipos-payment"><p>Total payable<strong>{money(subtotal)}</strong></p><label className="ipos-field" htmlFor="ipos-cash">Cash received<input id="ipos-cash" ref={cashInput} className="ops-input" inputMode="decimal" autoComplete="off" value={cash} onChange={(e) => setCash(e.target.value)} disabled={busy || !!state.pending} aria-describedby="ipos-cash-help ipos-cash-error" /></label><small id="ipos-cash-help">Scan items before opening payment. Confirm the cash received manually.</small>{paymentFieldError && <p id="ipos-cash-error" className="ipos-inline-error" role="alert">{error}</p>}<div className="ipos-actions">{[subtotal, ...[50000, 100000, 500000].filter((v) => v > subtotal)].map((value) => <button className="ops-button" key={value} disabled={busy || !!state.pending} onClick={() => setCash((value / 100).toFixed(2))}>{money(value)}</button>)}</div><p>Change due<strong>{amount !== null && amount >= subtotal ? money(amount - subtotal) : 'Enter cash received'}</strong></p><button type="button" className="ops-button ops-button-primary" disabled={busy || !!state.pending || !ownsCounter} onClick={() => {
+    {dialog === 'payment' && <Modal title="Cash payment" onClose={() => { if (!busy) setDialog(null); }}><div className="ipos-payment"><p>Total payable<strong>{money(subtotal)}</strong></p><label className="ipos-field" htmlFor="ipos-cash">Cash received<input id="ipos-cash" ref={cashInput} className="ops-input" inputMode="decimal" autoComplete="off" value={cash} onChange={(e) => setCash(e.target.value)} disabled={busy || !!state.pending} aria-describedby="ipos-cash-help ipos-cash-error" /></label><small id="ipos-cash-help">Scan items before opening payment. Confirm the cash received manually.</small>{paymentFieldError && <p id="ipos-cash-error" className="ipos-inline-error" role="alert">{error}</p>}<div className="ipos-actions">{[subtotal, ...[50000, 100000, 500000].filter((v) => v > subtotal)].map((value) => <button className="ops-button" key={value} disabled={busy || !!state.pending} onClick={() => setCash((value / 100).toFixed(2))}>{money(value)}</button>)}</div><p>Change due<strong>{amount !== null && amount >= subtotal ? money(amount - subtotal) : 'Enter cash received'}</strong></p><button type="button" className="ops-button ops-button-primary" disabled={busy || !!state.pending || !ownsCounter || !canSell} onClick={() => {
       try { const payload = paymentPayload(state.draft, state.settings, cash); if (commit({ ...state, pending: payload })) void sendSale(payload); }
       catch (cause) { setError(errorMessage(cause)); cashInput.current?.focus(); }
     }}>{busy ? 'Saving sale…' : 'Complete cash sale'}</button><p className="ipos-muted">Only select this after collecting cash. Printing will not create another sale.</p>{state.pending && !busy && <button className="ops-button" onClick={() => setDialog(null)}>Close and check saved sale</button>}</div></Modal>}

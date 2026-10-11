@@ -44,6 +44,7 @@ async function merchant(suffix) {
     userId: user.id, shopName: `Test ${suffix}`, shopType: 'GROCERY', phoneNumber: `+92${suffix.slice(0, 10)}`,
     address: 'Disposable test street', city: 'Lahore', latitude: 31.5, longitude: 74.3,
     serviceRadiusKm: 50, approvalStatus: 'APPROVED', isOpen: true, isOnline: true,
+    openingTime: '00:00', closingTime: '23:59',
   } });
 }
 

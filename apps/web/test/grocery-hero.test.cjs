@@ -18,6 +18,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../compon
   },
 });
 const { GroceryHero } = target.exports;
+const homeSource = fs.readFileSync(require.resolve('../app/page.tsx'), 'utf8');
 function nodes(node) {
   if (node == null) return [];
   if (Array.isArray(node)) return node.flatMap(nodes);
@@ -25,9 +26,9 @@ function nodes(node) {
   return [node, ...nodes(node.props.children)];
 }
 
-test('hero uses real semantic text and does not claim a confirmed location for the default area', () => {
+test('hero uses real semantic text and never implies a default delivery location', () => {
   for (const confirmed of [false, true]) {
-    const tree = nodes(GroceryHero({ hasConfirmedLocation: confirmed }));
+    const tree = nodes(GroceryHero({ hasConfirmedLocation: confirmed, onChooseLocation() {} }));
     const heading = tree.find(node => node.type === 'h1');
     const text = nodes(heading).filter(node => typeof node === 'string').join('');
     assert.equal(text, confirmed ? 'Everyday groceries from shops near you.' : 'Everyday groceries from local shops.');
@@ -37,14 +38,32 @@ test('hero uses real semantic text and does not claim a confirmed location for t
   }
 });
 
-test('both CTAs use existing guest discovery destinations without handlers or auth dependencies', () => {
-  const links = nodes(GroceryHero({ hasConfirmedLocation: true })).filter(node => node.type === 'Link');
+test('confirmed location links to guest shop discovery without auth dependencies', () => {
+  const links = nodes(GroceryHero({ hasConfirmedLocation: true, onChooseLocation() {} })).filter(node => node.type === 'Link');
   assert.deepEqual(links.map(node => node.props.href), ['/search', '/search?type=shops']);
   assert.ok(links.every(node => !node.props.onClick));
 });
 
+test('unconfirmed location requires an explicit action before local discovery', () => {
+  let opened = false;
+  const tree = nodes(GroceryHero({ hasConfirmedLocation: false, onChooseLocation() { opened = true; } }));
+  const button = tree.find(node => node.type === 'button');
+  assert.equal(button.props.children, 'Set delivery location');
+  button.props.onClick();
+  assert.equal(opened, true);
+});
+
+test('nearby shops are the first homepage section after the hero and failures stay scoped', () => {
+  const hero = homeSource.indexOf('<GroceryHero');
+  const shops = homeSource.indexOf('aria-labelledby="nearby-shops-title"');
+  const categories = homeSource.indexOf('Shop by category');
+  assert.ok(hero >= 0 && shops > hero && categories > shops);
+  assert.match(homeSource, /setShopError\(!!location && shopResult\?\.status === 'rejected'\)/);
+  assert.match(homeSource, /setProductError\(!!location && productResult\?\.status === 'rejected'\)/);
+});
+
 test('only separate production artwork is rendered with reserved dimensions and responsive sizing', () => {
-  const tree = nodes(GroceryHero({ hasConfirmedLocation: false }));
+  const tree = nodes(GroceryHero({ hasConfirmedLocation: false, onChooseLocation() {} }));
   const images = tree.filter(node => node.type === 'Image');
   assert.equal(images.length, 1);
   assert.equal(images[0].props.src, '/images/hero/grocery-hero-artwork.webp');

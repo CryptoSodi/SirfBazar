@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentMethod } from '../common/constants';
 
@@ -99,4 +99,31 @@ export class ItemUnavailableDto {
   @IsOptional()
   @IsString()
   replacementMerchantProductId?: string;
+}
+
+export class OrderRevisionChangeDto {
+  @IsString() @IsNotEmpty() @MaxLength(128)
+  originalItemId: string;
+
+  @IsIn(['REMOVE', 'REDUCE', 'REPLACE'])
+  action: 'REMOVE' | 'REDUCE' | 'REPLACE';
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100000)
+  quantity?: number;
+
+  @IsOptional() @IsString() @MaxLength(128)
+  replacementMerchantProductId?: string;
+}
+
+export class CreateOrderRevisionDto {
+  @IsUUID('4')
+  requestId: string;
+
+  @IsArray() @ArrayNotEmpty() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => OrderRevisionChangeDto)
+  changes: OrderRevisionChangeDto[];
+}
+
+export class OrderRevisionResponseDto {
+  @IsBoolean()
+  accept: boolean;
 }

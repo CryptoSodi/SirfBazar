@@ -6,8 +6,9 @@ function fixture(multi = false) {
   let state = { active: true, stock: 20, payments: 0, orders: [], audits: [] };
   let queue = Promise.resolve(), fail = false;
   const item = { merchantProductId: 'mp', quantity: 2 };
+  const operatingHours = [];
   const mp = { id: 'mp', productId: 'milk', merchantId: 'shop', pricePaisa: 29500, stockQuantity: 20, isAvailable: true,
-    product: { name: 'Milk', unit: 'litre', approvalStatus: 'APPROVED', isRestricted: false, requiresPrescription: false, category: { isRestricted: false, isActive: true } }, merchant: { id: 'shop', shopName: 'Shop', approvalStatus: 'APPROVED', isOpen: true, isOnline: true, latitude: 31.52, longitude: 74.35, serviceRadiusKm: 20, minimumOrderValuePaisa: 0, averagePreparationMinutes: 10 } };
+    product: { name: 'Milk', unit: 'litre', approvalStatus: 'APPROVED', isRestricted: false, requiresPrescription: false, category: { isRestricted: false, isActive: true } }, merchant: { id: 'shop', shopName: 'Shop', approvalStatus: 'APPROVED', isOpen: true, isOnline: true, openingTime: '00:00', closingTime: '23:59', operatingHours, latitude: 31.52, longitude: 74.35, serviceRadiusKm: 20, minimumOrderValuePaisa: 0, averagePreparationMinutes: 10 } };
   const prisma = {
     customer: { findUnique: async ({ where }) => ({ id: where.userId, user: { fullName: 'Test' } }) },
     cart: { findFirst: async () => state.active ? { id: 'cart', couponCode: null, items: multi ? [item, { ...item, merchantProductId: 'mp2' }] : [item] } : null },
@@ -49,10 +50,15 @@ function fixture(multi = false) {
     const record = state.orders.find((entry) => entry.id === id);
     assert.equal(record.customerId, userId); return { ...record };
   };
-  return { service, state: () => state, fail: (value) => fail = value,
+  return { service, state: () => state, fail: (value) => fail = value, setHours: (hours) => operatingHours.splice(0, operatingHours.length, ...hours),
     approve: async (value) => ({ ...value, approvedQuote: (await service.quoteOrder('customer', value)).approvedQuote }) };
 }
 const input = { requestId: 'bb63e131-9d1c-4208-a2b8-1a2cbd68b432', cartId: 'cart', deliveryAddressId: 'home', paymentMethod: 'COD' };
+test('checkout quote refuses a shop outside its saved weekly schedule', async () => {
+  const f = fixture();
+  f.setHours(Array.from({ length: 7 }, (_, dayOfWeek) => ({ dayOfWeek, isClosed: true, opensAt: null, closesAt: null, closesNextDay: false })));
+  await assert.rejects(f.service.quoteOrder('customer', input), /outside its posted delivery hours/);
+});
 test('concurrent same-reference checkout creates one order, payment and stock decrement', async () => {
   const f = fixture();
   const approved = await f.approve(input);

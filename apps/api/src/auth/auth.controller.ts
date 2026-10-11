@@ -32,6 +32,11 @@ export class AuthController {
     return this.authService.linkGoogle(user.userId, dto.idToken);
   }
 
+  @Get('google-account')
+  googleAccount(@CurrentUser() user: AuthUser) {
+    return this.authService.googleAccount(user.userId);
+  }
+
   @Public()
   @Post('admin-login')
   adminLogin(@Body() dto: AdminLoginDto) {

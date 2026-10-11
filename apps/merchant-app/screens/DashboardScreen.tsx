@@ -18,6 +18,9 @@ const ui = StyleSheet.create({
   title: { color: '#172321', fontSize: 29, lineHeight: 34, fontWeight: '800', letterSpacing: -1.1, marginTop: 7 },
   description: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 7 },
   status: { color: colors.primary, fontSize: 11, fontWeight: '700', marginTop: 9 },
+  trial: { marginTop: 16, padding: 14, backgroundColor: '#EAF7F2', borderColor: '#C5E7D9', borderWidth: 1, borderRadius: 10 },
+  trialTitle: { color: '#075E46', fontSize: 12, fontWeight: '800' },
+  trialText: { color: '#315A4D', fontSize: 11, lineHeight: 17, marginTop: 5 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 22 },
   metric: { width: '48%', flexGrow: 1, minHeight: 122, justifyContent: 'space-between', backgroundColor: '#FFFFFF', borderColor: '#E4E8E7', borderWidth: 1, borderRadius: 14, padding: 15 },
   metricLabel: { color: colors.muted, fontSize: 11 },
@@ -35,6 +38,18 @@ const ui = StyleSheet.create({
   other: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 9 },
   slogan: { color: colors.primary, textAlign: 'center', fontSize: 18, fontWeight: '700', marginTop: 26 },
 });
+
+function trialDate(value?: string | null) {
+  return value ? new Intl.DateTimeFormat('en-PK', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Karachi' }).format(new Date(value)) : '—';
+}
+
+function trialRemaining(milliseconds?: number | null) {
+  const minutes = Math.max(0, Math.ceil((milliseconds ?? 0) / 60_000));
+  if (minutes < 60) return `${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  return days ? `${days} days ${hours % 24} hours` : `${hours} hours ${minutes % 60} minutes`;
+}
 
 export default function DashboardScreen() {
   const toast = useToast();
@@ -70,11 +85,22 @@ export default function DashboardScreen() {
     ['30-day sales', pkr(stats.monthSalesPaisa ?? 0)], ['30-day net earnings', pkr(stats.netEarningsPaisa ?? 0)],
     ['Commission (30d)', pkr(stats.commissionPaisa ?? 0)],
   ];
+  const posTrial = profile?.posTrial;
+  const trialDetails = posTrial?.status === 'ACTIVE'
+    ? `Started ${trialDate(posTrial.startedAt)}. Ends ${trialDate(posTrial.endsAt)}. ${trialRemaining(posTrial.remainingMilliseconds)} remaining.`
+    : posTrial?.status === 'EXPIRED'
+      ? `Started ${trialDate(posTrial.startedAt)} and ended ${trialDate(posTrial.endsAt)}. POS sales are disabled; existing records remain read-only. Renewal is not configured; contact support.`
+      : posTrial?.status === 'DECLINED'
+        ? 'POS was not enabled during onboarding. Marketplace orders and other shop features remain available.'
+        : posTrial?.status === 'LEGACY'
+          ? 'This shop predates POS trial tracking; current POS access is preserved.'
+          : null;
 
   return <SafeAreaView style={ui.screen} edges={['top']}><ScrollView contentContainerStyle={ui.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); load(); setRefreshing(false); }} />}>
     <Image source={require('../assets/brand/sirfbazar-horizontal-no-slogan.png')} style={ui.logo} accessibilityLabel="SirfBazar" />
     <View style={ui.shopRow}><Text style={ui.shopName} numberOfLines={1}>{profile?.shopName ?? 'Your shop'}</Text><View style={ui.presence}><Text style={ui.presenceText}>{stats.isOnline ? 'Online' : 'Offline'}</Text><Switch value={stats.isOnline} onValueChange={toggleOnline} trackColor={{ true: colors.primary }} accessibilityLabel="Shop available for orders" /></View></View>
     <Text style={ui.eyebrow}>Your shop, connected</Text><Text style={ui.title}>A good day starts here.</Text><Text style={ui.description}>Orders, stock and your own delivery team in one place.</Text><Text style={ui.status}>{stats.approvalStatus} · {stats.isOpen ? 'Store open' : 'Store closed'}</Text>
+    {trialDetails && <View style={ui.trial}><Text style={ui.trialTitle}>{posTrial?.status === 'ACTIVE' ? 'POS trial active' : posTrial?.status === 'EXPIRED' ? 'POS trial ended' : posTrial?.status === 'DECLINED' ? 'POS not enabled' : 'POS access'}</Text><Text style={ui.trialText}>{trialDetails}</Text></View>}
     <View style={ui.grid}>{metrics.map(([label, value, hint]) => <View key={label} style={ui.metric}><Text style={ui.metricLabel}>{label}</Text><Text style={ui.metricValue} numberOfLines={1}>{value}</Text><Text style={ui.metricHint}>{hint}</Text></View>)}</View>
     <View style={ui.focus}><Text style={ui.focusTitle}>Your focus today</Text><Text style={ui.focusText}>{stats.pendingOrders ?? 0} online orders awaiting acceptance</Text><Text style={ui.focusText}>{stats.lowStockProducts ?? 0} products running low</Text></View>
     <Text style={ui.sectionTitle}>Order pipeline</Text><View style={ui.panel}><Text style={ui.panelDescription}>Current online orders for your shop</Text>{pipeline.map(([label, count]) => <View key={label} style={ui.pipelineRow}><Text style={ui.pipelineLabel}>{label}</Text><Text style={ui.pipelineCount}>{count}</Text></View>)}</View>

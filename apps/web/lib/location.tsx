@@ -3,16 +3,9 @@
 import { useEffect, useState } from 'react';
 import { getStoredLocation, storeLocation, SbLocation } from './api';
 
-/** Default browsing location when GPS is denied/unavailable: Gulberg, Lahore. */
-export const FALLBACK_LOCATION: SbLocation = {
-  latitude: 31.5204,
-  longitude: 74.3587,
-  label: 'Gulberg, Lahore (example)',
-};
-
 /**
- * Browse with a stored choice or a labelled example area. GPS is requested
- * only when the person explicitly chooses it in the location picker.
+ * Nearby discovery stays unfiltered until the customer explicitly confirms a
+ * delivery location. GPS is requested only from the location picker action.
  */
 export function useLocation() {
   const [location, setLocation] = useState<SbLocation | null>(null);
@@ -20,12 +13,12 @@ export function useLocation() {
 
   useEffect(() => {
     const stored = getStoredLocation();
-    setLocation(stored || FALLBACK_LOCATION);
+    setLocation(stored);
     setResolved(true);
 
     const onChange = () => {
       const updated = getStoredLocation();
-      setLocation(updated || FALLBACK_LOCATION);
+      setLocation(updated);
     };
     window.addEventListener('sb:location', onChange);
     return () => window.removeEventListener('sb:location', onChange);
