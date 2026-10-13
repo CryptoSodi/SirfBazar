@@ -43,7 +43,8 @@ function Run([string]$File, [string[]]$Arguments, [string]$Directory, [hashtable
         $message = $stdout.Result + $stderr.Result
         if ($secret) { $message = $message.Replace($secret, '[REDACTED]') }
         if ($LogPath) { [IO.File]::WriteAllText($LogPath, $message) }
-        Write-Host $message
+        if ($LogPath) { Write-Host (($message -split "`n" | Select-Object -Last 25) -join "`n") }
+        else { Write-Host $message }
         if ($process.ExitCode -ne 0) { throw "Command failed ($($process.ExitCode)): $File" }
         return $message
     } finally { $process.Dispose() }
@@ -90,7 +91,9 @@ try {
             $archive = Join-Path $output "$role-source.tar"
             [void](Run 'git.exe' @('-C', $root, '-c', 'core.autocrlf=false', 'archive', '--format=tar', "--output=$archive", $source, "apps/$role-app") $root)
             [void](Run 'tar.exe' @('-xf', $archive, '-C', $stage, '--strip-components=2') $root)
-            if ((Get-FileHash "$original\package-lock.json").Hash -ne (Get-FileHash "$stage\package-lock.json").Hash) {
+            $installedLock = Get-Content "$original\package-lock.json" -Raw | ConvertFrom-Json -AsHashtable | ConvertTo-Json -Depth 100 -Compress
+            $snapshotLock = Get-Content "$stage\package-lock.json" -Raw | ConvertFrom-Json -AsHashtable | ConvertTo-Json -Depth 100 -Compress
+            if ($installedLock -cne $snapshotLock) {
                 throw 'Snapshot dependency lock differs from the installed-app source; install matching dependencies before building.'
             }
             $configPath = Join-Path $stage 'app.json'
@@ -135,7 +138,7 @@ try {
         if (-not (Test-Path $bundle)) { throw "Missing bundle for $role" }
         $artifact = Join-Path $output "sirfbazar-$role-v1.0.0-build$VersionCode.aab"
         Copy-Item -LiteralPath $bundle -Destination $artifact
-        $verification = Run "$java\bin\jarsigner.exe" @('-verify', $artifact) $root
+        $verification = Run "$java\bin\jarsigner.exe" @('-J-Duser.language=en', '-J-Duser.country=US', '-verify', $artifact) $root
         if ($verification -notmatch 'jar verified') { throw 'Bundle signature verification failed.' }
         $certificate = Run "$java\bin\keytool.exe" @('-J-Duser.language=en', '-printcert', '-jarfile', $artifact) $root
         if (-not $certificate.Contains($expectedSha1[$role])) { throw 'Bundle is not signed with the expected release certificate.' }

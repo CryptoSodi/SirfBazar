@@ -4,7 +4,9 @@ param(
     [Parameter(Mandatory)][ValidateSet('customer', 'merchant', 'rider')][string]$App,
     [Parameter(Mandatory)][string]$Bundle,
     [Parameter(Mandatory)][int]$VersionCode,
-    [string]$Bundletool = "$PSScriptRoot\..\output\bundletool-all-1.18.3.jar"
+    [string]$Bundletool = "$PSScriptRoot\..\output\bundletool-all-1.18.3.jar",
+    [string]$ApkPasswordFile,
+    [string]$KeyDirectory = 'D:\keys\SirfBazar'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -17,12 +19,12 @@ $expectedSha1 = @{
     merchant = 'FF:7A:DA:CB:08:BB:CD:CB:C8:7E:6A:9B:36:94:30:A2:42:4B:EE:58'
     rider = 'A1:42:B2:57:E3:C4:97:5F:21:FF:DF:24:93:6B:7A:13:E1:D8:5B:33'
 }
-$signature = & "$java\jarsigner.exe" -verify $Bundle 2>&1 | Out-String
+$signature = & "$java\jarsigner.exe" '-J-Duser.language=en' '-J-Duser.country=US' -verify $Bundle 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0 -or $signature -notmatch 'jar verified') { throw 'JAR signature verification failed.' }
 $certificate = & "$java\keytool.exe" '-J-Duser.language=en' -printcert -jarfile $Bundle 2>&1 | Out-String
 if ($LASTEXITCODE -ne 0 -or -not $certificate.Contains($expectedSha1[$App])) { throw 'Unexpected signing certificate.' }
-& "$java\java.exe" -jar $Bundletool validate "--bundle=$Bundle"
-if ($LASTEXITCODE -ne 0) { throw 'bundletool validation failed.' }
+$validation = & "$java\java.exe" -jar $Bundletool validate "--bundle=$Bundle" 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { throw "bundletool validation failed: $validation" }
 $raw = & "$java\java.exe" -jar $Bundletool dump manifest "--bundle=$Bundle" --module=base | Out-String
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect bundle manifest.' }
 [xml]$manifest = $raw
@@ -76,7 +78,32 @@ $report = @{
     bundleValidation = 'passed'; elf16KB = 'passed'
     deviceJourneys = 'not verified'; playDeliveredSigning = 'not verified'
 }
+if ($ApkPasswordFile) {
+    $passwordPath = (Resolve-Path -LiteralPath $ApkPasswordFile).Path
+    $keystore = (Resolve-Path -LiteralPath (Join-Path $KeyDirectory "sirfbazar-$App-release.jks")).Path
+    $set = [IO.Path]::ChangeExtension($Bundle, '.apks')
+    $apk = [IO.Path]::ChangeExtension($Bundle, '.apk')
+    if ((Test-Path $set) -or (Test-Path $apk)) { throw 'Refusing to overwrite an existing test APK or APK set.' }
+    # Bundletool reads the existing private file directly; no password value is a CLI argument.
+    & "$java\java.exe" -Xmx1024m -jar $Bundletool build-apks "--bundle=$Bundle" "--output=$set" --mode=universal `
+        "--ks=$keystore" "--ks-key-alias=sirfbazar-$App-release" "--ks-pass=file:$passwordPath" "--key-pass=file:$passwordPath"
+    if ($LASTEXITCODE -ne 0) { throw 'Universal APK generation failed.' }
+    $apkSet = [IO.Compression.ZipFile]::OpenRead($set)
+    try {
+        $entry = $apkSet.GetEntry('universal.apk')
+        if (-not $entry) { throw 'No universal APK in the generated set.' }
+        [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $apk, $false)
+    } finally { $apkSet.Dispose() }
+    $buildTools = Join-Path $env:LOCALAPPDATA 'Android\Sdk\build-tools\36.0.0'
+    & "$buildTools\zipalign.exe" -c -P 16 4 $apk
+    if ($LASTEXITCODE -ne 0) { throw 'Generated APK ZIP alignment failed.' }
+    $apkSignature = & "$java\java.exe" -jar "$buildTools\lib\apksigner.jar" verify --verbose --print-certs $apk | Out-String
+    if ($LASTEXITCODE -ne 0 -or -not $apkSignature.ToLowerInvariant().Contains($expectedSha1[$App].Replace(':', '').ToLowerInvariant())) {
+        throw 'APK signature or expected certificate verification failed.'
+    }
+    $report.apk = @{ path = $apk; sha256 = (Get-FileHash $apk -Algorithm SHA256).Hash; zip16KB = 'passed'; signature = 'passed' }
+}
 [IO.File]::WriteAllText("$Bundle.manifest.xml", $raw)
 [IO.File]::WriteAllText("$Bundle.verification.json", ($report | ConvertTo-Json -Depth 6))
 Write-Host "$App bundle verified: package=$package version=$version targetSDK=$sdk nativeLibraries=$($libraries.Count)"
-Write-Host 'This does not verify device journeys, generated APK ZIP alignment, Play signing or Google Play approval.'
+Write-Host 'This does not verify device journeys, Play-delivered signing or Google Play approval. APK ZIP checks run only with -ApkPasswordFile.'

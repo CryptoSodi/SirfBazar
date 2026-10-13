@@ -73,6 +73,12 @@ non-debug manifest and every packaged arm64/x86_64 ELF LOAD segment's 16 KB
 alignment. Merchant must not request microphone permission. It writes public
 manifest and JSON verification records beside the AAB.
 
+Add `-ApkPasswordFile <existing-private-file>` to also export a locally signed
+universal APK for device testing. Bundletool reads the private file directly;
+the password itself is never a command-line value. The validator checks the APK's
+expected signer and 16 KB ZIP alignment. It refuses to overwrite existing APKs
+or APK sets. These sideloadable test APKs do not prove Play-delivered signing.
+
 Passing these checks does not prove generated APK ZIP alignment, 16 KB device
 execution, correct UI or Google sign-in with Play's distribution certificate.
 Perform those checks on the appropriate Play testing track before production.
