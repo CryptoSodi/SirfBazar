@@ -48,11 +48,17 @@ were used. This is not a full screen-reader or mobile-app test.
 
 ## Still required before Play submission
 
-The website content is implemented locally, **not pushed or deployed**. An
-email-request page does not prove deletion fulfillment. The owner still needs to
-establish processing/retention periods and an operational erasure process,
-including retained financial records and backups. Each mobile app still needs
-a discoverable deletion-request entry and verification of the complete workflow.
+The website content is pushed in PR #21, **not yet deployed**. All three mobile
+profile/settings views now include deletion-request and policy links; merchant
+and rider login views also expose them. The customer request screen opens email
+instead of calling the legacy soft-disable endpoint. Component tests passed;
+updated native builds, onboarding-state coverage and full workflows still need
+device verification.
+
+An email-request page does not prove deletion fulfillment. Following the owner's
+request for customary retention, `deletion-operations.md` records selected
+processing/retention targets. The operational erasure process, retained financial
+evidence and backup expiry remain unverified. No live erasure was performed.
 
 Policy wording should receive appropriate legal review before publication; this
 change does not certify legal or Google Play compliance. No fixed retention,
