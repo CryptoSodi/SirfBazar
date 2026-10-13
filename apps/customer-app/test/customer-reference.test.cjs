@@ -11,7 +11,7 @@ function load(file, deps, extras = {}) {
     setTimeout, clearTimeout, AbortController, process, ...extras });
   return module.exports;
 }
-function harness() {
+function harness(respond) {
   const data = new Map(); const requests = []; const events = [];
   const storage = { getItem: async k => data.get(k) ?? null, setItem: async (k, v) => data.set(k, v), removeItem: async k => data.delete(k) };
   const api = load('api', {
@@ -22,7 +22,7 @@ function harness() {
     './toast-session': load('toast-session', {}),
     './customer-flow': load('customer-flow', {}), 'react-native': { Platform: { OS: 'web' } },
     'expo-constants': { default: { expoConfig: {} } },
-  }, { fetch: async (url, options) => { requests.push({ url, options }); return { ok: true, status: 200, json: async () => ({ sessionToken: 'guest', groups: [], itemCount: 0 }) }; } });
+  }, { fetch: async (url, options) => { requests.push({ url, options }); return respond ? respond(url, options) : { ok: true, status: 200, json: async () => ({ sessionToken: 'guest', groups: [], itemCount: 0 }) }; } });
   return { api, data, requests, events };
 }
 test('map fallback is not a confirmed delivery location', async () => {
@@ -46,6 +46,50 @@ test('public catalogue reads do not carry expired private credentials', async ()
   await api.api.get('/products/search?q=milk'); await api.api.get('/merchants/nearby');
   assert.equal(requests.every(r => !r.options.headers.authorization), true);
   await api.api.get('/customer/profile'); assert.equal(requests.at(-1).options.headers.authorization, 'Bearer expired-private');
+});
+
+test('ordinary and corrupt cached profiles preserve anonymous discovery', async () => {
+  const { api, data, requests } = harness();
+  data.set('sb.accessToken', 'private');
+  for (const profile of [JSON.stringify({ id: 'ordinary-customer' }), '{broken']) {
+    data.set('sb.user', profile);
+    await api.api.get('/products/nearby');
+  }
+  assert.equal(requests.length, 2);
+  assert.equal(requests.every(r => !r.options.headers.authorization), true);
+});
+
+test('review discovery refreshes once for concurrent reads and sends verified-session credentials', async () => {
+  const user = { id: 'play-review-v1-user-customer' };
+  const { api, data, requests } = harness(async url => ({ ok: true, status: 200, json: async () => url.endsWith('/auth/refresh-token')
+    ? { accessToken: 'renewed-review', refreshToken: 'rotated-review', user }
+    : { items: [{ id: 'play-review-v1-shop' }] } }));
+  data.set('sb.user', JSON.stringify(user));
+  data.set('sb.accessToken', 'expired-review');
+  data.set('sb.refreshToken', 'review-refresh');
+  const paths = ['/products/nearby', '/merchants/nearby', '/location/service-availability', '/coupons'];
+  await Promise.all(paths.map(path => api.api.get(path)));
+  assert.equal(requests.filter(r => r.url.endsWith('/auth/refresh-token')).length, 1);
+  for (const request of requests.filter(r => !r.url.endsWith('/auth/refresh-token'))) {
+    assert.equal(request.options.headers.authorization, 'Bearer renewed-review');
+  }
+});
+
+test('revoked review session never falls back to ordinary discovery', async () => {
+  const { api, data, requests } = harness(async () => ({ ok: false, status: 401, json: async () => ({}) }));
+  data.set('sb.user', JSON.stringify({ id: 'play-review-v1-user-customer' }));
+  data.set('sb.accessToken', 'revoked-review');
+  data.set('sb.refreshToken', 'revoked-refresh');
+  await assert.rejects(api.api.get('/merchants/nearby'), error => error.status === 401);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url.endsWith('/auth/refresh-token'), true);
+});
+
+test('cached review identity alone cannot authorize catalogue access', async () => {
+  const { api, data, requests } = harness();
+  data.set('sb.user', JSON.stringify({ id: 'play-review-v1-user-customer' }));
+  await assert.rejects(api.api.get('/products/nearby'), error => error.status === 401);
+  assert.equal(requests.length, 0);
 });
 test('unknown-area guest creation and cart fetch do not send map fallback coordinates', async () => {
   const { api, requests } = harness(); await api.fetchCart();

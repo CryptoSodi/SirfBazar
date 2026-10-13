@@ -228,7 +228,12 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   const version = authVersion;
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   const publicRead = method === 'GET' && /^\/(products|merchants|location|coupons)(\/|\?|$)/.test(path);
-  const access = publicRead ? null : await getAccessToken();
+  const reviewDiscovery = publicRead && (await getUser().catch(() => null))?.id === 'play-review-v1-user-customer';
+  // Ordinary discovery stays anonymous. The isolated review catalogue needs a
+  // verified session; public endpoints otherwise treat expired JWTs as guests.
+  // Refreshes are single-flight and this extra request affects review users only.
+  if (reviewDiscovery) await renewSession();
+  const access = publicRead && !reviewDiscovery ? null : await getAccessToken();
   if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
   if (access) headers.authorization = `Bearer ${access}`;
   if (path.startsWith('/guest')) headers['x-guest-session'] = await ensureGuestToken();

@@ -169,11 +169,46 @@ CI includes both new test files. Native/Play-installed UI journeys are separate.
   ACL-restricted `C:\Users\tassa\.codex\private\SirfBazar-review\review-credentials.json`.
   Never copy these codes into public documentation or GitHub issues/releases.
 
-Pending: installed-APK journeys and push/upload checks, Play sign-in-detail
-submission and full-access declaration. ADB reported no connected device during
-this activation. The Play declaration has NOT been certified, and no app was
-published by this change. The existing onboarding/Google identity exceptions
-above must remain disclosed rather than hidden by a success claim.
+Pending: complete installed-APK journeys and push/upload checks, Play sign-in-detail
+submission and full-access declaration. The Play declaration has NOT been
+certified, and no app was published by this change. The existing onboarding/Google
+identity exceptions above must remain disclosed rather than hidden by a success claim.
+
+## Physical Device Checks - 13 October 2026
+
+Connected Samsung Galaxy A52 (`SM-A525F`); installed all three release-signed
+1.0.0/build 6 APKs, min SDK 24, target SDK 36. All three phone/code logins reached
+their authenticated screens using the isolated accounts. Customer saved addresses
+showed the provisioned Review demo address. Merchant dashboard showed the expected
+demo shop and three orders; inventory showed five fixture products, and saving the
+unchanged price/stock returned successfully to inventory. Rider showed its assigned
+demo order and advanced to the pickup acknowledgement screen. These observations
+do not prove completed native checkout, delivery, uploads or push delivery.
+
+Device testing exposed a release blocker: customer public catalogue requests
+discarded all access tokens, so the API correctly hid the demo shop even after
+reviewer login and selection of the saved demo address. `apps/customer-app/lib/api.ts`
+now refreshes and attaches the session only for the explicitly provisioned review
+customer's discovery requests. The cached identity is only a routing hint; server
+JWT, session and tenant checks remain authoritative. Concurrent refreshes share the
+existing single-flight operation. Revoked review access fails instead of falling
+back to the ordinary catalogue. Ordinary/guest browsing remains anonymous.
+
+Validation: all 54 customer tests and customer TypeScript check passed, including
+four new regressions for ordinary/corrupt profiles, concurrent review discovery,
+revocation and an identity without credentials. A rebuilt native candidate must
+still demonstrate browse/cart/checkout before the full-access declaration is signed.
+
+Additional observations awaiting reproduction: merchant verification responded to
+its text label after taps in the button's empty area had no visible effect; the
+long demo shop name overflowed the rider pickup card. ADB accessibility capture
+also timed out on rider details; screenshots were used instead. No new crash was
+reported by Android's rider process-exit history during those checks.
+
+Local, ignored screenshot evidence: `output/review-merchant-dashboard.png`,
+`output/review-merchant-inventory.png`, `output/review-rider-deliveries.png`,
+`output/review-rider-order.png`, and `output/review-rider-pickup-step.png`.
+Never publish verification-code screenshots or private credentials.
 
 | Coverage | Backend evidence | Remaining review evidence |
 | --- | --- | --- |
