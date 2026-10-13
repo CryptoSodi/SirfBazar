@@ -134,6 +134,7 @@ test('rider login keeps a single request active until Google login finishes', as
     imports: {
       '@react-navigation/native': { useNavigation: () => ({ reset: value => navigations.push(value) }) },
       '../components/RiderUI': Object.fromEntries(['Body', 'Button', 'Dock', 'Field', 'H1', 'Icon', 'IconBox', 'Label', 'LinkButton', 'Note', 'Page', 'Sheet'].map(name => [name, name])),
+      '../components/AccountPolicies': { AccountPolicies: 'AccountPolicies' },
       '../lib/api': { api: { post: async () => { requests++; return new Promise(done => { resolve = done; }); } }, ApiError: Error, storeAuth: async auth => stored.push(auth) },
       '../assets/brand/rider-slogan-light.png': 'image',
     },
