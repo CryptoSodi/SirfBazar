@@ -188,7 +188,7 @@ export async function renewSession() {
       if (version !== authVersion) throw new ApiError('Your session changed. Try again.', 409);
       if (user?.id && auth.user?.id !== user.id) throw new ApiError('Sign in again to renew your session.', 401);
       await persistAuth(auth, version);
-      if (version === authVersion) publishCustomerEvent('auth');
+      if (version === authVersion) publishCustomerEvent('session');
     })();
     const entry = { version, promise };
     refreshing = entry;

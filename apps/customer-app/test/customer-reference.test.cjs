@@ -61,7 +61,7 @@ test('ordinary and corrupt cached profiles preserve anonymous discovery', async 
 
 test('review discovery refreshes once for concurrent reads and sends verified-session credentials', async () => {
   const user = { id: 'play-review-v1-user-customer' };
-  const { api, data, requests } = harness(async url => ({ ok: true, status: 200, json: async () => url.endsWith('/auth/refresh-token')
+  const { api, data, requests, events } = harness(async url => ({ ok: true, status: 200, json: async () => url.endsWith('/auth/refresh-token')
     ? { accessToken: 'renewed-review', refreshToken: 'rotated-review', user }
     : { items: [{ id: 'play-review-v1-shop' }] } }));
   data.set('sb.user', JSON.stringify(user));
@@ -70,9 +70,43 @@ test('review discovery refreshes once for concurrent reads and sends verified-se
   const paths = ['/products/nearby', '/merchants/nearby', '/location/service-availability', '/coupons'];
   await Promise.all(paths.map(path => api.api.get(path)));
   assert.equal(requests.filter(r => r.url.endsWith('/auth/refresh-token')).length, 1);
+  assert.deepEqual(events, ['session'], 'same-account renewal must not invalidate in-flight basket edits');
   for (const request of requests.filter(r => !r.url.endsWith('/auth/refresh-token'))) {
     assert.equal(request.options.headers.authorization, 'Bearer renewed-review');
   }
+});
+
+test('realtime reconnects after token renewal without an account-change event', async () => {
+  const events = load('customer-events', {});
+  const sockets = [];
+  let access = 'initial';
+  const realtime = load('realtime', {
+    'react-native': { AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) } },
+    'socket.io-client': { io: (_, options) => {
+      const socket = { connected: true, disconnects: 0, on() {}, emit() {}, disconnect() { this.disconnects++; this.connected = false; }, options };
+      sockets.push(socket); return socket;
+    } },
+    './api': { API_URL: 'http://localhost:3001/api', api: { get: async () => ({}) }, getAccessToken: async () => access,
+      getAuthVersion: () => 1, renewSession: async () => {} },
+    './customer-events': events,
+  }, { setInterval: () => 0, clearInterval() {} });
+  let accountChanges = 0;
+  const unwatch = events.subscribeCustomerEvent('auth', () => accountChanges++);
+  const stop = realtime.startCustomerRealtime();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(sockets.length, 1);
+  access = 'rotated'; events.publishCustomerEvent('session');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(sockets.length, 2);
+  assert.equal(sockets[0].disconnects, 1);
+  let handshake;
+  sockets[1].options.auth(value => handshake = value);
+  assert.equal(handshake.token, 'rotated');
+  assert.equal(accountChanges, 0);
+  stop(); unwatch();
+  events.publishCustomerEvent('session');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(sockets.length, 2, 'stopped realtime must unsubscribe from renewal');
 });
 
 test('revoked review session never falls back to ordinary discovery', async () => {

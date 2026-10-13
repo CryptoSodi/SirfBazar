@@ -210,6 +210,29 @@ Local, ignored screenshot evidence: `output/review-merchant-dashboard.png`,
 `output/review-rider-order.png`, and `output/review-rider-pickup-step.png`.
 Never publish verification-code screenshots or private credentials.
 
+## Customer Candidate Checks - 14 October 2026
+
+Release-signed customer build 7 (`2d70aef`) passed bundle/signature/16-KB native
+library validation and installed as an update, preserving the review session and
+saved address. The home screen displayed the isolated demo products and shop.
+Android notification permission was allowed for customer and merchant; rider
+permission and actual push delivery remain unverified.
+
+An Add-to-basket attempt then failed with "Your account changed. Check your basket
+again." No checkout was performed. The discovery refresh emitted the same `auth`
+event used for account switching, invalidating the in-flight basket operation.
+Token renewal now emits a separate `session` event; realtime reconnects with the
+rotated token without resetting basket identity. Genuine login/logout still use
+`auth`. All 55 customer tests and the customer TypeScript check pass, including
+renewal-event separation and realtime reconnection/unsubscription regressions.
+Build 7 must not be published; the replacement still needs installed-device tests.
+
+Rider pickup was confirmed on the demo delivery, which reached `ON_THE_WAY`.
+Arrival and delivery completion have not yet been verified on the phone. Evidence:
+`output/review-customer-build7-home.png` and
+`output/review-rider-pickup-confirmed.png`. These are local, ignored artifacts.
+No full-access declaration or Play rollout was submitted.
+
 | Coverage | Backend evidence | Remaining review evidence |
 | --- | --- | --- |
 | Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle and live HTTP revocation | Native login screens |
