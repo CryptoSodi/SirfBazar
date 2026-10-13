@@ -81,7 +81,9 @@ export default function RiderDeliveryScreen() {
     let stopped = false;
     let subscription: Location.LocationSubscription | null = null;
     void (async () => {
-      const permission = await Location.requestForegroundPermissionsAsync();
+      // Permission dialogs change AppState; requesting here can loop on focus.
+      // The explicit Location & alerts screen owns permission requests.
+      const permission = await Location.getForegroundPermissionsAsync();
       if (stopped || generation !== getAuthVersion()) return;
       if (permission.status !== 'granted') { setLocationError('Location permission is off. Enable it to share your position during this delivery.'); return; }
       setLocationError('');

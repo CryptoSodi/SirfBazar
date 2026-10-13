@@ -233,6 +233,15 @@ Arrival and delivery completion have not yet been verified on the phone. Evidenc
 `output/review-rider-pickup-confirmed.png`. These are local, ignored artifacts.
 No full-access declaration or Play rollout was submitted.
 
+Rider notification permission was subsequently granted under the owner's explicit
+approval. Android reported location already granted, but repeatedly resumed a
+permission activity over the delivery page. The active-order location effect
+requested permission on every focus/AppState activation, creating a focus loop.
+It now reads permission without opening a dialog; the explicit Location & alerts
+control still requests it. The settings copy now describes the existing focused,
+foreground active-order watcher instead of incorrectly claiming GPS is inactive.
+This candidate requires native retesting.
+
 | Coverage | Backend evidence | Remaining review evidence |
 | --- | --- | --- |
 | Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle and live HTTP revocation | Native login screens |
