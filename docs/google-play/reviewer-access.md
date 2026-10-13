@@ -140,13 +140,45 @@ ratings, demo coupon isolation, team creation without modifying real identities,
 product/import isolation and retry, and POS entitlement/stock/idempotency.
 CI includes both new test files. Native/Play-installed UI journeys are separate.
 
-Pending: protected PR/release, production activation, private credential storage,
-fixture-only live verification and saved Play App access instructions.
+## Activation Evidence - 13 October 2026
+
+- Implementation merged through [PR 23](https://github.com/CryptoSodi/SirfBazar/pull/23).
+- [Master CI/deployment 38439903643](https://github.com/CryptoSodi/SirfBazar/actions/runs/38439903643)
+  passed every required release gate and deployed
+  `e4f40dbb6f5099b3c1a7686d2d949089c1e2b541` on Battle.
+- Immediately before provisioning, a custom-format PostgreSQL backup was made
+  and its archive listing verified at
+  `/var/backups/sirfbazar-api/play-review-20261013/sirfbazar.dump`.
+  SHA-256: `9ace2e1611a44667d4ffa55585fedfd9c73a81f78ce97b1336ef74bfc2dd1519`.
+  This activation checked the archive, not a new scratch restore. Configuration
+  copies and `proof.json` are in that same root-private backup directory.
+- Added only `/etc/sirfbazar-review.env` and the documented SirfBazar service
+  drop-in. Hashes of the original API environment and service unit were unchanged.
+  No migrations, DNS changes or other-service restarts were performed.
+- Post-activation health checks passed for local/public API, quote routes, CORS
+  and WhatsApp readiness. Three review accounts are ACTIVE, manually revocable.
+- Live API verification passed: exact identities, role/discovery isolation,
+  profile/support, quoted COD checkout, merchant fulfillment, rider delivery,
+  ratings, non-expiring POS entitlement and idempotent demo sale.
+- Live disable test rejected all three old sessions with HTTP 401. Accounts were
+  then deliberately reactivated; old refresh sessions remain revoked. One assigned
+  rider delivery and one preparing merchant order remain as review fixtures.
+- Detailed fixture-only proof (no credentials) is at
+  `/var/lib/sirfbazar-api/play-review-20261013/live-verification.json`.
+- Credentials are outside Git: the private server directory above and the owner's
+  ACL-restricted `C:\Users\tassa\.codex\private\SirfBazar-review\review-credentials.json`.
+  Never copy these codes into public documentation or GitHub issues/releases.
+
+Pending: installed-APK journeys and push/upload checks, Play sign-in-detail
+submission and full-access declaration. ADB reported no connected device during
+this activation. The Play declaration has NOT been certified, and no app was
+published by this change. The existing onboarding/Google identity exceptions
+above must remain disclosed rather than hidden by a success claim.
 
 | Coverage | Backend evidence | Remaining review evidence |
 | --- | --- | --- |
-| Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle | Live login and native login screens |
-| Customer catalogue/cart/checkout/delivery | Isolated stock, quote, fulfillment and delivery assertions | Native browse/checkout/order views |
+| Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle and live HTTP revocation | Native login screens |
+| Customer catalogue/cart/checkout/delivery | Isolated stock, quote, fulfillment and delivery assertions; live complete delivery | Native browse/checkout/order views |
 | Profile, addresses, ratings, support | Profile and support ownership, delivered-order rating; existing address regressions | Native edit/support/rating flows |
 | Merchant inventory and imports | Create/preview/apply/retry and foreign-shop rejection | Native inventory controls; import is web-only where absent from APK |
 | Rider/staff management | Synthetic suspended members; real user unchanged; tenant rejection | Merchant native rider controls |
