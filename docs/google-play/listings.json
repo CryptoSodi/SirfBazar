@@ -1,0 +1,67 @@
+{
+  "sourceCommit": "6463f3cc05b6bca2f4da5228a58bec2461551d41",
+  "locale": "en-US",
+  "website": "https://www.sirfbazar.com",
+  "supportEmail": "support@sirfbazar.com",
+  "supportEmailConfirmedByOwner": "2026-10-13",
+  "proposedCountries": [
+    "PK"
+  ],
+  "price": "Free",
+  "status": "Prepared locally; not submitted to Google Play",
+  "apps": [
+    {
+      "role": "customer",
+      "packageName": "pk.sirfbazar.customer",
+      "title": "SirfBazar: Local Shopping",
+      "shortDescription": "Shop nearby stores, review your basket and follow local deliveries.",
+      "fullDescription": "Your nearby bazar, now online.\n\nSirfBazar connects you with participating local shops in Pakistan. Browse everyday essentials, compare available products and place an order with the shops that serve your delivery location.\n\nSHOP FROM NEARBY STORES\nChoose your delivery location to discover available shops and products. Browse categories, search for what you need and check the seller, pack size, price and availability before adding to your basket.\n\nBROWSE FIRST, SIGN IN WHEN NEEDED\nExplore shops and build your basket as a guest. Sign in with Google or a phone verification code when you need your account, saved addresses or checkout.\n\nREVIEW BEFORE YOU ORDER\nAdjust quantities and review your delivery address and final charges before placing an order. Cash on delivery is supported for eligible orders. If a shop proposes a supported change to your order, review it before approving or rejecting it.\n\nFOLLOW EACH SHOP'S DELIVERY\nView order progress and delivery details, revisit past orders and contact support. Each shop prepares its own products and manages its own riders, so items from different shops may arrive separately.\n\nMADE FOR YOUR NEIGHBOURHOOD\nSave delivery addresses and choose a Light, Dark or device-based appearance. Location access is used with your permission; you can also choose a delivery location manually.\n\nProduct selection, stock, opening hours, delivery coverage and charges depend on participating shops. SirfBazar does not own the shops' inventory. Service is available only where participating merchants deliver.\n\nNeed help? Contact support@sirfbazar.com or visit https://www.sirfbazar.com.",
+      "category": "SHOPPING",
+      "candidateTags": [
+        "Shopping",
+        "Grocery shopping",
+        "Food delivery"
+      ],
+      "tagStatus": "Select only matching tags offered by Play Console; candidate taxonomy not yet verified",
+      "featureHeadline": "Your nearby bazar.",
+      "featureSubhead": "Shop from local stores.",
+      "releaseNotes": "The first SirfBazar release brings local shop discovery, guest browsing, basket and checkout, saved addresses, order updates and support. Availability depends on participating shops and delivery coverage."
+    },
+    {
+      "role": "merchant",
+      "packageName": "pk.sirfbazar.merchant",
+      "title": "SirfBazar Merchant",
+      "shortDescription": "Manage your shop's products, orders, riders and earnings in one place.",
+      "fullDescription": "Bring your local shop to SirfBazar.\n\nSirfBazar Merchant helps participating shop owners and authorised staff manage their marketplace business from an Android phone. Keep your products, orders and delivery team organised while your shop stays in control of its own inventory and fulfilment.\n\nSET UP YOUR SHOP\nCreate your shop profile, add a shop photo, choose your category and provide your location and contact details. Set opening hours, closed days and delivery coverage during setup. Marketplace access depends on the account's approval and permissions.\n\nMANAGE PRODUCTS AND STOCK\nBrowse the shared product catalogue, manage the products your shop sells and update prices, stock quantities and availability. Review incoming orders against your current inventory.\n\nKEEP ORDERS MOVING\nView order details, accept eligible orders, update preparation progress and assign an available rider from your shop's team. Customers can follow the saved order status in SirfBazar.\n\nORGANISE YOUR RIDERS\nManage your shop's rider team and coordinate deliveries through the existing order workflow. SirfBazar merchants fulfil orders using their own riders.\n\nREVIEW EARNINGS\nSee the earnings and settlement information available to your account. Access is controlled by your shop membership and staff permissions.\n\nGOOGLE OR PHONE SIGN-IN\nSign in with Google or a phone verification code and view the Google account linked to your SirfBazar session.\n\nThis app is for shop owners and authorised staff. Customers should use the SirfBazar shopping app; delivery riders should use SirfBazar Rider. Availability and account features depend on approval, role and configured services.\n\nNeed help? Contact support@sirfbazar.com or visit https://www.sirfbazar.com.",
+      "category": "BUSINESS",
+      "candidateTags": [
+        "Business",
+        "Inventory management"
+      ],
+      "tagStatus": "Select only matching tags offered by Play Console; candidate taxonomy not yet verified",
+      "featureHeadline": "Your shop. Connected.",
+      "featureSubhead": "Products, orders and your team.",
+      "releaseNotes": "The first SirfBazar Merchant release includes shop setup, catalogue and inventory tools, marketplace order management, shop rider management and earnings information for eligible accounts."
+    },
+    {
+      "role": "rider",
+      "packageName": "pk.sirfbazar.rider",
+      "title": "SirfBazar Rider",
+      "shortDescription": "View assigned deliveries, record pickups and complete your shop's orders.",
+      "fullDescription": "Deliver for a shop you know.\n\nSirfBazar Rider gives approved riders a focused way to manage deliveries assigned by their shop. Follow the order from pickup to handover, review delivery details and keep the shop informed of progress.\n\nJOIN YOUR SHOP'S TEAM\nSign in with Google or a phone verification code. Find a participating shop and request to join its delivery team, or access an existing rider account. The shop must approve and activate your account before you can deliver.\n\nSEE YOUR ASSIGNMENTS\nView the deliveries assigned to you, including the shop, order status and the customer information needed for the delivery. Riders only receive access to their own authorised assignments.\n\nFOLLOW PICKUP AND HANDOVER\nRecord shop arrival and pickup through the delivery workflow. Review cash-on-delivery details where applicable, and use the customer's delivery code to confirm a supported handover.\n\nLOCATION DURING ACTIVE DELIVERY\nWith permission, share your location during an assigned active delivery while the delivery screen is open. This app does not promise continuous background or closed-app tracking.\n\nHISTORY AND HELP\nReview your delivery history, report an issue through available support tools and choose a Light, Dark or device-based appearance.\n\nSirfBazar Rider is for riders managed by participating shops. It is not an open job board and does not guarantee work or earnings. Customers should use SirfBazar; shop owners and staff should use SirfBazar Merchant.\n\nNeed help? Contact support@sirfbazar.com or visit https://www.sirfbazar.com.",
+      "category": "BUSINESS",
+      "candidateTags": [
+        "Business",
+        "Delivery"
+      ],
+      "tagStatus": "Select only matching tags offered by Play Console; candidate taxonomy not yet verified",
+      "featureHeadline": "Every delivery, clearer.",
+      "featureSubhead": "From your shop to their door.",
+      "releaseNotes": "The first SirfBazar Rider release includes shop join requests, assigned deliveries, pickup and handover steps, delivery history, support and foreground location sharing during active deliveries."
+    }
+  ],
+  "businessName": "Sirf Bazar",
+  "accountDeletionUrl": "https://www.sirfbazar.com/account-deletion",
+  "privacyPolicyUrl": "https://www.sirfbazar.com/privacy-policy",
+  "websitePoliciesStatus": "Implemented locally; not deployed or legally reviewed; retention and deletion fulfillment remain to be verified"
+}

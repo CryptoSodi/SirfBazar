@@ -61,7 +61,7 @@ export default function ProfileScreen() {
   );
   const memberRows: typeof rows = [
     { icon: 'logout', title: 'Sign out', onPress: () => setConfirmSignOut(true) },
-    { icon: 'trash', title: 'Delete account', description: 'Review before confirming', onPress: () => navigation.navigate('ProfileEdit', { deleteAccount: true }) },
+    { icon: 'trash', title: 'Request account deletion', description: 'Contact support to remove your account and data', onPress: () => navigation.navigate('ProfileEdit', { deleteAccount: true }) },
   ];
   return (
     <View style={s.screen}>
@@ -90,6 +90,7 @@ export default function ProfileScreen() {
         <View style={[s.card, { padding: 0, overflow: 'hidden', marginTop: 20 }]}>{rows.map((item, index) => row(item, index, rows.length))}</View>
         {loggedIn && <View style={[s.card, { padding: 0, overflow: 'hidden', marginTop: 20 }]}>{memberRows.map((item, index) => row(item, index, memberRows.length))}</View>}
         {loggedIn && <GoogleAccountLink />}
+        <AccountPolicies color={colors.primary} textColor={colors.muted} />
         {confirmSignOut && <View style={[s.card, { gap: 12, marginTop: 16 }]}>
           <Text style={s.h2}>Sign out of your account?</Text><Text style={s.muted}>You can keep browsing. Your saved orders and addresses remain in your account.</Text>
           <TouchableOpacity accessibilityRole="button" disabled={signingOut} style={s.btnGhost} onPress={() => setConfirmSignOut(false)}><Text style={s.btnGhostText}>Stay signed in</Text></TouchableOpacity>
@@ -109,3 +110,4 @@ export default function ProfileScreen() {
     </View>
   );
 }
+import { AccountPolicies } from '../components/AccountPolicies';
