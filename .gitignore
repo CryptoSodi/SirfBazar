@@ -44,3 +44,7 @@ dist-remediation/
 *.keystore
 *.password.clixml
 credentials.json
+
+# Firebase server credentials are private; google-services.json is public app config.
+**/*firebase-adminsdk*.json
+**/fcm-service-account*.json

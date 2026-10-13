@@ -244,12 +244,41 @@ This candidate requires native retesting.
 
 | Coverage | Backend evidence | Remaining review evidence |
 | --- | --- | --- |
-| Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle and live HTTP revocation | Native login screens |
-| Customer catalogue/cart/checkout/delivery | Isolated stock, quote, fulfillment and delivery assertions; live complete delivery | Native browse/checkout/order views |
+| Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle and live HTTP revocation | All three native review logins observed on build 6; subsequent customer/rider updates preserved sessions |
+| Customer catalogue/cart/checkout/delivery | Isolated stock, quote, fulfillment and delivery assertions; live complete delivery | Customer build 8 browse, quantity changes, checkout and tracking observed; broader regression remains |
 | Profile, addresses, ratings, support | Profile and support ownership, delivered-order rating; existing address regressions | Native edit/support/rating flows |
 | Merchant inventory and imports | Create/preview/apply/retry and foreign-shop rejection | Native inventory controls; import is web-only where absent from APK |
 | Rider/staff management | Synthetic suspended members; real user unchanged; tenant rejection | Merchant native rider controls |
-| Rider delivery and issue reporting | Existing order state machine and owned support ticket service | Native tracking, issue reporting and delivery confirmation |
+| Rider delivery and issue reporting | Existing order state machine and owned support ticket service | Build 8 arrival and delivery confirmation observed; native issue reporting remains |
 | POS | Non-expiring demo entitlement, real sale transaction, replay and stock isolation | POS browser flow; not a separate Play app |
 | Documents and device notifications | Existing ownership/registration implementations, now allowed | Review-owned upload and actual device push verification |
 | Identity/onboarding | Pre-onboarded accounts, personal Google linking intentionally unavailable on shared identities | Disclose review login method; do not certify untested identity flows |
+
+## Replacement Candidate Device Results - 14 October 2026
+
+Customer build 8 (source `40c28bb`) and rider build 8 (source `cd5eca9`) passed
+bundle, release-signature and 16-KB native-library validation, then installed as
+updates on the Samsung Galaxy A52. Merchant remained on build 6. These results
+supersede the earlier pending replacement-candidate checks, not all review gates.
+
+- Customer displayed all five isolated products. Add, increase to two, basket
+  synchronization and decrease to one worked. Saved Review demo address and
+  quoted COD checkout produced isolated order `SB20261013-0D8C48`; basket cleared.
+- Merchant accepted that order and marked it ready for pickup. Customer tracking
+  reflected the changes. It remains ready and was not assigned to a real rider.
+- Rider build 8 no longer showed the permission-focus loop. The existing isolated
+  delivery `SB20261013-D816B6` advanced through arrival and code-confirmed COD
+  completion. Customer tracking showed delivered and removed the delivery code.
+- In-app order notifications were present. Android notification permission was
+  granted for all three apps, but customer phone-alert registration failed due
+  to absent Firebase initialization. Actual push delivery remains blocked; see
+  [push configuration audit](push-configuration-audit.md).
+
+Local ignored evidence: `output/review-customer-build8-order-sent.png`,
+`output/review-merchant-ready-order.png`, `output/review-rider-build8-arrived.png`,
+`output/review-rider-build8-delivered.png`. No private review/delivery codes belong
+in published screenshots or documentation.
+
+Full native profile/address editing, rating, support, uploads and remaining
+feature coverage still need verification. These candidates have not been uploaded
+to Play, and no full-access declaration or rollout has been submitted.
