@@ -3,14 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MerchantApprovalStatus } from '../common/constants';
 import { haversineKm } from '../common/utils/geo';
 import { DetectLocationDto } from './catalog.dto';
+import { reviewMerchantFilter } from '../auth/review-access';
 
 @Injectable()
 export class LocationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private approvedMerchantPoints() {
+  private approvedMerchantPoints(userId?: string) {
     return this.prisma.merchant.findMany({
-      where: { approvalStatus: MerchantApprovalStatus.APPROVED },
+      where: { approvalStatus: MerchantApprovalStatus.APPROVED, ...reviewMerchantFilter(userId) },
       select: {
         id: true,
         city: true,
@@ -27,8 +28,8 @@ export class LocationService {
    * merchant serves the point. This is not the customer's exact locality.
    * Without coordinates, fall back to the city with the most merchants.
    */
-  async detect(dto: DetectLocationDto) {
-    const merchants = await this.approvedMerchantPoints();
+  async detect(dto: DetectLocationDto, userId?: string) {
+    const merchants = await this.approvedMerchantPoints(userId);
 
     if (dto.latitude != null && dto.longitude != null) {
       if (merchants.length === 0) {
@@ -77,19 +78,20 @@ export class LocationService {
     return { city: topCity, area: null, latitude: null, longitude: null, serviceable: false };
   }
 
-  async serviceAvailability(latitude: number, longitude: number) {
-    const merchants = await this.approvedMerchantPoints();
+  async serviceAvailability(latitude: number, longitude: number, userId?: string) {
+    const merchants = await this.approvedMerchantPoints(userId);
     const merchantsInRange = merchants.filter(
       (m) => haversineKm(latitude, longitude, m.latitude, m.longitude) <= m.serviceRadiusKm,
     ).length;
     return { serviceable: merchantsInRange > 0, merchantsInRange };
   }
 
-  async nearbyAreas(city?: string) {
+  async nearbyAreas(city?: string, userId?: string) {
     const groups = await this.prisma.merchant.groupBy({
       by: ['city', 'area'],
       where: {
         approvalStatus: MerchantApprovalStatus.APPROVED,
+        ...reviewMerchantFilter(userId),
         ...(city?.trim() ? { city: { contains: city.trim(), mode: 'insensitive' as const } } : {}),
       },
       orderBy: [{ city: 'asc' }, { area: 'asc' }],

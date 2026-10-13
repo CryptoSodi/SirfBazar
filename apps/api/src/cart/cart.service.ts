@@ -7,6 +7,7 @@ import { haversineKm } from '../common/utils/geo';
 import { MerchantApprovalStatus } from '../common/constants';
 import { lockOwners } from '../common/owner-lock';
 import { serializable } from '../common/transaction';
+import { requireReviewCartBoundary } from '../auth/review-access';
 
 export interface CartOwner {
   customerId?: string;
@@ -75,6 +76,7 @@ export class CartService {
     return serializable(this.prisma, async (tx) => {
     await this.lockOwner(tx, owner);
     const mp = await this.loadSellableMerchantProduct(merchantProductId, tx, true);
+    requireReviewCartBoundary(owner.customerId, mp.merchantId);
 
     const cart = await this.getOrCreateActiveCartInTransaction(tx, owner);
     const existing = await tx.cartItem.findUnique({
@@ -120,6 +122,7 @@ export class CartService {
       await tx.cartItem.delete({ where: { id: item.id } });
     } else {
       const mp = await this.loadSellableMerchantProduct(item.merchantProductId, tx, quantity > item.quantity);
+      requireReviewCartBoundary(owner.customerId, mp.merchantId);
       if (quantity > mp.stockQuantity) {
         throw new BadRequestException(`Only ${mp.stockQuantity} in stock at this shop`);
       }
@@ -211,6 +214,7 @@ export class CartService {
           })) ?? (await tx.cart.create({ data: { customerId: customerOwner.customerId } }));
         for (const item of guestCart.items) {
           const listing = await this.loadSellableMerchantProduct(item.merchantProductId, tx);
+          requireReviewCartBoundary(customerOwner.customerId, listing.merchantId);
           const existing = await tx.cartItem.findUnique({ where: { cartId_merchantProductId: { cartId: customerCart.id, merchantProductId: item.merchantProductId } }, select: { quantity: true } });
           if ((existing?.quantity ?? 0) + item.quantity > listing.stockQuantity) {
             throw new BadRequestException(`Only ${listing.stockQuantity} in stock at this shop. Check your basket before continuing.`);

@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { REVIEW_SHOP_ID } from '../auth/review-access';
 import { AccessService } from '../common/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -46,6 +47,7 @@ export class RiderService {
     return this.prisma.merchant.findMany({
       where: {
         approvalStatus: 'APPROVED',
+        id: { not: REVIEW_SHOP_ID },
         ...(q ? { shopName: { contains: q, mode: 'insensitive' } } : {}),
       },
       select: { id: true, shopName: true, city: true, area: true, address: true },
@@ -66,6 +68,7 @@ export class RiderService {
       profileImageUrl?: string;
     },
   ) {
+    if (dto.merchantId === REVIEW_SHOP_ID) throw new NotFoundException('Shop not accepting riders');
     const existing = await this.prisma.rider.findUnique({ where: { userId } });
     if (existing) throw new BadRequestException('This account is already registered as a rider.');
     const merchant = await this.prisma.merchant.findFirst({

@@ -64,6 +64,7 @@ jobs:
       - run: npm run test:whatsapp
       - run: npm run test:google
       - run: npm run test:remediation:unit
+      - run: node -r ts-node/register/transpile-only --test test/review-access.test.cjs
       - run: node ../../scripts/test-native-session-transports.cjs
       - run: node ../../scripts/test-google-native.cjs
       - run: node ../../scripts/test-google-clients.cjs
@@ -289,6 +290,11 @@ jobs:
             -f apps/api/prisma/upgrades/20261011-google-account-profile.sql \
             -f apps/api/prisma/upgrades/20261011-merchant-settings-pos-and-order-revisions.sql
       - run: node scripts/verify-remediation.mjs --database
+      - name: Verify isolated store-review accounts and revocation
+        working-directory: apps/api
+        run: node -r ts-node/register/transpile-only --test test/review-access-database.test.cjs
+        env:
+          DATABASE_URL: ${{ env.REMEDIATION_DATABASE_URL }}
 
   release-checks:
     if: ${{ always() }}

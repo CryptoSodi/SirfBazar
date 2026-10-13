@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, OrderStatus, PaymentStatus, RefundStatus, SettlementStatus } from '../common/constants';
 import { serializable } from '../common/transaction';
+import { REVIEW_SHOP_ID } from '../auth/review-access';
 
 @Injectable()
 export class SettlementsService {
@@ -41,12 +42,14 @@ export class SettlementsService {
   }
 
   async generate(adminUserId: string, input: { merchantId?: string; startDate: string; endDate: string }) {
+    if (input.merchantId === REVIEW_SHOP_ID) throw new BadRequestException('Review orders cannot be settled.');
     const start = new Date(input.startDate);
     const end = new Date(input.endDate);
     if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start >= end) throw new BadRequestException('Invalid settlement period');
     const merchants = await this.prisma.merchant.findMany({ where: input.merchantId ? { id: input.merchantId } : { approvalStatus: 'APPROVED' }, orderBy: { id: 'asc' } });
     const created: any[] = [];
     for (const merchant of merchants) {
+      if (merchant.id === REVIEW_SHOP_ID) continue;
       const settlement = await serializable(this.prisma, async (tx) => {
         const candidates = await tx.order.findMany({ where: {
           merchantId: merchant.id, status: OrderStatus.DELIVERED, channel: 'ONLINE',
@@ -79,6 +82,7 @@ export class SettlementsService {
     const result = await serializable(this.prisma, async (tx) => {
       const settlement = await tx.settlement.findUnique({ where: { id: settlementId }, include: { merchant: { select: { userId: true, shopName: true } }, orders: { select: { id: true, merchantEarningPaisa: true } } } });
       if (!settlement) throw new NotFoundException('Settlement not found');
+      if (settlement.merchantId === REVIEW_SHOP_ID) throw new BadRequestException('Review orders cannot be paid out.');
       if (settlement.status !== SettlementStatus.PENDING || settlement.amountPaisa <= 0 || !settlement.orders.length) throw new ConflictException('Settlement is not payable; review or reconcile it first');
       const payable = settlement.orders.reduce((sum, order) => sum + order.merchantEarningPaisa, 0) - await this.deductions(tx, settlement.orders.map((order) => order.id));
       if (payable !== settlement.amountPaisa) throw new ConflictException('Settlement deductions changed; hold and reconcile before payment');

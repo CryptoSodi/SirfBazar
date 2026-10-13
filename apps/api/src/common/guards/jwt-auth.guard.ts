@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ALLOW_INACTIVE_RIDER_KEY, IS_PUBLIC_KEY } from '../decorators';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UserRole } from '../constants';
+import { requireReviewSession, requireReviewRoute, reviewMembershipValid } from '../../auth/review-access';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -21,6 +22,7 @@ export class JwtAuthGuard implements CanActivate {
     if (token) {
       try {
         const payload = await this.jwtService.verifyAsync(token);
+        requireReviewSession(payload.sub, payload.role);
         const user = await this.prisma.user.findUnique({
           where: { id: payload.sub },
           select: {
@@ -28,7 +30,7 @@ export class JwtAuthGuard implements CanActivate {
             customer: { select: { id: true } },
             merchant: { select: { id: true } },
             staffOf: { where: { status: 'ACTIVE' }, select: { id: true, merchant: { select: { user: { select: { status: true } } } } } },
-            rider: { select: { id: true, isActive: true, approvalStatus: true } },
+            rider: { select: { id: true, merchantId: true, isActive: true, approvalStatus: true } },
           },
         });
         const session = typeof payload.sid === 'string'
@@ -39,7 +41,7 @@ export class JwtAuthGuard implements CanActivate {
           : undefined;
         const role = payload.role as UserRole;
         const allowInactiveRider = this.reflector.getAllAndOverride<boolean>(ALLOW_INACTIVE_RIDER_KEY, [context.getHandler(), context.getClass()]);
-        const member = user?.status === 'ACTIVE' && (
+        const member = user?.status === 'ACTIVE' && reviewMembershipValid(payload.sub, user) && (
           (role === UserRole.CUSTOMER && !!user.customer) ||
           (role === UserRole.MERCHANT_OWNER && !!user.merchant) ||
           (role === UserRole.MERCHANT_STAFF && user.staffOf.some((staff) => staff.merchant.user.status === 'ACTIVE')) ||
@@ -60,6 +62,7 @@ export class JwtAuthGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
+    requireReviewRoute(req.user?.userId, context.getClass().name, context.getHandler().name);
     if (isPublic) return true;
 
     if (!req.user) throw new UnauthorizedException('Authentication required');

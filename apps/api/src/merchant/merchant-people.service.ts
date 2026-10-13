@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, StaffPermission, UserRole } from '../common/constants';
 import { CreateRiderDto, CreateStaffDto, UpdateRiderDto, UpdateStaffDto } from './merchant.dto';
 import { serializable } from '../common/transaction';
+import { reviewPhone, reviewAccount } from '../auth/review-access';
 
 /** Merchant-managed riders and staff (spec 12.9 / 12.10). */
 @Injectable()
@@ -39,6 +40,7 @@ export class MerchantPeopleService {
   }
 
   async createRider(userId: string, dto: CreateRiderDto) {
+    if (reviewPhone(dto.phoneNumber)) throw new BadRequestException('Reserved review identity.');
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.RIDERS);
 
@@ -49,6 +51,7 @@ export class MerchantPeopleService {
     if (existingUser?.rider) {
       throw new BadRequestException('This phone number is already registered as a rider');
     }
+    if (reviewAccount(existingUser?.id)) throw new BadRequestException('Reserved review identity.');
 
     const rider = await this.prisma.$transaction(async (tx) => {
       // Attach a rider profile to the existing account if the phone is already
@@ -199,6 +202,7 @@ export class MerchantPeopleService {
   }
 
   async createStaff(userId: string, dto: CreateStaffDto) {
+    if (reviewPhone(dto.phoneNumber)) throw new BadRequestException('Reserved review identity.');
     const ctx = await this.access.merchantContext(userId);
     if (!ctx.isOwner) throw new BadRequestException('Only the shop owner can manage staff');
 

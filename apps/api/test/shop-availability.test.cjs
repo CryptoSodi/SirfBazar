@@ -19,7 +19,7 @@ function catalogFixture() {
     merchant: { findMany: async ({ where }) => shops.filter(s => matches(s, where)), findUnique: async ({ where }) => shops.find(s => s.id === where.id) },
     merchantProduct: { findMany: async ({ where }) => {
       offerQueries++;
-      assert.deepEqual(where.merchant, { approvalStatus: 'APPROVED', isOnline: true, isOpen: true });
+      assert.deepEqual(where.merchant, { approvalStatus: 'APPROVED', isOnline: true, isOpen: true, id: { not: 'play-review-v1-shop' } });
       return offers.filter(o => matches(o.merchant, where.merchant) && (!where.merchantId || (typeof where.merchantId === 'string' ? o.merchantId === where.merchantId : where.merchantId.in.includes(o.merchantId))) && (!where.product?.NOT || o.productId !== where.product.NOT.id));
     }, count: async () => 1 },
     product: { findUnique: async () => product, findMany: async () => [product] },

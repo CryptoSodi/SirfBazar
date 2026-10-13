@@ -34,6 +34,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { serializable } from '../common/transaction';
 import { lockOwners } from '../common/owner-lock';
 import { isMerchantOpenAt } from '../common/merchant-hours';
+import { requireReviewCartBoundary, REVIEW_CUSTOMER_ID } from '../auth/review-access';
 
 export interface PlaceOrderInput {
   requestId: string;
@@ -119,6 +120,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (input.paymentMethod !== PaymentMethod.COD) throw new BadRequestException('Only cash on delivery is available');
     const cart = await db.cart.findFirst({ where: { id: input.cartId, customerId, status: 'ACTIVE' }, include: { items: true } });
     if (!cart || cart.items.length === 0) throw new ConflictException('This checkout basket is no longer active. Check your orders before retrying.');
+    if (customerId === REVIEW_CUSTOMER_ID && (input.couponCode || cart.couponCode)) throw new BadRequestException('Coupons are unavailable for review orders.');
     const address = await db.customerAddress.findFirst({ where: { id: input.deliveryAddressId, customerId } });
     if (!address) throw new BadRequestException('Delivery address not found');
     if (address.latitude == null || address.longitude == null || !Number.isFinite(address.latitude) || !Number.isFinite(address.longitude) || Math.abs(address.latitude) > 90 || Math.abs(address.longitude) > 180) {
@@ -136,6 +138,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException('A product in your basket is unavailable for checkout');
       }
       const merchant = listing.merchant;
+      requireReviewCartBoundary(customerId, merchant.id);
       if (merchant.approvalStatus !== MerchantApprovalStatus.APPROVED || !merchant.isOpen || !merchant.isOnline) throw new BadRequestException(`${merchant.shopName} is not accepting orders right now`);
       if (!isMerchantOpenAt(merchant.operatingHours, merchant.openingTime, merchant.closingTime)) throw new BadRequestException(`${merchant.shopName} is outside its posted delivery hours`);
       if (!Number.isInteger(item.quantity) || item.quantity < 1 || !listing.isAvailable || listing.stockQuantity < item.quantity) throw new BadRequestException(`${listing.product.name} has insufficient stock`);
@@ -247,6 +250,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       const mp = mpById.get(item.merchantProductId);
       if (!mp) throw new BadRequestException('A cart item is no longer sold by this shop');
       const m = mp.merchant;
+      requireReviewCartBoundary(customer.id, m.id);
       if (m.approvalStatus !== MerchantApprovalStatus.APPROVED || !m.isOpen || !m.isOnline) {
         throw new BadRequestException(`${m.shopName} is not accepting orders right now`);
       }

@@ -23,13 +23,13 @@ export class ProductsController {
   constructor(private readonly catalog: CatalogService) {}
 
   @Get('categories')
-  categories(@Query() query: LocationQuery) {
-    return this.catalog.categoriesTree(query);
+  categories(@Query() query: LocationQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.categoriesTree(query, user?.userId);
   }
 
   @Get('search')
-  search(@Query() query: SearchProductsQuery) {
-    return this.catalog.search(query);
+  search(@Query() query: SearchProductsQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.search(query, user?.userId);
   }
 
   /** Full global catalog for browsing/discovery (not merchant- or location-filtered). */
@@ -39,13 +39,13 @@ export class ProductsController {
   }
 
   @Get('nearby')
-  nearby(@Query() query: NearbyProductsQuery) {
-    return this.catalog.nearbyProducts(query);
+  nearby(@Query() query: NearbyProductsQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.nearbyProducts(query, user?.userId);
   }
 
   @Get('popular')
-  popular(@Query() query: LocationQuery) {
-    return this.catalog.popularProducts(query);
+  popular(@Query() query: LocationQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.popularProducts(query, user?.userId);
   }
 
   /** Personalized when a JWT is sent (the guard decodes it even on public routes). */
@@ -55,8 +55,8 @@ export class ProductsController {
   }
 
   @Get(':id')
-  detail(@Param('id') id: string, @Query() query: LocationQuery) {
-    return this.catalog.productDetail(id, query);
+  detail(@Param('id') id: string, @Query() query: LocationQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.productDetail(id, query, user?.userId);
   }
 }
 
@@ -70,22 +70,23 @@ export class MerchantsDiscoveryController {
   ) {}
 
   @Get('nearby')
-  nearby(@Query() query: NearbyMerchantsQuery) {
-    return this.catalog.nearbyMerchants(query);
+  nearby(@Query() query: NearbyMerchantsQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.nearbyMerchants(query, user?.userId);
   }
 
   @Get(':id')
-  detail(@Param('id') id: string, @Query() query: LocationQuery) {
-    return this.catalog.merchantDetail(id, query);
+  detail(@Param('id') id: string, @Query() query: LocationQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.merchantDetail(id, query, user?.userId);
   }
 
   @Get(':id/products')
-  products(@Param('id') id: string, @Query() query: MerchantProductsQuery) {
-    return this.catalog.merchantProducts(id, query);
+  products(@Param('id') id: string, @Query() query: MerchantProductsQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.merchantProducts(id, query, user?.userId);
   }
 
   @Get(':id/reviews')
-  merchantReviews(@Param('id') id: string, @Query() query: PageQueryDto) {
+  merchantReviews(@Param('id') id: string, @Query() query: PageQueryDto, @CurrentUser() user?: AuthUser) {
+    this.catalog.requireVisibleMerchant(id, user?.userId);
     return this.reviews.listForMerchant(id, query);
   }
 }
@@ -97,18 +98,18 @@ export class LocationController {
   constructor(private readonly location: LocationService) {}
 
   @Post('detect')
-  detect(@Body() dto: DetectLocationDto) {
-    return this.location.detect(dto);
+  detect(@Body() dto: DetectLocationDto, @CurrentUser() user?: AuthUser) {
+    return this.location.detect(dto, user?.userId);
   }
 
   @Get('service-availability')
-  serviceAvailability(@Query() query: ServiceAvailabilityQuery) {
-    return this.location.serviceAvailability(query.latitude, query.longitude);
+  serviceAvailability(@Query() query: ServiceAvailabilityQuery, @CurrentUser() user?: AuthUser) {
+    return this.location.serviceAvailability(query.latitude, query.longitude, user?.userId);
   }
 
   @Get('nearby-areas')
-  nearbyAreas(@Query() query: NearbyAreasQuery) {
-    return this.location.nearbyAreas(query.city);
+  nearbyAreas(@Query() query: NearbyAreasQuery, @CurrentUser() user?: AuthUser) {
+    return this.location.nearbyAreas(query.city, user?.userId);
   }
 }
 
@@ -120,7 +121,7 @@ export class GuestCatalogController {
   constructor(private readonly catalog: CatalogService) {}
 
   @Get('location-products')
-  locationProducts(@Query() query: NearbyProductsQuery) {
-    return this.catalog.nearbyProducts(query);
+  locationProducts(@Query() query: NearbyProductsQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.nearbyProducts(query, user?.userId);
   }
 }
