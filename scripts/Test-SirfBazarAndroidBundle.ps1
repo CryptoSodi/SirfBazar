@@ -45,6 +45,17 @@ if ($App -eq 'merchant' -and 'android.permission.RECORD_AUDIO' -in $permissions)
 $zip = [IO.Compression.ZipFile]::OpenRead($Bundle)
 $libraries = @()
 try {
+    $javascript = $zip.GetEntry('base/assets/index.android.bundle')
+    if (-not $javascript) { throw 'Missing production JavaScript bundle.' }
+    $reader = [IO.StreamReader]::new($javascript.Open())
+    try { $code = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    $embedded = @{
+        productionApi = $code.Contains('https://api.sirfbazar.com/api')
+        googleClient = $code.Contains('453311658725-s55gcpidi4h6kf38hgqhmrku11ha02ts.apps.googleusercontent.com')
+        support = $code.Contains('support@sirfbazar.com')
+        deletion = $code.Contains('account-deletion')
+    }
+    if ($embedded.Values -contains $false) { throw 'Missing expected release configuration/policy strings in JavaScript bundle.' }
     foreach ($entry in $zip.Entries) {
         if ($entry.FullName -notmatch '^base/lib/(arm64-v8a|x86_64)/.+\.so$') { continue }
         $stream = $entry.Open()
@@ -75,6 +86,7 @@ $report = @{
     package = $package; versionCode = [int]$version; targetSdk = [int]$sdk
     sha256 = (Get-FileHash $Bundle -Algorithm SHA256).Hash
     signerSha1 = $expectedSha1[$App]; permissions = $permissions; libraries = $libraries
+    embeddedConfigurationStrings = $embedded
     bundleValidation = 'passed'; elf16KB = 'passed'
     deviceJourneys = 'not verified'; playDeliveredSigning = 'not verified'
 }
@@ -102,6 +114,7 @@ if ($ApkPasswordFile) {
         throw 'APK signature or expected certificate verification failed.'
     }
     $report.apk = @{ path = $apk; sha256 = (Get-FileHash $apk -Algorithm SHA256).Hash; zip16KB = 'passed'; signature = 'passed' }
+    [IO.File]::WriteAllText("$apk.verification.json", (@{ bundleSha256 = $report.sha256; package = $package; versionCode = [int]$version; signerSha1 = $expectedSha1[$App]; apk = $report.apk } | ConvertTo-Json -Depth 5))
 }
 [IO.File]::WriteAllText("$Bundle.manifest.xml", $raw)
 [IO.File]::WriteAllText("$Bundle.verification.json", ($report | ConvertTo-Json -Depth 6))
