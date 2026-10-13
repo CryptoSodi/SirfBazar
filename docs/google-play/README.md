@@ -2,6 +2,8 @@
 
 Last inspected: 2026-10-13. Base: `6463f3cc05b6bca2f4da5228a58bec2461551d41`.
 Release preparation: PR #21, `codex/google-play-publication`.
+Local build tooling and permission cleanup: PR #22, `codex/local-android-release`.
+See [build 6 evidence](build6-verification.md) for the completed local AAB/APK checks.
 
 **Not published or submitted.** This folder contains preparation, not evidence
 of Google approval. No SirfBazar app was created in Play Console in this run.
@@ -105,9 +107,9 @@ to a new service without specific authorization.
 | Data safety | Source inventory is in `data-safety-review.md`; no questionnaire submitted | Reconcile SDKs, backend recipients and deployed configuration; complete each app's answers accurately |
 | Reviewer access | No approved review accounts or tested review instructions established | Provide restricted, stable access to customer, approved merchant and approved rider flows; no shared production-admin credentials or auth bypass |
 | Google login readiness | Live console inspected on 13 October: project `sirfbazar` / `453311658725`, External/Testing, one test user. Homepage/privacy/terms URLs now saved; no configured scopes shown in Data access | Recheck publication readiness, obtain approval where required, register Play signing SHA and test Play-installed sign-in |
-| Android permissions | Build-4 merchant manifest includes microphone, legacy storage and overlay permissions. New config disables image-picker microphone and gallery flow uses the system photo picker without broad gallery permission. First local customer merge traced storage/overlay to Expo-generated manifests; all three configs now block those unused permissions | Inspect rebuilt merged manifests and test camera/gallery cancellation and denial |
+| Android permissions | Build-6 manifests verified: no unused overlay/legacy storage in any app and no merchant microphone permission. Gallery flow uses the system photo picker without broad gallery permission | Test camera/gallery cancellation and denial on real supported devices |
 | Native journeys/screenshots | Installation succeeded for two APKs; launch captures black | Diagnose rendering, test all apps and capture genuine screenshots without personal information |
-| AAB and prelaunch checks | Profiles/key validation passed; EAS quota blocked cloud build. Owner approved local Windows builds; see `local-android-builds.md` | Complete local builds, inspect bundles, then test track and Play checks |
+| AAB and prelaunch checks | All three local build-6 AABs and test APKs built and verified for expected signer, manifest and native/ZIP alignment; see `build6-verification.md` | Device journeys, Play signing enrollment, test track and Play prelaunch checks |
 | Console declarations | Create App requires policy certification and export declaration; neither accepted | Complete truthful declarations and obtain action-time confirmation for binding terms when ready |
 
 ## Decisions needed from owner
@@ -135,10 +137,11 @@ without erasing another merchant's records or misleading the requester.
 - Customer and merchant APK installation on emulator: passed.
 - Native visual launch and authenticated journeys: **not verified**.
 - All three mobile typechecks and 69 existing mobile tests: passed.
-- New policy-link tests: 11 passed; Google-client tests: 22 passed after adding
+- New policy/config tests: 14 passed; Google-client tests: 22 passed after adding
   the new rider policy component to the isolated login test harness.
-- AAB build: **attempted, blocked by quota**. Play upload, review and production
-  publication: **not performed**.
+- Cloud AAB build: **blocked by quota**. Local AAB builds and artifact checks:
+  **passed for all three apps**. Play upload, review and production publication:
+  **not performed**.
 
 The initial preparation changed no runtime code. Follow-up updates website
 policies, native policy/deletion-request entry points and merchant photo permissions.
