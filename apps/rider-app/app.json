@@ -22,6 +22,7 @@
     },
     "android": {
       "package": "pk.sirfbazar.rider",
+      "googleServicesFile": "./google-services.json",
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",

@@ -14,10 +14,32 @@ completed policy or a claim that every possible SDK data flow was verified.
 | Precise location, speed, heading during assigned delivery | Rider; `screens/RiderDeliveryScreen.tsx` sends `/rider/location` only for focused foreground active assignments | Test pause/resume/logout, permission changes, recipients and stored history; do not claim background tracking |
 | Orders, payment/COD records, refunds, settlement information | Relevant roles; Customer/Order/Payment/Refund models and API orders/payments/settlements modules | Separate purchase history from financial details; verify real providers and legally required retention |
 | Support messages and related order references | All role-specific support flows and API support module | Confirm attachments, recipients, retention and deletion handling |
-| Expo push token and platform; notification delivery | All; each app's `lib/push.ts`, API `notifications/expo-push.service.ts`, PushToken schema | Verify deployed Expo/FCM recipients and logout/deletion cleanup, classify identifiers correctly |
+| Expo push token and platform; notification delivery | All; each app's `lib/push.ts`, API `notifications/expo-push.service.ts`, PushToken schema | Dedicated Firebase project and all three Expo FCM V1 assignments verified on 14 October; real background delivery and order-opening observed in all three build-10 apps. Customer logout removed its token and re-login restored registration without changing merchant registration. Expo and Google FCM carry delivery tokens and notification payloads; no Firebase Analytics enabled. Merchant/rider logout, deletion cleanup and token rotation still need device verification; classify identifiers accurately before submission. See `firebase-push-setup.md` |
 | Diagnostics, logs and SDK/network metadata | Not exhaustively verified | Inspect bundled SDK behavior and deployment logging before asserting no collection |
 
 ## Declaration rules for this release
+
+### SDK follow-up - 14 October 2026
+
+The new push/Maps candidates require SDK collection in addition to first-party
+API storage. Firebase Analytics being disabled does not mean no SDK metadata is
+collected. The [Firebase Android disclosure guide](https://firebase.google.com/docs/android/play-data-disclosure)
+documents FCM app-version/user-agent metadata and its Installations dependency,
+which generates a per-installation identifier. It states listed data uses HTTPS;
+that does not establish encryption for every other app/provider path.
+
+The [Maps Android disclosure guide](https://developers.google.com/maps/documentation/android-sdk/play-data-disclosure)
+documents request/device metadata, SDK identifiers, IP addresses, SDK diagnostics
+and map interaction data as applicable. Include those flows when classifying the
+customer app. Verify the actual bundled versions/configuration and their handling
+before answering the collection, purpose, sharing and deletion questions.
+
+Customer Data safety has only a partial saved Console draft: collection Yes,
+phone/other authentication plus OAuth, and the account-deletion URL. Per-type
+handling and security answers remain incomplete. Merchant/rider submissions were
+not completed. No independent security audit or completed erasure test is claimed.
+
+### Release rules
 
 - Assess each app independently. Website analytics are not automatically evidence
   that the native apps collect the same analytics.

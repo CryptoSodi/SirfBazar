@@ -1,4 +1,4 @@
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { AppIcon } from './components/AppIcon';
 import { getEntryRoute } from './lib/api';
 import { colors } from './lib/theme';
+import { createOrderPushNavigation } from './lib/notification-navigation';
 import LoginScreen from './screens/LoginScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import OrdersScreen from './screens/OrdersScreen';
@@ -26,6 +27,7 @@ export type RootStackParamList = {
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const TABS = [
   ['Dashboard', DashboardScreen, 'overview'],
@@ -68,6 +70,11 @@ const theme = {
 export default function App() {
   const [ready, setReady] = useState(false);
   const [entryRoute, setEntryRoute] = useState<'Login' | 'Tabs' | 'Onboard'>('Login');
+  const [pushNavigation] = useState(() => createOrderPushNavigation({
+    isReady: () => navigationRef.isReady(),
+    openOrder: orderId => navigationRef.navigate('OrderDetail', { orderId }),
+  }));
+  useEffect(() => ready ? pushNavigation.start() : undefined, [ready, pushNavigation]);
 
   useEffect(() => {
     getEntryRoute().then((route) => {
@@ -80,7 +87,7 @@ export default function App() {
   if (!ready) return null;
 
   return (
-    <NavigationContainer theme={theme}>
+    <NavigationContainer theme={theme} ref={navigationRef} onReady={() => { void pushNavigation.flush(); }}>
       <StatusBar style="dark" />
       <Stack.Navigator
         initialRouteName={entryRoute}

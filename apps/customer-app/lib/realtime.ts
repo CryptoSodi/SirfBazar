@@ -86,6 +86,7 @@ export function startCustomerRealtime() {
     token = null;
     void sync();
   });
+  const unsubscribeSession = subscribeCustomerEvent('session', () => { void sync(); });
   const state = AppState.addEventListener('change', () => {
     void sync();
     invalidate();
@@ -104,6 +105,7 @@ export function startCustomerRealtime() {
   return () => {
     stopped = true;
     unsubscribe();
+    unsubscribeSession();
     state.remove();
     clearInterval(retry);
     clearInterval(renewal);

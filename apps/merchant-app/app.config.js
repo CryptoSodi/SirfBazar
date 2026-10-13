@@ -24,6 +24,8 @@ if (process.env.REMEDIATION_TEST_BUILD === '1') {
   expo.slug += '-remediation';
   expo.scheme += '-remediation';
   expo.android.package += '.remediation';
+  // Production FCM configuration does not register the isolated test package.
+  delete expo.android.googleServicesFile;
   expo.ios.bundleIdentifier += '.remediation';
 }
 

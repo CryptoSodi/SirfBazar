@@ -1,4 +1,4 @@
-export type CustomerEvent = 'auth' | 'orders' | 'notifications' | 'support' | 'location';
+export type CustomerEvent = 'auth' | 'session' | 'orders' | 'notifications' | 'support' | 'location';
 const listeners = new Map<CustomerEvent, Set<() => void>>();
 export function publishCustomerEvent(event: CustomerEvent) {
   listeners.get(event)?.forEach((listener) => listener());

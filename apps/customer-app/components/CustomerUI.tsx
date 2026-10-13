@@ -18,6 +18,7 @@ export function Icon({ name, size = 22, color }: { name: IconName; size?: number
 export function goTab(navigation: any, name: string, params?: any) {
   if (name === 'BrowseTab') { name = 'HomeTab'; params = { screen: 'Browse' }; }
   if (name === 'CartTab' && !params) params = { screen: 'Cart' };
+  if (params?.screen) params = { ...params, initial: false };
   let nav = navigation;
   while (nav) {
     if (nav.getState()?.routeNames?.includes(name)) { nav.navigate(name, params); return; }

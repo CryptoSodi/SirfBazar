@@ -67,6 +67,9 @@ jobs:
       - run: node -r ts-node/register/transpile-only --test test/review-access.test.cjs
       - run: node ../../scripts/test-native-session-transports.cjs
       - run: node ../../scripts/test-google-native.cjs
+      - run: node ../../scripts/test-customer-maps-config.cjs
+      - run: node ../../scripts/test-firebase-native.cjs
+      - run: node ../../scripts/test-push-navigation.cjs
       - run: node ../../scripts/test-google-clients.cjs
       - run: node ../../scripts/test-native-policies.cjs
       - name: Verify Linux production packaging without connecting to production

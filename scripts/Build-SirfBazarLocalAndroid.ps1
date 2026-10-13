@@ -5,6 +5,7 @@ param(
     [ValidateRange(1, 2100000000)][int]$VersionCode = 6,
     [string]$SourceCommit = 'HEAD',
     [string]$PasswordFile,
+    [string]$AndroidMapsKeyFile,
     [string]$KeyDirectory = 'D:\keys\SirfBazar',
     [switch]$Resume,
     [switch]$RefreshConfig
@@ -18,6 +19,7 @@ $output = Join-Path $root "output\aab$VersionCode"
 $roles = if ($App -eq 'all') { @('customer', 'merchant', 'rider') } else { @($App) }
 $node = (Get-Command node.exe).Source
 $secret = $null
+$androidMapsKey = $null
 $expectedSha1 = @{
     customer = '9F:67:B7:7D:B1:8A:32:31:E2:33:78:A8:56:1F:48:94:93:92:A3:A0'
     merchant = 'FF:7A:DA:CB:08:BB:CD:CB:C8:7E:6A:9B:36:94:30:A2:42:4B:EE:58'
@@ -42,6 +44,7 @@ function Run([string]$File, [string[]]$Arguments, [string]$Directory, [hashtable
         $process.WaitForExit()
         $message = $stdout.Result + $stderr.Result
         if ($secret) { $message = $message.Replace($secret, '[REDACTED]') }
+        if ($androidMapsKey) { $message = $message.Replace($androidMapsKey, '[REDACTED_MAPS_KEY]') }
         if ($LogPath) { [IO.File]::WriteAllText($LogPath, $message) }
         if ($LogPath) { Write-Host (($message -split "`n" | Select-Object -Last 25) -join "`n") }
         else { Write-Host $message }
@@ -55,6 +58,10 @@ $source = (& git -C $root rev-parse --verify "$SourceCommit^{commit}").Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve source commit.' }
 [void][IO.Directory]::CreateDirectory($output)
 try {
+    if ($AndroidMapsKeyFile) {
+        $androidMapsKey = (Get-Content -LiteralPath $AndroidMapsKeyFile -Raw | ConvertFrom-Json).key
+        if ($androidMapsKey -notmatch '^AIza[A-Za-z0-9_-]{35}$') { throw 'Invalid Android Maps key file.' }
+    }
     if ($PasswordFile) {
         $secret = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $PasswordFile).Path).TrimEnd("`r", "`n")
         if (-not $secret) { throw 'Password file is empty.' }
@@ -113,6 +120,7 @@ try {
             CMAKE_BUILD_PARALLEL_LEVEL = '2'
         }
         foreach ($entry in $profile.build.preview.env.GetEnumerator()) { $environment[$entry.Key] = $entry.Value }
+        if ($role -eq 'customer' -and $androidMapsKey) { $environment.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY = $androidMapsKey }
         if ($environment.EXPO_PUBLIC_API_URL -ne 'https://api.sirfbazar.com/api') { throw 'Unexpected release API.' }
         $native = Join-Path $stage 'android'
         if ($refresh -or -not (Test-Path "$native\gradlew.bat")) {
@@ -146,4 +154,4 @@ try {
         [IO.File]::WriteAllText((Join-Path $output "$role-artifact.json"), ($record | ConvertTo-Json))
         Write-Host "Built: $artifact"
     }
-} finally { $secret = $null }
+} finally { $secret = $null; $androidMapsKey = $null }

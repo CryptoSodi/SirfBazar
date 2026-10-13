@@ -65,6 +65,12 @@ ignored `output/play-{customer,merchant,rider}-bundle-validated.jpg`.
 
 ## Signing and remaining work
 
+Update 14 October: all three recorded Play signing certificates now have Android
+OAuth clients. Customer native Maps authorization failed during device checks;
+its separately approved repair is in progress. See
+[current signing and reviewer follow-up](play-signing-follow-up-2026-10-14.md).
+The statements below describe the earlier registration baseline.
+
 Play automatically shows Google-managed signing for the newly created app.
 No local private keystore was uploaded or changed. Play distribution certificates
 must be registered with Google OAuth/Maps and Play-installed sign-in verified.

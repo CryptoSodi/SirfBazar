@@ -22,6 +22,7 @@
     },
     "android": {
       "package": "pk.sirfbazar.customer",
+      "googleServicesFile": "./google-services.json",
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -39,12 +40,7 @@
         "ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyBdkMmH4b_cdnLIQfLFS2zDK84tNvqrbAs"
-        }
-      }
+      ]
     },
     "plugins": [
       [
