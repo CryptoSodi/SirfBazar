@@ -5,8 +5,12 @@ Release preparation: PR #21, `codex/google-play-publication`.
 Local build tooling and permission cleanup: PR #22, `codex/local-android-release`.
 See [build 6 evidence](build6-verification.md) for the completed local AAB/APK checks.
 
-**Not published or submitted.** This folder contains preparation, not evidence
-of Google approval. No SirfBazar app was created in Play Console in this run.
+**Not published or submitted for review.** All three Play Console app drafts now
+exist, their build-6 bundles are uploaded and validated, and listing preparation
+is partially saved. See the [latest Console progress record](console-progress-2026-10-13.md)
+for app IDs, completed declarations, signing fingerprints and remaining gates.
+The historical readiness audit below predates that Console setup and is not
+evidence of Google approval.
 PR #21 merged as `d65c057c19f2a17fe9ea9b51c78cdb68274c79dc`; the normal
 production workflow [38396284601](https://github.com/CryptoSodi/SirfBazar/actions/runs/38396284601)
 passed, including API deployment. No schema, signing key, OAuth client, scope or

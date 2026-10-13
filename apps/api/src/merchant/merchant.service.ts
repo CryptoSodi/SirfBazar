@@ -19,6 +19,7 @@ import {
   UserRole,
 } from '../common/constants';
 import { OnboardMerchantDto, UpdateMerchantProfileDto, AddDocumentDto } from './merchant.dto';
+import { reviewPosEntitlement } from '../auth/review-access';
 
 @Injectable()
 export class MerchantService {
@@ -207,7 +208,7 @@ export class MerchantService {
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
     const posTrial = await this.prisma.merchantPosTrial.findUnique({ where: { userId: merchant.userId } });
-    return { ...merchant, trial: merchantTrial(merchant.createdAt), posTrial: merchantPosTrialView(posTrial), isOwner: ctx.isOwner, permissions: ctx.permissions };
+    return { ...merchant, trial: merchantTrial(merchant.createdAt), posTrial: reviewPosEntitlement(merchant.id) ?? merchantPosTrialView(posTrial), isOwner: ctx.isOwner, permissions: ctx.permissions };
   }
 
   async updateProfile(userId: string, dto: UpdateMerchantProfileDto) {

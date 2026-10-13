@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { ADMIN_ROLES, StaffPermission, UserRole } from '../common/constants';
 import { audienceAllowed, NotificationAudience } from '../notifications/notification-audience';
+import { requireReviewSession, reviewMembershipValid } from '../auth/review-access';
 
 /**
  * Socket.IO rooms:
@@ -44,8 +45,9 @@ export class RealtimeGateway implements OnGatewayConnection {
     if (typeof token === 'string' && token) {
       try {
         const payload = await this.jwtService.verifyAsync(token);
-        const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { role: true, status: true, customer: { select: { id: true } }, merchant: { select: { id: true } }, staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, isActive: true, approvalStatus: true } } } });
-        if (!user || user.status !== 'ACTIVE') return;
+        requireReviewSession(payload.sub, payload.role);
+        const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { role: true, status: true, customer: { select: { id: true } }, merchant: { select: { id: true } }, staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, merchantId: true, isActive: true, approvalStatus: true } } } });
+        if (!user || user.status !== 'ACTIVE' || !reviewMembershipValid(payload.sub, user)) return;
         const role = payload.role as UserRole;
         const member = role === UserRole.CUSTOMER ? !!user.customer
           : role === UserRole.MERCHANT_OWNER ? !!user.merchant
@@ -71,16 +73,18 @@ export class RealtimeGateway implements OnGatewayConnection {
   private async current(client: Socket) {
     const { userId, sessionId, role } = client.data;
     if (!userId) return false;
+    try { requireReviewSession(userId, role); }
+    catch { client.disconnect(true); return false; }
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: {
       role: true, status: true, customer: { select: { id: true } }, merchant: { select: { id: true } },
-      staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, isActive: true, approvalStatus: true } },
+      staffOf: { where: { status: 'ACTIVE', merchant: { user: { status: 'ACTIVE' } } }, select: { id: true } }, rider: { select: { id: true, merchantId: true, isActive: true, approvalStatus: true } },
     } });
     const member = role === UserRole.CUSTOMER ? !!user?.customer
       : role === UserRole.MERCHANT_OWNER ? !!user?.merchant
       : role === UserRole.MERCHANT_STAFF ? !!user?.staffOf.length
       : role === UserRole.RIDER ? !!user?.rider?.isActive && user.rider.approvalStatus === 'APPROVED'
       : ADMIN_ROLES.includes(role) && user?.role === role;
-    if (user?.status !== 'ACTIVE' || !member) {
+    if (user?.status !== 'ACTIVE' || !member || !reviewMembershipValid(userId, user)) {
       client.disconnect(true);
       return false;
     }

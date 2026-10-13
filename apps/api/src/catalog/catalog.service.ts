@@ -6,6 +6,7 @@ import { boundingBox, estimateDeliveryMinutes, haversineKm } from '../common/uti
 import { paged, parsePage } from '../common/utils/pagination';
 import { resolveCategoryBranch } from '../common/utils/category-tree';
 import { isMerchantOpenAt } from '../common/merchant-hours';
+import { reviewMerchantFilter, reviewAccount, reviewProductFilter, REVIEW_SHOP_ID } from '../auth/review-access';
 import {
   LocationQuery,
   NearbyMerchantsQuery,
@@ -59,9 +60,9 @@ export class CatalogService {
    * category pages; ordering still flows through merchant shops shown on the
    * product detail page (offers).
    */
-  async catalogProducts(query: SearchProductsQuery) {
+  async catalogProducts(query: SearchProductsQuery, userId?: string) {
     const { page, pageSize, skip, take } = parsePage(query);
-    const where: Prisma.ProductWhereInput = { approvalStatus: ProductApprovalStatus.APPROVED };
+    const where: Prisma.ProductWhereInput = { approvalStatus: ProductApprovalStatus.APPROVED, ...reviewProductFilter(reviewAccount(userId) ? REVIEW_SHOP_ID : undefined) };
     if (query.categoryId) where.categoryId = { in: await resolveCategoryBranch(this.prisma, query.categoryId) };
     if (query.q?.trim()) {
       const q = query.q.trim();
@@ -113,7 +114,7 @@ export class CatalogService {
    * one in-stock product from an approved, open shop within range are returned
    * (dynamic, hyperlocal). Without a location, all active categories are shown.
    */
-  async categoriesTree(location?: { latitude?: number; longitude?: number; radiusKm?: number }) {
+  async categoriesTree(location?: { latitude?: number; longitude?: number; radiusKm?: number }, userId?: string) {
     const categories = await this.prisma.category.findMany({
       where: { isActive: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -133,6 +134,7 @@ export class CatalogService {
       const inRange = await this.merchantsInRange(location.latitude, location.longitude, location.radiusKm, {
         isOnline: true,
         isOpen: true,
+        ...reviewMerchantFilter(userId),
       });
       const merchantIds = inRange.map((m) => m.merchant.id);
       availableCatIds = new Set();
@@ -206,6 +208,7 @@ export class CatalogService {
     const candidates = await this.prisma.merchant.findMany({
       where: {
         approvalStatus: MerchantApprovalStatus.APPROVED,
+        ...reviewMerchantFilter(),
         latitude: { gte: box.minLat, lte: box.maxLat },
         longitude: { gte: box.minLon, lte: box.maxLon },
         ...extraWhere,
@@ -242,6 +245,7 @@ export class CatalogService {
    * filtering is skipped and distance fields are null (guest browsing).
    */
   private async buildProductCards(opts: {
+    userId?: string;
     latitude?: number;
     longitude?: number;
     radiusKm?: number;
@@ -256,7 +260,7 @@ export class CatalogService {
 
     let merchantFilter: Prisma.MerchantProductWhereInput;
     if (hasLocation) {
-      const inRange = await this.merchantsInRange(opts.latitude!, opts.longitude!, opts.radiusKm, { isOpen: true, isOnline: true });
+      const inRange = await this.merchantsInRange(opts.latitude!, opts.longitude!, opts.radiusKm, { isOpen: true, isOnline: true, ...reviewMerchantFilter(opts.userId) });
       if (inRange.length === 0) return [];
       for (const { merchant, reach } of inRange) reachByMerchant.set(merchant.id, reach);
       merchantFilter = { merchantId: { in: [...reachByMerchant.keys()] } };
@@ -271,7 +275,7 @@ export class CatalogService {
         ...merchantFilter,
         // Discovery includes offline shops; sellable offers never do, even
         // without a location or if a shop changed state after range lookup.
-        merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true },
+        merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true, ...reviewMerchantFilter(opts.userId) },
         product: {
           approvalStatus: ProductApprovalStatus.APPROVED,
           ...(opts.productIds ? { id: { in: opts.productIds } } : {}),
@@ -361,7 +365,7 @@ export class CatalogService {
 
   // ── Product discovery ───────────────────────────────────────────────────────
 
-  async search(query: SearchProductsQuery) {
+  async search(query: SearchProductsQuery, userId?: string) {
     const { page, pageSize, skip, take } = parsePage(query);
 
     const productWhere: Prisma.ProductWhereInput = {};
@@ -377,6 +381,7 @@ export class CatalogService {
     }
 
     const cards = await this.buildProductCards({
+      userId,
       latitude: query.latitude,
       longitude: query.longitude,
       radiusKm: query.radiusKm,
@@ -388,9 +393,10 @@ export class CatalogService {
     return paged(cards.slice(skip, skip + take), cards.length, page, pageSize);
   }
 
-  async nearbyProducts(query: NearbyProductsQuery) {
+  async nearbyProducts(query: NearbyProductsQuery, userId?: string) {
     const { page, pageSize, skip, take } = parsePage(query);
     const cards = await this.buildProductCards({
+      userId,
       latitude: query.latitude,
       longitude: query.longitude,
       radiusKm: query.radiusKm,
@@ -400,11 +406,11 @@ export class CatalogService {
   }
 
   /** Top products by OrderItem count over the last 30 days (all-time fallback). */
-  async popularProducts(query: LocationQuery): Promise<ProductCard[]> {
+  async popularProducts(query: LocationQuery, userId?: string): Promise<ProductCard[]> {
     const since = new Date(Date.now() - 30 * 86400_000);
     let top = await this.prisma.orderItem.groupBy({
       by: ['productId'],
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since }, order: { merchantId: { not: REVIEW_SHOP_ID } } },
       _count: { productId: true },
       orderBy: { _count: { productId: 'desc' } },
       take: 50,
@@ -413,6 +419,7 @@ export class CatalogService {
       // Cast: Prisma's groupBy overload inference trips without a `where`.
       top = (await this.prisma.orderItem.groupBy({
         by: ['productId'],
+        where: { order: { merchantId: { not: REVIEW_SHOP_ID } } },
         _count: { productId: true },
         orderBy: { _count: { productId: 'desc' } },
         take: 50,
@@ -422,6 +429,7 @@ export class CatalogService {
     if (top.length === 0) {
       // Fresh database with no orders yet — fall back to default-ranked cards.
       const cards = await this.buildProductCards({
+        userId,
         latitude: query.latitude,
         longitude: query.longitude,
       });
@@ -430,6 +438,7 @@ export class CatalogService {
 
     const rank = new Map(top.map((t, i) => [t.productId, i]));
     const cards = await this.buildProductCards({
+      userId,
       latitude: query.latitude,
       longitude: query.longitude,
       productIds: [...rank.keys()],
@@ -467,6 +476,7 @@ export class CatalogService {
             .map(([categoryId]) => categoryId);
           if (topCategoryIds.length > 0) {
             const cards = await this.buildProductCards({
+              userId,
               latitude: query.latitude,
               longitude: query.longitude,
               productWhere: { categoryId: { in: topCategoryIds } },
@@ -476,17 +486,17 @@ export class CatalogService {
         }
       }
     }
-    return this.popularProducts(query);
+    return this.popularProducts(query, userId);
   }
 
   // ── Product detail ──────────────────────────────────────────────────────────
 
-  async productDetail(productId: string, query: LocationQuery) {
+  async productDetail(productId: string, query: LocationQuery, userId?: string) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
       include: { category: { select: { id: true, name: true, slug: true } } },
     });
-    if (!product || product.approvalStatus !== ProductApprovalStatus.APPROVED) {
+    if (!product || product.approvalStatus !== ProductApprovalStatus.APPROVED || (product.createdByMerchantId === REVIEW_SHOP_ID && !reviewAccount(userId))) {
       throw new NotFoundException('Product not found');
     }
 
@@ -496,13 +506,13 @@ export class CatalogService {
       merchant: { approvalStatus: MerchantApprovalStatus.APPROVED },
     };
     if (hasLocation) {
-      const inRange = await this.merchantsInRange(query.latitude!, query.longitude!, undefined, { isOpen: true, isOnline: true });
+      const inRange = await this.merchantsInRange(query.latitude!, query.longitude!, undefined, { isOpen: true, isOnline: true, ...reviewMerchantFilter(userId) });
       for (const { merchant, reach } of inRange) reachByMerchant.set(merchant.id, reach);
       merchantFilter = { merchantId: { in: [...reachByMerchant.keys()] } };
     }
 
     const offerRows = await this.prisma.merchantProduct.findMany({
-      where: { productId, ...merchantFilter, merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true } },
+      where: { productId, ...merchantFilter, merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true, ...reviewMerchantFilter(userId) } },
       include: {
         merchant: { select: { id: true, shopName: true, ratingAverage: true } },
       },
@@ -534,6 +544,7 @@ export class CatalogService {
 
     const similar = (
       await this.buildProductCards({
+        userId,
         latitude: query.latitude,
         longitude: query.longitude,
         productWhere: { categoryId: product.categoryId, NOT: { id: product.id } },
@@ -561,10 +572,10 @@ export class CatalogService {
 
   // ── Merchant discovery ──────────────────────────────────────────────────────
 
-  async nearbyMerchants(query: NearbyMerchantsQuery) {
+  async nearbyMerchants(query: NearbyMerchantsQuery, userId?: string) {
     const { page, pageSize, skip, take } = parsePage(query);
 
-    const extraWhere: Prisma.MerchantWhereInput = {};
+    const extraWhere: Prisma.MerchantWhereInput = reviewMerchantFilter(userId);
     if (query.shopType) extraWhere.shopType = query.shopType;
     if (query.categoryId) {
       extraWhere.products = {
@@ -602,7 +613,8 @@ export class CatalogService {
     return paged(items.slice(skip, skip + take), items.length, page, pageSize);
   }
 
-  async merchantDetail(merchantId: string, query: LocationQuery) {
+  async merchantDetail(merchantId: string, query: LocationQuery, userId?: string) {
+    this.requireVisibleMerchant(merchantId, userId);
     const merchant = await this.prisma.merchant.findUnique({ where: { id: merchantId }, include: { operatingHours: true } });
     if (!merchant || merchant.approvalStatus !== MerchantApprovalStatus.APPROVED) {
       throw new NotFoundException('Merchant not found');
@@ -635,7 +647,9 @@ export class CatalogService {
   async merchantProducts(
     merchantId: string,
     query: { categoryId?: string; q?: string; page?: number; pageSize?: number },
+    userId?: string,
   ) {
+    this.requireVisibleMerchant(merchantId, userId);
     const merchant = await this.prisma.merchant.findUnique({
       where: { id: merchantId },
       select: { id: true, approvalStatus: true, isOnline: true, isOpen: true, openingTime: true, closingTime: true, operatingHours: true },
@@ -648,7 +662,7 @@ export class CatalogService {
     if (!merchant.isOnline || !merchant.isOpen || !isMerchantOpenAt(merchant.operatingHours, merchant.openingTime, merchant.closingTime)) return paged([], 0, page, pageSize);
     const where: Prisma.MerchantProductWhereInput = {
       merchantId,
-      merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true },
+      merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true, ...reviewMerchantFilter(userId) },
       product: {
         approvalStatus: ProductApprovalStatus.APPROVED,
         ...(query.categoryId ? { categoryId: { in: await resolveCategoryBranch(this.prisma, query.categoryId) } } : {}),
@@ -695,6 +709,10 @@ export class CatalogService {
       isAvailable: row.isAvailable,
     }));
     return paged(items, total, page, pageSize);
+  }
+
+  requireVisibleMerchant(merchantId: string, userId?: string) {
+    if ((merchantId === REVIEW_SHOP_ID) !== !!reviewAccount(userId)) throw new NotFoundException('Merchant not found');
   }
 
   private merchantCard(

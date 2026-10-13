@@ -11,6 +11,11 @@ Dev conveniences:
 - Admin seed login: `admin@sirfbazar.pk` / `Admin@12345` (see prisma/seed.ts).
 
 ## Auth
+Store-review access, when explicitly enabled, uses the same send/verify OTP
+contracts for three reserved identities only. It returns `status: test` without
+sending a message, requires a private configured code and enforces an isolated
+demo-shop boundary. See [reviewer access and revocation](google-play/reviewer-access.md).
+
 Routes below are public unless explicitly marked as requiring a bearer session.
 - `POST /auth/send-otp` `{phoneNumber}` → `{sent, expiresInSeconds}` (429 on resend cooldown)
 - `POST /auth/verify-otp` `{phoneNumber, code, fullName?, context?: customer|admin|merchant|rider}` → `{accessToken, refreshToken, user}`; default context is customer

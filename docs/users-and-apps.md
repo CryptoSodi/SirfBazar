@@ -3,6 +3,10 @@
 A complete guide to every application in the SirfBazar platform, who uses it, how
 they log in, and what they can do. Last updated for the live deployment.
 
+> Legacy seeded demo accounts and fixed OTP examples below are development-only,
+> not production login instructions. Google Play uses separately provisioned,
+> isolated accounts. See [reviewer access and immediate revocation](google-play/reviewer-access.md).
+
 ---
 
 ## 1. Live URLs

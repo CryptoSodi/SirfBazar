@@ -5,6 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ADMIN_ROLES, NotificationType, TicketStatus, UserRole } from '../common/constants';
 import { parsePage, paged, PageQuery } from '../common/utils/pagination';
+import { reviewAccount } from '../auth/review-access';
 
 @Injectable()
 export class SupportService {
@@ -100,11 +101,11 @@ export class SupportService {
         riderId,
         createdByUserId: userId,
         issueCategory: input.issueCategory,
-        title: input.title,
+        title: reviewAccount(userId) ? `[Store review] ${input.title}` : input.title,
         description: input.description,
       },
     });
-    this.realtime.emitToAdmins('support:new', { ticketId: ticket.id, orderId: input.orderId });
+    if (!reviewAccount(userId)) this.realtime.emitToAdmins('support:new', { ticketId: ticket.id, orderId: input.orderId });
     return ticket;
   }
 
@@ -155,7 +156,7 @@ export class SupportService {
         type: NotificationType.SUPPORT_REPLY,
         referenceId: ticket.id,
       });
-    } else if (ticket.assignedToAdminId) {
+    } else if (ticket.assignedToAdminId && !reviewAccount(userId)) {
       const admin = await this.prisma.user.findUnique({ where: { id: ticket.assignedToAdminId }, select: { role: true } });
       if (!admin || !ADMIN_ROLES.includes(admin.role as UserRole)) return row;
       await this.notifications.notify({

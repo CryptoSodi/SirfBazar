@@ -19,6 +19,7 @@ import { Prisma } from '@prisma/client';
 import { WhatsAppError, validateWhatsAppPhone } from '../whatsapp/whatsapp.service';
 import { serializable } from '../common/transaction';
 import { revokeSessionRegistrations, transferRegistrations } from '../notifications/notification-registration';
+import { reviewPhone, reviewAccount, reviewCodeHash, requireReviewSession } from './review-access';
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 const positiveSetting = (name: string, fallback: number) => {
@@ -96,7 +97,7 @@ export class AuthService {
 
   private async createOtp(identifier: string, purpose: string, code: string) {
     // Salted, deliberately slow hashes protect short codes at rest. Never persist plaintext.
-    const codeHash = await bcrypt.hash(code, 12);
+    const codeHash = reviewCodeHash(identifier, purpose) ?? await bcrypt.hash(code, 12);
     return this.prisma.$transaction(async db => {
       // Shared across API processes: concurrent resends cannot bypass recipient limits.
       await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`otp:${identifier}`}))`;
@@ -124,15 +125,26 @@ export class AuthService {
     }
   }
 
-  private async consumeOtp(otp: { id: string; codeHash: string }, code: string) {
+  private async consumeOtp(otp: { id: string; codeHash: string; phoneNumber?: string }, code: string) {
     const invalid = () => new UnauthorizedException('Code is invalid, expired, or has too many failed attempts.');
     // Reserve an attempt before comparing, including concurrent verification requests.
-    const reserved = await this.prisma.otpCode.updateMany({
+    const reserve = (db: Prisma.TransactionClient) => db.otpCode.updateMany({
       where: { id: otp.id, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: this.otpMaxAttempts } },
       data: { attempts: { increment: 1 } },
     });
+    const reserved = reviewPhone(otp.phoneNumber ?? '')
+      ? await this.prisma.$transaction(async db => {
+          await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`otp:${otp.phoneNumber}`}))`;
+          const usage = await db.otpCode.aggregate({
+            where: { phoneNumber: otp.phoneNumber, createdAt: { gte: new Date(Date.now() - 86400_000) } },
+            _sum: { attempts: true },
+          });
+          if ((usage._sum.attempts ?? 0) >= 20) throw new HttpException('Review sign-in limit reached. Try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
+          return reserve(db);
+        })
+      : await reserve(this.prisma);
     if (reserved.count !== 1) throw invalid();
-    const valid = (this.isMockOtp && code === '123456') || await bcrypt.compare(code, otp.codeHash);
+    const valid = (this.isMockOtp && !reviewPhone(otp.phoneNumber ?? '') && code === '123456') || await bcrypt.compare(code, otp.codeHash);
     if (!valid) throw invalid();
     const consumed = await this.prisma.otpCode.updateMany({
       where: { id: otp.id, consumedAt: null, expiresAt: { gt: new Date() } },
@@ -145,15 +157,29 @@ export class AuthService {
 
   async sendOtp(phoneNumber: string, purpose = 'LOGIN') {
     phoneNumber = this.normalizePhone(phoneNumber);
+    const review = reviewPhone(phoneNumber);
+    if (review) {
+      reviewCodeHash(phoneNumber, purpose);
+      const user = await this.prisma.user.findUnique({ where: { phoneNumber }, select: { id: true, status: true } });
+      if (user?.id !== review.userId || user.status !== 'ACTIVE') throw new UnauthorizedException('Review account is unavailable.');
+    }
     const code = generateNumericCode(6);
     const attempt = await this.createOtp(phoneNumber, purpose, code);
-    const status = await this.deliverOtp(attempt.id, phoneNumber, code, purpose);
+    // Reserved review numbers never receive WhatsApp/SMS. Reviewers use their private code.
+    const status = review ? 'test' as const : await this.deliverOtp(attempt.id, phoneNumber, code, purpose);
     return { sent: status !== 'unconfirmed', status, expiresInSeconds: this.otpTtlSeconds, resendAfterSeconds: this.otpResendCooldownSeconds,
       ...(status === 'unconfirmed' ? { message: 'Submission is unconfirmed. If a code arrives, use it; wait before resending.' } : {}) };
   }
 
   async verifyOtp(phoneNumber: string, code: string, fullName?: string, context: AuthContext = 'customer') {
     phoneNumber = this.normalizePhone(phoneNumber);
+    const review = reviewPhone(phoneNumber);
+    if (review) {
+      requireReviewSession(review.userId, review.role);
+      if (context !== review.context) throw new UnauthorizedException('Use the review account for this app.');
+      const existing = await this.prisma.user.findUnique({ where: { phoneNumber }, select: { id: true, status: true } });
+      if (existing?.id !== review.userId || existing.status !== 'ACTIVE') throw new UnauthorizedException('Review account is unavailable.');
+    }
     const otp = await this.prisma.otpCode.findFirst({
       where: { phoneNumber, purpose: 'LOGIN', consumedAt: null },
       orderBy: { createdAt: 'desc' },
@@ -217,6 +243,7 @@ export class AuthService {
         }
         const linked = await db.user.findUnique({ where: { googleId: profile.googleId } });
         if (linked) {
+          if (reviewAccount(linked.id)) throw new UnauthorizedException('Use the supplied review phone and code.');
           await this.saveGoogleAccountProfile(db, linked.id, profile);
           return linked;
         }
@@ -224,6 +251,7 @@ export class AuthService {
         if (matches.length > 1) throw new UnauthorizedException('Account email is ambiguous. Contact support.');
         const existing = matches[0];
         if (existing) {
+          if (reviewAccount(existing.id)) throw new UnauthorizedException('Use the supplied review phone and code.');
           if (existing.status !== 'ACTIVE') throw new UnauthorizedException('Account is not active');
           if (existing.googleId || !profile.emailAuthoritative) {
             throw new UnauthorizedException('Sign in using your existing method and link Google from your account.');
@@ -263,6 +291,7 @@ export class AuthService {
   }
 
   async linkGoogle(userId: string, idToken: string) {
+    if (reviewAccount(userId)) throw new BadRequestException('Shared review accounts cannot be linked to a personal Google identity.');
     let profile;
     try { profile = await this.googleAuth.verifyIdToken(idToken); }
     catch (error) {
@@ -390,6 +419,7 @@ export class AuthService {
 
   async startMerchantRegistration(dto: MerchantRegistrationStartDto) {
     const identifier = this.normalizeIdentifier(dto.contact);
+    if (reviewPhone(identifier)) throw new BadRequestException('Reserved review identity.');
     if (!this.isMockOtp && (dto.channel !== 'mobile' || identifier.includes('@'))) {
       throw new BadRequestException('Verification requires a mobile number. Email delivery is not configured.');
     }
@@ -458,6 +488,7 @@ export class AuthService {
 
   async resetMerchantPassword(identifier: string, code: string, password: string) {
     const clean = this.normalizeIdentifier(identifier);
+    if (reviewPhone(clean)) throw new BadRequestException('Reserved review identity.');
     const user = await this.merchantUserByIdentifier(clean);
     const otp = await this.prisma.otpCode.findFirst({ where: { phoneNumber: clean, purpose: 'MERCHANT_PASSWORD_RESET', consumedAt: null }, orderBy: { createdAt: 'desc' } });
     if (!user || !otp || otp.expiresAt < new Date() || otp.attempts >= this.otpMaxAttempts) throw new UnauthorizedException('Recovery code is invalid or expired.');
@@ -477,6 +508,7 @@ export class AuthService {
   }
 
   private async issueTokensInTransaction(tx: Prisma.TransactionClient, userId: string, role: UserRole, previousSessionId?: string) {
+    requireReviewSession(userId, role);
     const refreshToken = generateToken(32);
     const refreshTtlDays = Number(process.env.JWT_REFRESH_TTL_DAYS || 30);
 
@@ -576,6 +608,11 @@ export class AuthService {
    * merchant, and a rider at once — the active role is chosen per app at login.
    */
   private async resolveContextRole(userId: string, context: AuthContext, db: Prisma.TransactionClient = this.prisma): Promise<UserRole> {
+    const review = reviewAccount(userId);
+    if (review) {
+      requireReviewSession(userId, review.role);
+      if (review.context !== context) throw new UnauthorizedException('Use the review account for this app.');
+    }
     if (context === 'customer') {
       await this.ensureCustomerRecord(userId, db);
       return UserRole.CUSTOMER;
