@@ -19,6 +19,11 @@
     },
     "android": {
       "package": "pk.sirfbazar.merchant",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "icon": "./assets/brand/app-icons/merchant/icon-1024.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/app-icons/merchant/adaptive-foreground.png",

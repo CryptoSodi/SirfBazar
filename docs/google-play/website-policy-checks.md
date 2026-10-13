@@ -48,7 +48,9 @@ were used. This is not a full screen-reader or mobile-app test.
 
 ## Still required before Play submission
 
-The website content is pushed in PR #21, **not yet deployed**. All three mobile
+The website content was merged in PR #21 and **deployed**. Production workflow
+38396284601 passed; Terms, Privacy, Account deletion and Contact each returned
+HTTP 200 with `support@sirfbazar.com` and no `.pk` support mailbox. All three mobile
 profile/settings views now include deletion-request and policy links; merchant
 and rider login views also expose them. The customer request screen opens email
 instead of calling the legacy soft-disable endpoint. Component tests passed;

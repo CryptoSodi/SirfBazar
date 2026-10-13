@@ -22,6 +22,11 @@
     },
     "android": {
       "package": "pk.sirfbazar.rider",
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "icon": "./assets/brand/app-icons/rider/icon-1024.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/brand/app-icons/rider/adaptive-foreground.png",

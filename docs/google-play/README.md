@@ -5,12 +5,16 @@ Release preparation: PR #21, `codex/google-play-publication`.
 
 **Not published or submitted.** This folder contains preparation, not evidence
 of Google approval. No SirfBazar app was created in Play Console in this run.
-No production service, database, signing key, or Google OAuth registration was changed.
+PR #21 merged as `d65c057c19f2a17fe9ea9b51c78cdb68274c79dc`; the normal
+production workflow [38396284601](https://github.com/CryptoSodi/SirfBazar/actions/runs/38396284601)
+passed, including API deployment. No schema, signing key, OAuth client, scope or
+audience change was made. Google consent branding URLs were updated as below.
 
 Owner follow-up: the business name is **Sirf Bazar** and the public support/deletion
 mailbox is now **support@sirfbazar.com** (replaces the earlier .pk address).
 Terms, Privacy, Contact and a public `/account-deletion` email-request page have
-been implemented locally, with footer links. They have not been deployed. This
+been deployed, with footer links. All four routes returned HTTP 200 with the
+approved .com mailbox and no old .pk support address on 13 October. This
 is not a completed data-erasure system or legal-compliance certification.
 
 ## Account and listings
@@ -96,14 +100,14 @@ to a new service without specific authorization.
 | Gate | Evidence / current state | Required next action |
 | --- | --- | --- |
 | Account/data deletion | `apps/api/src/customers/customers.service.ts`, `deleteAccount`, only sets `DELETED` and revokes refresh tokens | Implement a genuine request/fulfillment process and test data handling; disabling access alone is insufficient |
-| All-role deletion entry | All three profile/settings views now include `AccountPolicies`; merchant/rider login also expose links. Customer deletion screen opens an email request instead of falsely completing erasure | Verify updated native builds and remaining onboarding states; deploy the public web resource |
+| All-role deletion entry | All three profile/settings views now include `AccountPolicies`; merchant/rider login also expose links. Customer deletion screen opens an email request instead of falsely completing erasure. Public request page deployed | Verify updated native builds and remaining onboarding states |
 | Privacy/retention | Updated policy describes precise location, all roles and request-based deletion. Owner requested customary retention; selected targets are in `deletion-operations.md`, not yet enforced | Test actual fulfillment, verify retention settings and deployed policy; do not claim the targets already operate |
 | Data safety | Source inventory is in `data-safety-review.md`; no questionnaire submitted | Reconcile SDKs, backend recipients and deployed configuration; complete each app's answers accurately |
 | Reviewer access | No approved review accounts or tested review instructions established | Provide restricted, stable access to customer, approved merchant and approved rider flows; no shared production-admin credentials or auth bypass |
-| Google login readiness | Live console inspected on 13 October: project `sirfbazar` / `453311658725`, External/Testing, one test user. Publish disabled pending branding. Homepage/privacy/terms fields empty | Complete branding after policy deployment, obtain publication approval where required, register Play signing SHA and test Play-installed sign-in |
-| Android permissions | Build-4 merchant manifest includes microphone, legacy storage and overlay permissions. New config disables image-picker microphone and gallery flow uses the system photo picker without broad gallery permission | Inspect rebuilt merged manifest, trace remaining permissions and test camera/gallery cancellation and denial |
+| Google login readiness | Live console inspected on 13 October: project `sirfbazar` / `453311658725`, External/Testing, one test user. Homepage/privacy/terms URLs now saved; no configured scopes shown in Data access | Recheck publication readiness, obtain approval where required, register Play signing SHA and test Play-installed sign-in |
+| Android permissions | Build-4 merchant manifest includes microphone, legacy storage and overlay permissions. New config disables image-picker microphone and gallery flow uses the system photo picker without broad gallery permission. First local customer merge traced storage/overlay to Expo-generated manifests; all three configs now block those unused permissions | Inspect rebuilt merged manifests and test camera/gallery cancellation and denial |
 | Native journeys/screenshots | Installation succeeded for two APKs; launch captures black | Diagnose rendering, test all apps and capture genuine screenshots without personal information |
-| AAB and prelaunch checks | Profiles/key validation passed; EAS quota blocked the attempted build | Obtain build capacity or use a verified local toolchain, inspect bundles, then test track and Play checks |
+| AAB and prelaunch checks | Profiles/key validation passed; EAS quota blocked cloud build. Owner approved local Windows builds; see `local-android-builds.md` | Complete local builds, inspect bundles, then test track and Play checks |
 | Console declarations | Create App requires policy certification and export declaration; neither accepted | Complete truthful declarations and obtain action-time confirmation for binding terms when ready |
 
 ## Decisions needed from owner
