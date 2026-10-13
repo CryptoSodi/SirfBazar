@@ -297,3 +297,17 @@ rider navigation tests, existing mobile tests and required source CI gates pass.
 See [Firebase setup and device evidence](firebase-push-setup.md) for exact source
 commits, artifact hashes, demo orders, screenshots and untested lifecycle cases.
 No full-access certification, Play review submission or rollout was made.
+
+## Maps and Support Follow-up - 14 October 2026
+
+Customer build 10 saved unchanged profile/address fields and created an isolated
+support ticket visible in its native conversation. Its map failed authorization.
+Customer build 11 replaces the embedded Maps key with an environment-configured,
+Android-package/certificate-restricted key and renders real map tiles on the same
+phone. Existing session and demo catalogue were preserved by the update. Map
+confirmation returned to the editor; saving was rejected with the existing
+active-order address protection, not reported as a successful write.
+
+See [signing and Maps follow-up](play-signing-follow-up-2026-10-14.md) for signer
+registrations, artifact hashes, test evidence and remaining gates. These checks
+do not complete native rating, uploads, revision or full-access certification.

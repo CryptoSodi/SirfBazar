@@ -19,6 +19,28 @@ completed policy or a claim that every possible SDK data flow was verified.
 
 ## Declaration rules for this release
 
+### SDK follow-up - 14 October 2026
+
+The new push/Maps candidates require SDK collection in addition to first-party
+API storage. Firebase Analytics being disabled does not mean no SDK metadata is
+collected. The [Firebase Android disclosure guide](https://firebase.google.com/docs/android/play-data-disclosure)
+documents FCM app-version/user-agent metadata and its Installations dependency,
+which generates a per-installation identifier. It states listed data uses HTTPS;
+that does not establish encryption for every other app/provider path.
+
+The [Maps Android disclosure guide](https://developers.google.com/maps/documentation/android-sdk/play-data-disclosure)
+documents request/device metadata, SDK identifiers, IP addresses, SDK diagnostics
+and map interaction data as applicable. Include those flows when classifying the
+customer app. Verify the actual bundled versions/configuration and their handling
+before answering the collection, purpose, sharing and deletion questions.
+
+Customer Data safety has only a partial saved Console draft: collection Yes,
+phone/other authentication plus OAuth, and the account-deletion URL. Per-type
+handling and security answers remain incomplete. Merchant/rider submissions were
+not completed. No independent security audit or completed erasure test is claimed.
+
+### Release rules
+
 - Assess each app independently. Website analytics are not automatically evidence
   that the native apps collect the same analytics.
 - API storage and third-party processing matter, not only device permissions.

@@ -32,8 +32,13 @@ Samsung SM-A525F / Android 14, customer build 10, isolated review account:
 
 - Profile editor loaded the existing demo name and `review@example.invalid`.
   Saving unchanged details returned to Account without a visible error.
-- Saved-address list and editor loaded the isolated Lahore fixture. No real
-  phone location was requested and no address was deleted.
+- Saved-address list and editor loaded the isolated Lahore fixture. Saving
+  unchanged fields returned to the list on build 10. No real phone location was
+  requested and no address was deleted.
+- The customer submitted one clearly marked demo support request. The native
+  app opened its persisted conversation with status OPEN and the submitted
+  text. No real delivery or support assistance was requested. Evidence:
+  `output/review-customer-support-created.png`.
 - Confirm on map produced a blank Google map: failed reviewer journey.
 - Android diagnostics at 02:45 on 14 October reported an API-token error with
   `StatusCode=INVALID_ARGUMENT` and Maps SDK `Authorization failure`.
@@ -44,9 +49,10 @@ Local proof: ignored `output/review-customer-profile-save-check.png` and
 
 ## Maps repair
 
-The native Maps key in `apps/customer-app/app.json` differs from the available
-Maps Platform API Key in project `sirfbazar`. `app.config.js` has no Maps key
-environment override. The inspected cloud key allows 33 APIs, including Maps SDK
+Before the repair, the native Maps key in `apps/customer-app/app.json` differed
+from the available Maps Platform API Key in project `sirfbazar`, and
+`app.config.js` had no Maps key environment override. The inspected shared cloud
+key allows 33 APIs, including Maps SDK
 for Android, and has no application restriction. Its value is not recorded here;
 the shared key was not changed or reused. The embedded key's owner and original
 reason for rejection remain unknown.
@@ -66,7 +72,27 @@ The hardcoded key was removed; `app.config.js` reads
 production Android build without it. Local release tooling accepts
 `-AndroidMapsKeyFile` and redacts the value from command output. EAS environment
 configuration was not changed. The isolated remediation package does not receive
-the production key. Rebuild and device verification remain in progress.
+the production key.
+
+Customer build 11 from `e9da68ddd31da03703f1a36c3d083517ec30e1da` compiled
+successfully and passed bundle/package/version/target-SDK validation, the expected
+release certificate, 38 native-library 16-KB alignment checks and APK ZIP checks.
+It installed as a data-preserving update on the Samsung SM-A525F / Android 14.
+The existing review session and isolated catalogue remained available.
+
+- AAB SHA-256: `31A8132BDEF2D74894F9A7AB4CD67BD49946107C0EF63ADF98DAABD8EDDA7F1D`.
+- APK SHA-256: `2FAA6A0BE1E7893C459B5BF5F09B76784A2B64E8842CA4F0654B5A6999E7C0D2`.
+- Files: ignored `output/aab11/sirfbazar-customer-v1.0.0-build11.{aab,apk}`;
+  adjacent verification JSON files record automated artifact checks.
+- The map loaded real tiles around the saved Lahore demo coordinates. Filtered
+  logs for the new process contained no Maps authorization/token errors.
+  Evidence: `output/review-customer-build11-map-loaded.png`.
+- Confirm pin returned to the editor and preserved the written address. A
+  subsequent save was rejected because the address belongs to an active order;
+  the explicit error said the address was retained. This is not a successful
+  post-confirmation save test. No replacement address or live delivery was made.
+- Local-release rendering is verified, not Play-delivered Maps/Google login or
+  every map interaction, permission state and network-failure path.
 
 ## Play declarations
 
@@ -84,16 +110,21 @@ Proof: ignored `output/play-customer-data-safety-partial-draft.png`.
 
 ## Remaining gates
 
-1. Finish approved Maps repair and device verification.
-2. Complete native reviewer support, inventory/upload and revision coverage;
+1. Verify Maps and Google login on a Play-delivered build; local-release Maps
+   rendering passed and customer build 11 is saved in the internal draft.
+2. Complete remaining native reviewer rating, inventory/upload and revision coverage;
    retain qualifications in `reviewer-access.md`.
 3. Complete evidence-backed Data safety for each app and verify manual deletion
    fulfillment separately from the existence of the request link.
 4. Save accurate reviewer instructions, target audience and genuine screenshots.
 5. Verify Play-installed Google login, Maps and signing coverage before release.
 
-All three build-10 releases remain drafts. Customer build 10 cannot be certified
-while Maps authorization fails. No new automated tests were run for the
+Customer build 11 is the sole bundle in its saved internal-testing draft, named
+`1.0.0 (11) - Maps and push review candidate`; Console confirmed Changes saved.
+Build 10 was removed only from this draft and remains in the artifact library.
+Merchant/rider build 10 drafts were not replaced. Proof:
+`output/play-customer-build11-saved.png`. No rollout or review submission occurred.
+No new automated tests were run for the
 initial console-only changes. After the Maps configuration repair, all 28 focused
 tests passed (`test-customer-maps-config.cjs`, `test-google-native.cjs`,
 `test-firebase-native.cjs`). The new Maps tests are included in CI. The device
