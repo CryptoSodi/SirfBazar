@@ -1,17 +1,18 @@
 import { AppIcon as UiIcon } from '../../components/AppIcon';
 import type { Metadata } from 'next';
 import { ProsePage } from '@/components/ProsePage';
+import { LegalLinks } from '@/components/LegalLinks';
+import { SUPPORT_EMAIL } from '@/lib/legal';
 
 export const metadata: Metadata = { title: 'Contact' };
 
 export default function Page() {
   return (
     <ProsePage title="Contact us">
+      <LegalLinks />
       <p>We are here to help customers, merchants, and riders.</p>
       <ul>
-        <li><UiIcon name="mail" size={18} /> Email: <a className="text-emerald-700 underline" href="mailto:support@sirfbazar.pk">support@sirfbazar.pk</a></li>
-        <li><UiIcon name="smartphone" size={18} /> WhatsApp: +92 300 0000000</li>
-        <li><UiIcon name="clock" size={18} /> Support hours: 9:00–23:00, 7 days a week</li>
+        <li><UiIcon name="mail" size={18} /> Email: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></li>
       </ul>
       <p>For order issues, the fastest route is the “Report an issue” button on your order screen — it creates a support ticket linked to your order.</p>
     </ProsePage>

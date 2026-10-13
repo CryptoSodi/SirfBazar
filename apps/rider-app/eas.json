@@ -25,6 +25,12 @@
       "extends": "preview",
       "android": { "credentialsSource": "local" }
     },
+    "play-store": {
+      "extends": "preview",
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle", "credentialsSource": "local" }
+    },
     "production": {
       "autoIncrement": true,
       "env": {

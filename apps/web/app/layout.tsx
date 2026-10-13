@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 
 const footerLinks = [
   ['Explore shops', '/search?type=shops'], ['Help centre', '/faqs'],
-  ['Your account', '/profile'], ['Privacy & terms', '/privacy-policy'],
+  ['Your account', '/profile'], ['Privacy policy', '/privacy-policy'],
+  ['Terms', '/terms'], ['Account deletion', '/account-deletion'], ['Contact', '/contact'],
 ] as const;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -3,6 +3,8 @@
 param(
     [ValidateSet('all', 'customer', 'merchant', 'rider')]
     [string]$App = 'all',
+    [ValidateSet('release-keystore', 'play-store')]
+    [string]$Profile = 'release-keystore',
     [string]$KeyDirectory = 'D:\keys\SirfBazar',
     [string]$PasswordFile = '',
     [switch]$Submit
@@ -65,9 +67,13 @@ try {
         $directory = Join-Path $root "apps\$name-app"
         $credentialsPath = Join-Path $directory 'credentials.json'
         if (Test-Path -LiteralPath $credentialsPath) { throw "Refusing to overwrite $credentialsPath" }
-        $profile = Get-Content -LiteralPath (Join-Path $directory 'eas.json') -Raw | ConvertFrom-Json
-        if ($profile.build.'release-keystore'.android.credentialsSource -ne 'local' -or $profile.build.'release-keystore'.extends -ne 'preview') {
+        $profileDocument = Get-Content -LiteralPath (Join-Path $directory 'eas.json') -Raw | ConvertFrom-Json
+        $selectedProfile = $profileDocument.build.$Profile
+        if ($selectedProfile.android.credentialsSource -ne 'local' -or $selectedProfile.extends -ne 'preview') {
             throw "Unexpected signing profile for $name"
+        }
+        if ($Profile -eq 'play-store' -and ($selectedProfile.android.buildType -ne 'app-bundle' -or $selectedProfile.distribution -ne 'store' -or $selectedProfile.autoIncrement -ne $true)) {
+            throw "Unexpected Google Play bundle configuration for $name"
         }
         $alias = "sirfbazar-$name-release"
         $keystore = (Resolve-Path -LiteralPath (Join-Path $KeyDirectory "$alias.jks")).Path
@@ -88,7 +94,8 @@ try {
     if (-not (Test-Path -LiteralPath $eas)) { throw 'Existing EAS CLI installation not found.' }
     $identity = Invoke-Captured $node @($eas, 'whoami') $root
     if ($identity.Out -notmatch '(?m)^tassaduq\r?$') { throw 'EAS account is not the approved tassaduq account.' }
-    $output = Join-Path $root ('output\apk-local-release-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $artifactLabel = if ($Profile -eq 'play-store') { 'aab-play-store' } else { 'apk-local-release' }
+    $output = Join-Path $root ('output\' + $artifactLabel + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
     [void][IO.Directory]::CreateDirectory($output)
     foreach ($name in $apps) {
         $directory = Join-Path $root "apps\$name-app"
@@ -113,14 +120,15 @@ try {
                 keystorePassword = $secrets[$name]; keyAlias = $alias; keyPassword = $secrets[$name]
             } } }
             [IO.File]::WriteAllText($credentialsPath, ($credentials | ConvertTo-Json -Depth 5))
-            Write-Host "Submitting $name to EAS using release-keystore (private testing APK, no store submission)..."
-            $result = Invoke-Captured $node @($eas, 'build', '--platform', 'android', '--profile', 'release-keystore',
+            $buildMessage = if ($Profile -eq 'play-store') { 'SirfBazar Google Play AAB candidate; existing local release key; store submission is separate' } else { 'Local SirfBazar release key; private testing only; Google device verification pending' }
+            Write-Host "Submitting $name to EAS using $Profile (no store submission)..."
+            $result = Invoke-Captured $node @($eas, 'build', '--platform', 'android', '--profile', $Profile,
                 '--non-interactive', '--freeze-credentials', '--no-wait', '--json', '--message',
-                'Local SirfBazar release key; private testing only; Google device verification pending') $directory
+                $buildMessage) $directory
             Write-Host $result.Err
             $builds = @($result.Out | ConvertFrom-Json)
             foreach ($build in $builds) {
-                $record = [ordered]@{ app = $name; id = $build.id; status = $build.status; profile = 'release-keystore'; expectedSha1 = $expected[$name] }
+                $record = [ordered]@{ app = $name; id = $build.id; status = $build.status; profile = $Profile; expectedSha1 = $expected[$name] }
                 $record | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output "$name-build.json") -Encoding utf8
                 Write-Host "$name build queued: $($build.id) [$($build.status)]"
             }
