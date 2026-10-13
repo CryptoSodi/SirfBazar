@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { resolveCategoryBranch } from '../common/utils/category-tree';
+import { REVIEW_COUPON_ID, REVIEW_CUSTOMER_ID, reviewAccount } from '../auth/review-access';
 
 export interface CouponQuote {
   couponId: string;
@@ -33,6 +34,7 @@ export class CouponsService {
       where: { code: ctx.code.trim().toUpperCase() },
     });
     if (!coupon || !coupon.isActive) throw new BadRequestException('Invalid coupon code');
+    if ((ctx.customerId === REVIEW_CUSTOMER_ID) !== (coupon.id === REVIEW_COUPON_ID)) throw new BadRequestException('Coupon is not valid for this account.');
 
     const now = new Date();
     if (coupon.startDate > now) throw new BadRequestException('Coupon is not active yet');
@@ -109,10 +111,10 @@ export class CouponsService {
   }
 
   /** Public list of currently active coupons (customer "offers" screens). */
-  listActive() {
+  listActive(userId?: string) {
     const now = new Date();
     return this.prisma.coupon.findMany({
-      where: { isActive: true, startDate: { lte: now }, endDate: { gte: now } },
+      where: { id: reviewAccount(userId) ? REVIEW_COUPON_ID : { not: REVIEW_COUPON_ID }, isActive: true, startDate: { lte: now }, endDate: { gte: now } },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,

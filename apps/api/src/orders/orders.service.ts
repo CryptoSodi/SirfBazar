@@ -34,7 +34,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { serializable } from '../common/transaction';
 import { lockOwners } from '../common/owner-lock';
 import { isMerchantOpenAt } from '../common/merchant-hours';
-import { requireReviewCartBoundary, REVIEW_CUSTOMER_ID } from '../auth/review-access';
+import { requireReviewCartBoundary } from '../auth/review-access';
 
 export interface PlaceOrderInput {
   requestId: string;
@@ -120,7 +120,6 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     if (input.paymentMethod !== PaymentMethod.COD) throw new BadRequestException('Only cash on delivery is available');
     const cart = await db.cart.findFirst({ where: { id: input.cartId, customerId, status: 'ACTIVE' }, include: { items: true } });
     if (!cart || cart.items.length === 0) throw new ConflictException('This checkout basket is no longer active. Check your orders before retrying.');
-    if (customerId === REVIEW_CUSTOMER_ID && (input.couponCode || cart.couponCode)) throw new BadRequestException('Coupons are unavailable for review orders.');
     const address = await db.customerAddress.findFirst({ where: { id: input.deliveryAddressId, customerId } });
     if (!address) throw new BadRequestException('Delivery address not found');
     if (address.latitude == null || address.longitude == null || !Number.isFinite(address.latitude) || !Number.isFinite(address.longitude) || Math.abs(address.latitude) > 90 || Math.abs(address.longitude) > 180) {

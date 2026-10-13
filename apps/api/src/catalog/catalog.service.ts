@@ -6,7 +6,7 @@ import { boundingBox, estimateDeliveryMinutes, haversineKm } from '../common/uti
 import { paged, parsePage } from '../common/utils/pagination';
 import { resolveCategoryBranch } from '../common/utils/category-tree';
 import { isMerchantOpenAt } from '../common/merchant-hours';
-import { reviewMerchantFilter, reviewAccount, REVIEW_SHOP_ID } from '../auth/review-access';
+import { reviewMerchantFilter, reviewAccount, reviewProductFilter, REVIEW_SHOP_ID } from '../auth/review-access';
 import {
   LocationQuery,
   NearbyMerchantsQuery,
@@ -60,9 +60,9 @@ export class CatalogService {
    * category pages; ordering still flows through merchant shops shown on the
    * product detail page (offers).
    */
-  async catalogProducts(query: SearchProductsQuery) {
+  async catalogProducts(query: SearchProductsQuery, userId?: string) {
     const { page, pageSize, skip, take } = parsePage(query);
-    const where: Prisma.ProductWhereInput = { approvalStatus: ProductApprovalStatus.APPROVED };
+    const where: Prisma.ProductWhereInput = { approvalStatus: ProductApprovalStatus.APPROVED, ...reviewProductFilter(reviewAccount(userId) ? REVIEW_SHOP_ID : undefined) };
     if (query.categoryId) where.categoryId = { in: await resolveCategoryBranch(this.prisma, query.categoryId) };
     if (query.q?.trim()) {
       const q = query.q.trim();
@@ -496,7 +496,7 @@ export class CatalogService {
       where: { id: productId },
       include: { category: { select: { id: true, name: true, slug: true } } },
     });
-    if (!product || product.approvalStatus !== ProductApprovalStatus.APPROVED) {
+    if (!product || product.approvalStatus !== ProductApprovalStatus.APPROVED || (product.createdByMerchantId === REVIEW_SHOP_ID && !reviewAccount(userId))) {
       throw new NotFoundException('Product not found');
     }
 

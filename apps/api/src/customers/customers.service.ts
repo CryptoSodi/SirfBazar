@@ -5,6 +5,7 @@ import { AccessService } from '../common/access.service';
 import { ACTIVE_ORDER_STATUSES } from '../common/constants';
 import { lockOwners } from '../common/owner-lock';
 import { serializable } from '../common/transaction';
+import { reviewAccount } from '../auth/review-access';
 
 @Injectable()
 export class CustomersService {
@@ -38,6 +39,9 @@ export class CustomersService {
     userId: string,
     input: { fullName?: string; email?: string; profileImageUrl?: string },
   ) {
+    if (reviewAccount(userId) && input.email && !/^[^@\s]+@example\.invalid$/i.test(input.email)) {
+      throw new BadRequestException('Use an @example.invalid email for the shared demo profile, not a personal email.');
+    }
     if (input.email) {
       const taken = await this.prisma.user.findFirst({
         where: { email: input.email, id: { not: userId } },

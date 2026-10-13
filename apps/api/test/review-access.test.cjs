@@ -9,10 +9,9 @@ const { RealtimeGateway } = require('../src/realtime/realtime.gateway.ts');
 
 function enabled() {
   process.env.PLAY_REVIEW_ENABLED = 'true';
-  process.env.PLAY_REVIEW_EXPIRES_AT = new Date(Date.now() + 3600000).toISOString();
 }
 
-test('review configuration fails closed; role and expiry apply only to reserved identities', () => {
+test('review access is manually revoked; role and disabled config fail closed', () => {
   delete process.env.PLAY_REVIEW_ENABLED;
   assert.throws(() => r.requireReviewSession(r.REVIEW_ACCOUNTS[0].userId, 'CUSTOMER'), /disabled/);
   assert.doesNotThrow(() => r.requireReviewSession('ordinary-user', 'CUSTOMER'));
@@ -22,8 +21,11 @@ test('review configuration fails closed; role and expiry apply only to reserved 
     assert.throws(() => r.requireReviewSession(account.userId, 'SUPER_ADMIN'), /invalid/);
   }
   process.env.PLAY_REVIEW_EXPIRES_AT = 'not-a-date';
-  assert.equal(r.reviewAccessActive(), false);
+  assert.equal(r.reviewAccessActive(), true);
   process.env.PLAY_REVIEW_EXPIRES_AT = new Date(Date.now() - 1).toISOString();
+  assert.equal(r.reviewAccessActive(), true);
+  assert.throws(() => r.requireReviewSession(`${r.REVIEW_MEMBER_PREFIX}rider`, 'RIDER'), /not login/);
+  process.env.PLAY_REVIEW_ENABLED = 'false';
   assert.equal(r.reviewAccessActive(), false);
 });
 
@@ -36,12 +38,12 @@ test('cart boundary isolates normal customers, guests and reviewers in both dire
   assert.doesNotThrow(() => r.requireReviewCartBoundary(r.REVIEW_CUSTOMER_ID, r.REVIEW_SHOP_ID));
 });
 
-test('new routes, identity linking, staff, coupons and financial actions fail closed', () => {
-  for (const [controller, method] of [['AuthController','googleLink'], ['MerchantController','createRider'], ['MerchantController','createStaff'], ['CartController','applyCoupon'], ['PaymentsController','confirm'], ['UnknownController','newEndpoint']]) {
+test('unknown routes, personal identity linking and payment confirmation fail closed', () => {
+  for (const [controller, method] of [['AuthController','googleLink'], ['PaymentsController','confirm'], ['UnknownController','newEndpoint']]) {
     assert.throws(() => r.requireReviewRoute(r.REVIEW_ACCOUNTS[0].userId, controller, method), /not available/);
     assert.doesNotThrow(() => r.requireReviewRoute('ordinary-user', controller, method));
   }
-  for (const [controller, method] of [['OrdersController','place'], ['MerchantOrdersController','assignRider'], ['RiderController','delivered']]) {
+  for (const [controller, method] of [['OrdersController','place'], ['MerchantOrdersController','assignRider'], ['RiderController','delivered'], ['MerchantController','createRider'], ['MerchantController','createStaff'], ['CartController','applyCoupon'], ['CustomersController','updateProfile'], ['OrdersController','rate'], ['SupportController','create'], ['PosController','createSale'], ['NotificationsController','saveToken']]) {
     assert.doesNotThrow(() => r.requireReviewRoute(r.REVIEW_ACCOUNTS[0].userId, controller, method));
   }
 });
@@ -72,7 +74,7 @@ test('reserved registration is rejected before touching an existing user', async
   await assert.rejects(auth.resetMerchantPassword(r.REVIEW_ACCOUNTS[0].phone, '123456', 'password'), /Reserved/);
 });
 
-test('disabled review JWT is rejected and expiry disconnects realtime subscriptions', async () => {
+test('disabled review JWT is rejected and manual revocation disconnects realtime subscriptions', async () => {
   process.env.PLAY_REVIEW_ENABLED = 'false';
   const payload = { sub: r.REVIEW_ACCOUNTS[0].userId, role: 'CUSTOMER', sid: 'session' };
   const jwt = { verifyAsync: async () => payload };
@@ -83,6 +85,17 @@ test('disabled review JWT is rejected and expiry disconnects realtime subscripti
   let disconnected = false;
   assert.equal(await gateway.current({ data: { userId: payload.sub, role: 'CUSTOMER' }, disconnect: () => { disconnected = true; } }), false);
   assert.equal(disconnected, true);
+});
+
+test('review POS access is not a trial and demo products cannot enter ordinary shops', () => {
+  enabled();
+  assert.equal(r.reviewPosEntitlement(r.REVIEW_SHOP_ID).salesEnabled, true);
+  assert.equal(r.reviewPosEntitlement(r.REVIEW_SHOP_ID).endsAt, null);
+  assert.equal(r.reviewPosEntitlement('ordinary-shop'), null);
+  assert.throws(() => r.requireReviewProductBoundary(r.REVIEW_SHOP_ID, 'ordinary-shop'), /isolated/);
+  assert.doesNotThrow(() => r.requireReviewProductBoundary(null, r.REVIEW_SHOP_ID));
+  process.env.PLAY_REVIEW_ENABLED = 'false';
+  assert.equal(r.reviewPosEntitlement(r.REVIEW_SHOP_ID).salesEnabled, false);
 });
 
 test('changed review memberships fail closed', () => {

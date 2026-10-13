@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { REVIEW_SHOP_ID } from '../auth/review-access';
+import { REVIEW_SHOP_ID, reviewAccount } from '../auth/review-access';
 import { AccessService } from '../common/access.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -379,12 +379,12 @@ export class RiderService {
         riderId: rider.id,
         createdByUserId: userId,
         issueCategory: 'RIDER_ISSUE',
-        title: `Rider issue on order ${order.orderNumber}`,
+        title: `${reviewAccount(userId) ? '[Store review] ' : ''}Rider issue on order ${order.orderNumber}`,
         description,
         priority: 'HIGH',
       },
     });
-    this.realtime.emitToAdmins('support:new', { ticketId: ticket.id, orderId: order.id });
+    if (!reviewAccount(userId)) this.realtime.emitToAdmins('support:new', { ticketId: ticket.id, orderId: order.id });
     const merchantUserIds = await this.access.merchantUserIds(rider.merchantId);
     await this.notifications.notifyMany(merchantUserIds, {
       audience: 'MERCHANT', scopeId: rider.merchantId,

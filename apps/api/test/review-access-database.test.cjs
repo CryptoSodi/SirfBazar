@@ -20,6 +20,11 @@ const { MerchantOrdersService } = require('../src/orders/merchant-orders.service
 const { RiderService } = require('../src/rider/rider.service.ts');
 const { SettlementsService } = require('../src/settlements/settlements.service.ts');
 const { RealtimeGateway } = require('../src/realtime/realtime.gateway.ts');
+const { CustomersService } = require('../src/customers/customers.service.ts');
+const { MerchantPeopleService } = require('../src/merchant/merchant-people.service.ts');
+const { MerchantProductsService } = require('../src/merchant/merchant-products.service.ts');
+const { SupportService } = require('../src/support/support.service.ts');
+const { PosService } = require('../src/pos/pos.service.ts');
 const { provisionReviewAccounts, disableReviewAccounts } = require('../src/auth/review-accounts-admin.ts');
 const r = require('../src/auth/review-access.ts');
 const db = new PrismaService();
@@ -29,7 +34,7 @@ test('PostgreSQL review lifecycle: real auth, isolated inventory/order/delivery,
   process.env.NODE_ENV = 'production';
   process.env.OTP_PROVIDER = 'whatsapp';
   process.env.PLAY_REVIEW_ENABLED = 'true';
-  process.env.PLAY_REVIEW_EXPIRES_AT = new Date(Date.now() + 86400000).toISOString();
+  process.env.PLAY_REVIEW_EXPIRES_AT = '2020-01-01'; // Legacy expiry no longer revokes reusable review credentials.
   process.env.JWT_SECRET = 'disposable-review-only';
   const codes = ['681293', '725194', '839215'];
   for (const [index, account] of r.REVIEW_ACCOUNTS.entries()) process.env[`PLAY_REVIEW_${account.context.toUpperCase()}_CODE_HASH`] = await bcrypt.hash(codes[index], 12);
@@ -65,7 +70,7 @@ test('PostgreSQL review lifecycle: real auth, isolated inventory/order/delivery,
   }
   assert.equal(await guarded(tokens[0].accessToken), true);
   await assert.rejects(guarded(tokens[0].accessToken, 'AuthController', 'googleLink'), /not available/);
-  await assert.rejects(guarded(tokens[1].accessToken, 'MerchantController', 'createStaff'), /not available/);
+  assert.equal(await guarded(tokens[1].accessToken, 'MerchantController', 'createStaff'), true);
   const catalog = new CatalogService(db);
   assert.deepEqual((await catalog.nearbyMerchants({}, customer.userId)).items.map(m => m.id), [r.REVIEW_SHOP_ID]);
   assert.ok(!(await catalog.nearbyMerchants({})).items.some(m => m.id === r.REVIEW_SHOP_ID));
@@ -88,7 +93,12 @@ test('PostgreSQL review lifecycle: real auth, isolated inventory/order/delivery,
   const status = new OrderStatusService(db, realtime);
   const orders = new OrdersService(db, baskets, coupons, new RefundsService(db, notifications), notifications, realtime, access, pricing, status);
   const checkout = { requestId: randomUUID(), cartId: cart.id, deliveryAddressId: 'play-review-v1-address', paymentMethod: 'COD' };
-  await assert.rejects(orders.quoteOrder(customer.userId, { ...checkout, couponCode: 'REAL-PROMOTION' }), /Coupons/);
+  await assert.rejects(orders.quoteOrder(customer.userId, { ...checkout, couponCode: 'REAL-PROMOTION' }), /coupon/);
+  const couponQuote = await orders.quoteOrder(customer.userId, { ...checkout, couponCode: 'PLAYREVIEW' });
+  assert.ok(couponQuote.approvedQuote);
+  await assert.rejects(coupons.validate({ code: 'PLAYREVIEW', customerId: normalUser.customer.id, subtotalPaisa: 10000, merchantIds: [r.REVIEW_SHOP_ID] }), /not valid/);
+  assert.ok(!(await coupons.listActive()).some(c => c.id === r.REVIEW_COUPON_ID));
+  assert.equal((await coupons.listActive(customer.userId))[0].id, r.REVIEW_COUPON_ID);
   const quote = await orders.quoteOrder(customer.userId, checkout);
   const order = await orders.placeOrder(customer.userId, { ...checkout, approvedQuote: quote.approvedQuote });
   const dispatch = new MerchantOrdersService(db, access, notifications, realtime, orders, status);
@@ -102,6 +112,58 @@ test('PostgreSQL review lifecycle: real auth, isolated inventory/order/delivery,
   await delivery.delivered(rider.userId, order.id, { otp: deliveryOrder.deliveryOtp, note: 'Isolated review fixture; no real cash or delivery.' });
   assert.equal((await db.order.findUniqueOrThrow({ where: { id: order.id } })).status, 'DELIVERED');
   assert.equal((await db.merchantProduct.findUniqueOrThrow({ where: { id: normalListing.id } })).stockQuantity, 50);
+  await orders.rate(customer.userId, order.id, { merchantRating: 5, riderRating: 5, reviewText: 'Isolated review fixture' });
+  assert.equal((await db.merchant.findUniqueOrThrow({ where: { id: shop.id } })).ratingCount, 0);
+  const customers = new CustomersService(db, access);
+  await customers.updateProfile(customer.userId, { fullName: 'Updated reviewer', email: 'review@example.invalid' });
+  assert.equal((await customers.profile(customer.userId)).email, 'review@example.invalid');
+  await assert.rejects(customers.updateProfile(customer.userId, { email: 'personal@gmail.com' }), /example.invalid/);
+  await assert.rejects(auth.linkGoogle(customer.userId, 'not-a-token'), /personal Google/);
+  let adminAlerts = 0;
+  const quietRealtime = { ...realtime, emitToAdmins() { adminAlerts++; } };
+  const support = new SupportService(db, access, notifications, quietRealtime);
+  for (const account of r.REVIEW_ACCOUNTS) {
+    const ticket = await support.create(account.userId, account.role, { issueCategory: 'APP_OR_ACCOUNT', title: 'Review help', description: 'Fixture only' });
+    assert.match(ticket.title, /Store review/);
+    await support.addMessage(account.userId, account.role, ticket.id, 'Follow-up fixture');
+    assert.equal((await support.getForUser(account.userId, account.role, ticket.id)).messages.length, 1);
+    await assert.rejects(support.getForUser(normalUser.id, 'CUSTOMER', ticket.id), /Not your/);
+  }
+  assert.equal(adminAlerts, 0);
+  const people = new MerchantPeopleService(db, access, { log: async () => {} }, notifications);
+  await db.user.update({ where: { id: normalUser.id }, data: { phoneNumber: '+923008889990' } });
+  const team = await people.createRider(merchant.userId, { fullName: 'Demo team rider', phoneNumber: '+923008889990' });
+  assert.notEqual(team.userId, normalUser.id);
+  assert.ok(team.userId.startsWith(r.REVIEW_MEMBER_PREFIX));
+  await assert.rejects(auth.issueTokens(team.userId, 'RIDER'), /not login/);
+  const staff = await people.createStaff(merchant.userId, { fullName: 'Demo staff', phoneNumber: '+923008889990', roleName: 'Cashier', permissions: ['POS'] });
+  assert.ok(staff.userId.startsWith(r.REVIEW_MEMBER_PREFIX));
+  assert.equal((await db.user.findUniqueOrThrow({ where: { id: normalUser.id } })).role, 'CUSTOMER');
+  await people.updateRider(merchant.userId, team.id, { fullName: 'Updated demo rider' });
+  await people.setRiderActive(merchant.userId, team.id, false);
+  await people.setRiderActive(merchant.userId, team.id, true);
+  await assert.rejects(people.updateRider(owner.id, team.id, { fullName: 'Foreign edit' }), /not found/);
+  const products = new MerchantProductsService(db, access);
+  const created = await products.add(merchant.userId, { newProduct: { name: `Demo-only ${suffix}`, categoryId: category.id, unit: 'piece' }, pricePaisa: 1000, stockQuantity: 3 });
+  assert.equal(created.product.createdByMerchantId, r.REVIEW_SHOP_ID);
+  await assert.rejects(products.add(owner.id, { productId: created.productId, pricePaisa: 1000, stockQuantity: 3 }), /isolated/);
+  // Even later approval must not publish review-created catalogue records.
+  await db.product.update({ where: { id: created.productId }, data: { approvalStatus: 'APPROVED' } });
+  assert.equal((await catalog.catalogProducts({ q: suffix })).items.length, 0);
+  await assert.rejects(catalog.productDetail(created.productId, {}), /not found/);
+  const importBody = { requestId: randomUUID(), mode: 'ADD_MISSING', items: [{ rowId: '1', name: `Demo import ${suffix}`, categoryId: category.id, unit: 'piece', pricePaisa: 2000, stockQuantity: 4 }] };
+  const preview = await products.bulkPreview(merchant.userId, importBody);
+  const imported = await products.bulkUpload(merchant.userId, { ...importBody, previewToken: preview.previewToken });
+  assert.equal(imported.created, 1);
+  assert.deepEqual(await products.bulkUpload(merchant.userId, { ...importBody, previewToken: preview.previewToken }), imported);
+  const pos = new PosService(db, access);
+  assert.equal((await pos.capabilities(merchant.userId)).trial.status, 'REVIEW');
+  const bill = { requestId: randomUUID(), items: [{ merchantProductId: demoListing.id, quantity: 1 }], note: 'Demo only - no cash collected' };
+  const sale = await pos.createSale(merchant.userId, bill);
+  assert.equal(sale.customerId, r.REVIEW_CUSTOMER_ID);
+  assert.equal((await pos.createSale(merchant.userId, bill)).id, sale.id);
+  assert.equal((await db.merchantProduct.findUniqueOrThrow({ where: { id: normalListing.id } })).stockQuantity, 50);
+  await assert.rejects(pos.createSale(merchant.userId, { items: [{ merchantProductId: normalListing.id, quantity: 1 }] }), /no longer in your store/);
   const settlement = new SettlementsService(db, notifications);
   await assert.rejects(settlement.generate(owner.id, { merchantId: r.REVIEW_SHOP_ID, startDate: '2020-01-01', endDate: '2099-01-01' }), /cannot be settled/);
   const stock = (await db.merchantProduct.findUniqueOrThrow({ where: { id: demoListing.id } })).stockQuantity;

@@ -5,6 +5,7 @@ import { AccessService } from '../common/access.service';
 import { OrderStatus, PaymentStatus, ProductApprovalStatus, StaffPermission, UserRole } from '../common/constants';
 import { generateOrderNumber } from '../common/utils/ids';
 import { merchantPosTrialView } from '../common/merchant-access-policy';
+import { REVIEW_SHOP_ID, REVIEW_CUSTOMER_ID, reviewPosEntitlement } from '../auth/review-access';
 
 interface SaleItemInput {
   merchantProductId: string;
@@ -53,6 +54,8 @@ export class PosService {
   }
 
   private async posTrial(merchantId: string) {
+    const review = reviewPosEntitlement(merchantId);
+    if (review) return review;
     const merchant = await this.prisma.merchant.findUnique({ where: { id: merchantId }, select: { userId: true } });
     if (!merchant) throw new NotFoundException('Merchant not found');
     const trial = await this.prisma.merchantPosTrial.findUnique({ where: { userId: merchant.userId } });
@@ -166,7 +169,7 @@ export class PosService {
     if (!Number.isSafeInteger(subtotalPaisa) || subtotalPaisa > 2147483647 || !Number.isSafeInteger(tendered) || tendered > 2147483647) throw new BadRequestException('Bill or cash amount exceeds the supported limit.');
     if (tendered < subtotalPaisa) throw new BadRequestException('Cash tendered is less than the total');
 
-    const customerId = await this.walkInCustomerId();
+    const customerId = ctx.merchantId === REVIEW_SHOP_ID ? REVIEW_CUSTOMER_ID : await this.walkInCustomerId();
 
     const meta = { version: 1, requestHash: fingerprint, cashierId: userId, counterName: dto.counterName ?? null, amountTenderedPaisa: tendered, changePaisa: tendered - subtotalPaisa };
     const order = await this.prisma.$transaction(async (tx) => {

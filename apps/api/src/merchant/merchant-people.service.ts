@@ -6,7 +6,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, StaffPermission, UserRole } from '../common/constants';
 import { CreateRiderDto, CreateStaffDto, UpdateRiderDto, UpdateStaffDto } from './merchant.dto';
 import { serializable } from '../common/transaction';
-import { reviewPhone, reviewAccount } from '../auth/review-access';
+import { reviewPhone, reviewAccount, REVIEW_MEMBER_PREFIX, REVIEW_SHOP_ID } from '../auth/review-access';
+import { createHash } from 'node:crypto';
+
+const demoMemberId = (kind: string, phone: string) => `${REVIEW_MEMBER_PREFIX}${kind}-${createHash('sha256').update(phone).digest('hex').slice(0, 24)}`;
 
 /** Merchant-managed riders and staff (spec 12.9 / 12.10). */
 @Injectable()
@@ -44,8 +47,9 @@ export class MerchantPeopleService {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.RIDERS);
 
+    const demoId = ctx.merchantId === REVIEW_SHOP_ID ? demoMemberId('rider', dto.phoneNumber) : undefined;
     const existingUser = await this.prisma.user.findUnique({
-      where: { phoneNumber: dto.phoneNumber },
+      where: demoId ? { id: demoId } : { phoneNumber: dto.phoneNumber },
       include: { rider: true },
     });
     if (existingUser?.rider) {
@@ -61,7 +65,8 @@ export class MerchantPeopleService {
         (
           await tx.user.create({
             data: {
-              phoneNumber: dto.phoneNumber,
+              ...(demoId ? { id: demoId, status: 'SUSPENDED' } : {}),
+              phoneNumber: demoId ? `REVIEW:${demoId}` : dto.phoneNumber,
               fullName: dto.fullName,
               role: UserRole.RIDER,
             },
@@ -206,8 +211,9 @@ export class MerchantPeopleService {
     const ctx = await this.access.merchantContext(userId);
     if (!ctx.isOwner) throw new BadRequestException('Only the shop owner can manage staff');
 
+    const demoId = ctx.merchantId === REVIEW_SHOP_ID ? demoMemberId('staff', dto.phoneNumber) : undefined;
     const existingUser = await this.prisma.user.findUnique({
-      where: { phoneNumber: dto.phoneNumber },
+      where: demoId ? { id: demoId } : { phoneNumber: dto.phoneNumber },
     });
     if (existingUser) {
       throw new BadRequestException('This phone number already belongs to another account');
@@ -216,7 +222,8 @@ export class MerchantPeopleService {
     const staff = await this.prisma.$transaction(async (tx) => {
       const staffUser = await tx.user.create({
         data: {
-          phoneNumber: dto.phoneNumber,
+          ...(demoId ? { id: demoId, status: 'SUSPENDED' } : {}),
+          phoneNumber: demoId ? `REVIEW:${demoId}` : dto.phoneNumber,
           fullName: dto.fullName,
           role: UserRole.MERCHANT_STAFF,
         },

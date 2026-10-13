@@ -12,19 +12,29 @@ discovery returns only that shop. Cart add/update/merge and quoted checkout enfo
 this boundary in both directions. Existing catalogue products are reused with
 separate demo inventory; normal merchant stock is not changed.
 
-Normal roles/ownership checks remain. A closed controller allowlist additionally
-denies identity changes, linking, onboarding, staff/rider creation, uploads,
-public ratings, support submission, coupons, POS and online payments. Review
-inventory updates affect only the demo shop. COD records demonstrate the flow;
+Normal roles/ownership checks remain. Review accounts can edit their profiles,
+manage addresses, inventory/imports/documents and demo team records, submit
+ratings/support, redeem the isolated `PLAYREVIEW` coupon, receive notifications,
+and use POS without a trial expiry. New team records use synthetic, suspended
+identities, never a real user's login account. New catalogue records are scoped
+to the demo merchant and cannot be listed by ordinary shops. Normal promotions
+cannot be used by reviewers, and normal customers cannot use the demo coupon.
+Use `review@example.invalid` when testing the shared customer's email field.
+
+COD/POS records demonstrate the real order state machine using isolated data;
 no actual cash or delivery is involved. Review orders cannot generate settlements
-or payouts. Administrators still see the explicitly named demo shop/orders;
-exclude these from manual business reports.
+or payouts. Online checkout is COD-only for normal customers too. Shared review
+identities cannot be attached to a personal Google account or reset through
+ordinary registration; reviewers use the supplied phone/code instead of Google.
+Administrators can see clearly identified demo records; exclude the demo shop
+from business reports. Demo support submissions do not page the real support team.
 
-Disclose these restrictions in Play App access instructions. This does not prove
-every restricted capability is reviewable: Google may request additional access.
-Never claim unrestricted access or conceal differences from ordinary accounts.
+The accounts are already onboarded, like existing approved merchants/riders.
+Never claim Google linking, fresh onboarding, native screens or push delivery
+have passed review testing based solely on backend tests. Complete the coverage
+record below before signing the Play full-access declaration.
 
-## Security and Expiry
+## Security and Revocation
 
 - Three distinct random six-digit codes, bcrypt cost 12. No codes in Git, logs,
   API responses or WhatsApp messages.
@@ -32,12 +42,14 @@ Never claim unrestricted access or conceal differences from ordinary accounts.
   hourly request cap and atomic per-challenge attempt counter still apply.
 - A persistent 20-attempt rolling 24-hour review limit covers successful and
   failed verification attempts across resends, serialized in PostgreSQL.
-- Both `PLAY_REVIEW_ENABLED=true` and future `PLAY_REVIEW_EXPIRES_AT` are required.
-  Missing, malformed or expired configuration fails closed.
-- Preparation defaults to 90 days. Renew before future submissions. Google needs
-  working access throughout review; do not expire/disable it during active review.
+- `PLAY_REVIEW_ENABLED=true` and valid bcrypt hashes are required. Missing or
+  malformed configuration fails closed. On 13 October the owner approved
+  reusable credentials with manual revocation instead of automatic expiry.
+  The obsolete `PLAY_REVIEW_EXPIRES_AT` variable is no longer used.
+- Review codes do not expire. Individual OTP challenges and JWT/refresh sessions
+  retain ordinary expiry/rotation; reviewers may sign in again with the same code.
 - HTTP authentication, refresh rotation and realtime emissions recheck access.
-  Refresh sessions cannot outlive the configured expiry.
+  Do not disable accounts during an active review or leave stale Play credentials.
 
 ## Activation
 
@@ -118,12 +130,27 @@ orders, delete review history or enable mock OTP.
 
 ## Verification and Deployment Evidence
 
-Local checks passed: API typecheck, eight review-control unit tests, 69 existing
-remediation unit tests and a disposable PostgreSQL lifecycle covering real auth,
+Local checks passed: API typecheck, nine review-control unit tests, 69 existing
+remediation unit tests, 49 Google/import/POS tests and a disposable PostgreSQL lifecycle covering real auth,
 replay/cooldown, normal OTP delivery, both-direction cart isolation, merge rollback,
 catalogue filtering, quoted checkout, merchant fulfillment, rider delivery,
 settlement rejection, provisioning retry, daily limits and session revocation.
+The expanded lifecycle also verifies customer profile updates, support ownership,
+ratings, demo coupon isolation, team creation without modifying real identities,
+product/import isolation and retry, and POS entitlement/stock/idempotency.
 CI includes both new test files. Native/Play-installed UI journeys are separate.
 
 Pending: protected PR/release, production activation, private credential storage,
 fixture-only live verification and saved Play App access instructions.
+
+| Coverage | Backend evidence | Remaining review evidence |
+| --- | --- | --- |
+| Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle | Live login and native login screens |
+| Customer catalogue/cart/checkout/delivery | Isolated stock, quote, fulfillment and delivery assertions | Native browse/checkout/order views |
+| Profile, addresses, ratings, support | Profile and support ownership, delivered-order rating; existing address regressions | Native edit/support/rating flows |
+| Merchant inventory and imports | Create/preview/apply/retry and foreign-shop rejection | Native inventory controls; import is web-only where absent from APK |
+| Rider/staff management | Synthetic suspended members; real user unchanged; tenant rejection | Merchant native rider controls |
+| Rider delivery and issue reporting | Existing order state machine and owned support ticket service | Native tracking, issue reporting and delivery confirmation |
+| POS | Non-expiring demo entitlement, real sale transaction, replay and stock isolation | POS browser flow; not a separate Play app |
+| Documents and device notifications | Existing ownership/registration implementations, now allowed | Review-owned upload and actual device push verification |
+| Identity/onboarding | Pre-onboarded accounts, personal Google linking intentionally unavailable on shared identities | Disclose review login method; do not certify untested identity flows |

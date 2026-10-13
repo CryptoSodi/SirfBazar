@@ -7,6 +7,7 @@ import { AddMerchantProductDto, BulkItemDto, BulkUploadDto, UpdateMerchantProduc
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { serializable } from '../common/transaction';
 import { resolveCategoryBranch } from '../common/utils/category-tree';
+import { reviewProductFilter, requireReviewProductBoundary } from '../auth/review-access';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -69,7 +70,7 @@ export class MerchantProductsService {
     this.access.requirePermission(ctx, StaffPermission.INVENTORY);
     const { page, pageSize, skip, take } = parsePage(query);
 
-    const where: any = { approvalStatus: ProductApprovalStatus.APPROVED };
+    const where: any = { approvalStatus: ProductApprovalStatus.APPROVED, ...reviewProductFilter(ctx.merchantId) };
     if (query.q) where.name = { contains: query.q, mode: 'insensitive' };
     if (query.categoryId) {
       const descendants = await resolveCategoryBranch(this.prisma, query.categoryId);
@@ -148,6 +149,7 @@ export class MerchantProductsService {
     } else {
       const product = await this.prisma.product.findUnique({ where: { id: productId } });
       if (!product) throw new NotFoundException('Catalog product not found');
+      requireReviewProductBoundary(product.createdByMerchantId, ctx.merchantId);
       if (product.approvalStatus === ProductApprovalStatus.DISABLED) {
         throw new BadRequestException('This product has been disabled by the platform');
       }
@@ -254,10 +256,11 @@ export class MerchantProductsService {
     for (const item of dto.items) {
       const next = { pricePaisa: item.pricePaisa, stockQuantity: item.stockQuantity };
       let product = item.productId ? await this.prisma.product.findUnique({ where: { id: item.productId } }) : null;
+      if (product) requireReviewProductBoundary(product.createdByMerchantId, merchantId);
       let error: string | undefined;
       if (!product && item.productId) error = 'Catalogue product not found';
       if (!product && !item.productId && item.merchantSku) {
-        const barcodeMatches = await this.prisma.product.findMany({ where: { barcode: item.merchantSku, approvalStatus: ProductApprovalStatus.APPROVED }, take: 2 });
+        const barcodeMatches = await this.prisma.product.findMany({ where: { barcode: item.merchantSku, approvalStatus: ProductApprovalStatus.APPROVED, ...reviewProductFilter(merchantId) }, take: 2 });
         if (barcodeMatches.length === 1) product = barcodeMatches[0];
         else if (barcodeMatches.length > 1) error = 'Barcode matches more than one catalogue product';
       }
@@ -266,7 +269,7 @@ export class MerchantProductsService {
         else {
           const [category, names] = await Promise.all([
             this.prisma.category.findUnique({ where: { id: item.categoryId } }),
-            this.prisma.product.findMany({ where: { name: { equals: item.name.trim(), mode: 'insensitive' } }, take: 2 }),
+            this.prisma.product.findMany({ where: { name: { equals: item.name.trim(), mode: 'insensitive' }, ...reviewProductFilter(merchantId) }, take: 2 }),
           ]);
           if (!category?.isActive || category.isRestricted) error = 'Choose an active unrestricted category';
           else if (names.length) error = 'Name matches catalogue products; select an exact product or barcode';
@@ -387,6 +390,7 @@ export class MerchantProductsService {
             result = { rowId: item.rowId, status: 'UPDATED', merchantProductId: snapshot.merchantProductId };
           } else {
             const product = await tx.product.findUnique({ where: { id: productId }, include: { category: true } });
+            if (product) requireReviewProductBoundary(product.createdByMerchantId, ctx.merchantId);
             if (!product || product.approvalStatus === ProductApprovalStatus.DISABLED || product.approvalStatus === ProductApprovalStatus.REJECTED || product.isRestricted || product.requiresPrescription || product.category.isRestricted) {
               throw new ConflictException('Catalogue product is unavailable. Preview again.');
             }

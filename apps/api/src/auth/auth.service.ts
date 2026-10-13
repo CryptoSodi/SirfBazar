@@ -243,6 +243,7 @@ export class AuthService {
         }
         const linked = await db.user.findUnique({ where: { googleId: profile.googleId } });
         if (linked) {
+          if (reviewAccount(linked.id)) throw new UnauthorizedException('Use the supplied review phone and code.');
           await this.saveGoogleAccountProfile(db, linked.id, profile);
           return linked;
         }
@@ -250,6 +251,7 @@ export class AuthService {
         if (matches.length > 1) throw new UnauthorizedException('Account email is ambiguous. Contact support.');
         const existing = matches[0];
         if (existing) {
+          if (reviewAccount(existing.id)) throw new UnauthorizedException('Use the supplied review phone and code.');
           if (existing.status !== 'ACTIVE') throw new UnauthorizedException('Account is not active');
           if (existing.googleId || !profile.emailAuthoritative) {
             throw new UnauthorizedException('Sign in using your existing method and link Google from your account.');
@@ -289,6 +291,7 @@ export class AuthService {
   }
 
   async linkGoogle(userId: string, idToken: string) {
+    if (reviewAccount(userId)) throw new BadRequestException('Shared review accounts cannot be linked to a personal Google identity.');
     let profile;
     try { profile = await this.googleAuth.verifyIdToken(idToken); }
     catch (error) {
@@ -514,8 +517,7 @@ export class AuthService {
         userId,
         tokenHash: sha256(refreshToken),
         role,
-        expiresAt: new Date(Math.min(Date.now() + refreshTtlDays * 86400_000,
-          reviewAccount(userId) ? Date.parse(process.env.PLAY_REVIEW_EXPIRES_AT!) : Infinity)),
+        expiresAt: new Date(Date.now() + refreshTtlDays * 86400_000),
       },
     });
     const accessToken = await this.jwtService.signAsync({ sub: userId, role, sid: session.id });

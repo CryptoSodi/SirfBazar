@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CouponsService } from './coupons.service';
-import { Public } from '../common/decorators';
+import { Public, AuthUser, CurrentUser } from '../common/decorators';
 
 @ApiTags('coupons')
 @Controller('coupons')
@@ -10,7 +10,7 @@ export class CouponsController {
 
   @Public()
   @Get()
-  listActive() {
-    return this.coupons.listActive();
+  listActive(@CurrentUser() user?: AuthUser) {
+    return this.coupons.listActive(user?.userId);
   }
 }

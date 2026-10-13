@@ -3,7 +3,7 @@ import { randomInt } from 'crypto';
 import { mkdirSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import * as bcrypt from 'bcryptjs';
-import { REVIEW_ACCOUNTS, REVIEW_CUSTOMER_ID, REVIEW_RIDER_ID, REVIEW_SHOP_ID, reviewCodeHash } from './review-access';
+import { REVIEW_ACCOUNTS, REVIEW_COUPON_ID, REVIEW_CUSTOMER_ID, REVIEW_MEMBER_PREFIX, REVIEW_RIDER_ID, REVIEW_SHOP_ID, reviewCodeHash } from './review-access';
 
 export async function provisionReviewAccounts(db: PrismaClient) {
   for (const account of REVIEW_ACCOUNTS) reviewCodeHash(account.phone, 'LOGIN');
@@ -11,7 +11,7 @@ export async function provisionReviewAccounts(db: PrismaClient) {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('play-review-provision-v1'))`;
     for (const account of REVIEW_ACCOUNTS) {
       const existing = await tx.user.findFirst({ where: { OR: [{ id: account.userId }, { phoneNumber: account.phone }] } });
-      if (existing && (existing.id !== account.userId || existing.phoneNumber !== account.phone || existing.role !== account.role || existing.email || existing.googleId || existing.passwordHash)) {
+      if (existing && (existing.id !== account.userId || existing.phoneNumber !== account.phone || existing.role !== account.role || existing.googleId || existing.passwordHash)) {
         throw new Error('Reserved review identity conflicts with an existing account. No records changed.');
       }
     }
@@ -21,7 +21,7 @@ export async function provisionReviewAccounts(db: PrismaClient) {
     if (existingCustomer && existingCustomer.id !== REVIEW_CUSTOMER_ID) throw new Error('Review customer profile mismatch.');
     const existingRider = await tx.rider.findUnique({ where: { userId: REVIEW_ACCOUNTS[2].userId } });
     if (existingRider && (existingRider.id !== REVIEW_RIDER_ID || existingRider.merchantId !== REVIEW_SHOP_ID)) throw new Error('Review rider membership mismatch.');
-    if (await tx.merchantStaff.count({ where: { OR: [{ merchantId: REVIEW_SHOP_ID }, { userId: { in: REVIEW_ACCOUNTS.map(a => a.userId) } }] } })) throw new Error('Review identities must not have staff memberships.');
+    if (await tx.merchantStaff.count({ where: { OR: [{ merchantId: REVIEW_SHOP_ID, userId: { not: { startsWith: REVIEW_MEMBER_PREFIX } } }, { userId: { in: REVIEW_ACCOUNTS.map(a => a.userId) } }] } })) throw new Error('Review staff must be isolated demo records.');
 
     const products = await tx.product.findMany({ where: {
       approvalStatus: 'APPROVED', isRestricted: false, requiresPrescription: false,
@@ -56,8 +56,12 @@ export async function provisionReviewAccounts(db: PrismaClient) {
       city: 'Lahore', latitude: 31.5826, longitude: 74.3276, contactName: 'Store Reviewer', contactPhone: REVIEW_ACCOUNTS[0].phone, isDefault: true,
     } });
     await tx.customer.update({ where: { id: REVIEW_CUSTOMER_ID }, data: { defaultAddressId: 'play-review-v1-address' } });
+    await tx.coupon.upsert({ where: { id: REVIEW_COUPON_ID }, update: { isActive: true }, create: {
+      id: REVIEW_COUPON_ID, code: 'PLAYREVIEW', title: 'Isolated review coupon', discountType: 'FIXED', discountValue: 100,
+      applicableMerchantId: REVIEW_SHOP_ID, startDate: new Date('2020-01-01'), endDate: new Date('9999-12-31'), usageLimitPerCustomer: 2147483647,
+    } });
     await tx.auditLog.create({ data: { action: 'PLAY_REVIEW_PROVISIONED', entityType: 'Merchant', entityId: REVIEW_SHOP_ID,
-      newValue: JSON.stringify({ userIds: REVIEW_ACCOUNTS.map(a => a.userId), expiresAt: process.env.PLAY_REVIEW_EXPIRES_AT }) } });
+      newValue: JSON.stringify({ userIds: REVIEW_ACCOUNTS.map(a => a.userId), revocation: 'manual' }) } });
     return { provisioned: true, shopId: REVIEW_SHOP_ID, users: 3, listingCount: products.length };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30000 });
 }
@@ -71,7 +75,9 @@ export async function disableReviewAccounts(db: PrismaClient) {
     const sessions = await tx.refreshToken.updateMany({ where: { userId: { in: userIds }, revokedAt: null }, data: { revokedAt: now } });
     await tx.otpCode.updateMany({ where: { phoneNumber: { in: REVIEW_ACCOUNTS.map(a => a.phone) }, consumedAt: null }, data: { consumedAt: now } });
     await tx.merchant.updateMany({ where: { id: REVIEW_SHOP_ID }, data: { isOnline: false, isOpen: false, approvalStatus: 'SUSPENDED' } });
-    await tx.rider.updateMany({ where: { id: REVIEW_RIDER_ID }, data: { isOnline: false, isActive: false } });
+    await tx.rider.updateMany({ where: { merchantId: REVIEW_SHOP_ID }, data: { isOnline: false, isActive: false } });
+    await tx.merchantStaff.updateMany({ where: { merchantId: REVIEW_SHOP_ID }, data: { status: 'DISABLED' } });
+    await tx.coupon.updateMany({ where: { id: REVIEW_COUPON_ID }, data: { isActive: false } });
     await tx.auditLog.create({ data: { action: 'PLAY_REVIEW_DISABLED', entityType: 'Merchant', entityId: REVIEW_SHOP_ID, newValue: JSON.stringify({ revokedSessions: sessions.count }) } });
     return { disabled: true, revokedSessions: sessions.count, dataPreserved: true };
   });
@@ -84,20 +90,19 @@ async function main() {
     if (!directory) throw new Error('A new private output directory is required.');
     const output = resolve(directory);
     mkdirSync(output, { mode: 0o700 }); // Refuse overwrite; never rotate existing credentials silently.
-    const expiry = new Date(Date.now() + 90 * 86400_000).toISOString();
     const codes = new Set<string>();
-    const credentials: Array<{ app: string; phone: string; code: string; expiresAt: string }> = [];
-    const env = ['PLAY_REVIEW_ENABLED=true', `PLAY_REVIEW_EXPIRES_AT=${expiry}`];
+    const credentials: Array<{ app: string; phone: string; code: string; revocation: string }> = [];
+    const env = ['PLAY_REVIEW_ENABLED=true'];
     for (const account of REVIEW_ACCOUNTS) {
       let code: string;
       do { code = String(randomInt(100000, 1000000)); } while (codes.has(code) || code === '123456');
       codes.add(code);
       env.push(`PLAY_REVIEW_${account.context.toUpperCase()}_CODE_HASH=${await bcrypt.hash(code, 12)}`);
-      credentials.push({ app: account.context, phone: account.phone, code, expiresAt: expiry });
+      credentials.push({ app: account.context, phone: account.phone, code, revocation: 'manual' });
     }
     writeFileSync(resolve(output, 'review.env'), env.join('\n') + '\n', { mode: 0o600, flag: 'wx' });
     writeFileSync(resolve(output, 'review-credentials.json'), JSON.stringify(credentials, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-    console.log(JSON.stringify({ prepared: true, directory: output, expiresAt: expiry, secretsPrinted: false }));
+    console.log(JSON.stringify({ prepared: true, directory: output, revocation: 'manual', secretsPrinted: false }));
     return;
   }
   const db = new PrismaClient();

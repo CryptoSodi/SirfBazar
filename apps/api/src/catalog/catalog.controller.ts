@@ -34,8 +34,8 @@ export class ProductsController {
 
   /** Full global catalog for browsing/discovery (not merchant- or location-filtered). */
   @Get('catalog')
-  catalogBrowse(@Query() query: SearchProductsQuery) {
-    return this.catalog.catalogProducts(query);
+  catalogBrowse(@Query() query: SearchProductsQuery, @CurrentUser() user?: AuthUser) {
+    return this.catalog.catalogProducts(query, user?.userId);
   }
 
   @Get('nearby')
