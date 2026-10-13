@@ -282,3 +282,18 @@ in published screenshots or documentation.
 Full native profile/address editing, rating, support, uploads and remaining
 feature coverage still need verification. These candidates have not been uploaded
 to Play, and no full-access declaration or rollout has been submitted.
+
+## Push-Enabled Build 10 Results - 14 October 2026
+
+This supersedes the Firebase/push blocker and build-upload status above, not
+the remaining full-feature review gates. All three release-signed build-10 apps
+are installed on the Samsung Galaxy A52 and saved as unpublished Play internal
+testing drafts. Real Android background alerts and correct order/delivery tap
+navigation passed for customer, merchant and rider. Customer logout removed only
+its registration; signing in restored it. Customer notification navigation now
+preserves the Orders and Account roots. All 58 customer tests, 16 new merchant/
+rider navigation tests, existing mobile tests and required source CI gates pass.
+
+See [Firebase setup and device evidence](firebase-push-setup.md) for exact source
+commits, artifact hashes, demo orders, screenshots and untested lifecycle cases.
+No full-access certification, Play review submission or rollout was made.
