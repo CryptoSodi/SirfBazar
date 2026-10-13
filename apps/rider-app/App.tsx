@@ -1,8 +1,9 @@
-import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { isLoggedIn } from './lib/api';
+import { createOrderPushNavigation } from './lib/notification-navigation';
 import { AppearanceProvider, useRiderTheme } from './lib/appearance';
 import LoginScreen from './screens/RiderLoginScreen';
 import OnboardScreen from './screens/RiderOnboardScreen';
@@ -29,6 +30,7 @@ export type RootStackParamList = {
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export default function App() {
   return <AppearanceProvider><AppNavigation /></AppearanceProvider>;
@@ -38,6 +40,11 @@ function AppNavigation() {
   const { palette, mode } = useRiderTheme();
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const [pushNavigation] = useState(() => createOrderPushNavigation({
+    isReady: () => navigationRef.isReady(),
+    openOrder: orderId => navigationRef.navigate('Delivery', { orderId }),
+  }));
+  useEffect(() => ready ? pushNavigation.start() : undefined, [ready, pushNavigation]);
 
   useEffect(() => {
     isLoggedIn().then((ok) => {
@@ -51,7 +58,7 @@ function AppNavigation() {
   const theme = { ...base, colors: { ...base.colors, background: palette.bg, card: palette.surface, text: palette.ink, border: palette.line, primary: palette.accent } };
 
   return (
-    <NavigationContainer theme={theme}>
+    <NavigationContainer theme={theme} ref={navigationRef} onReady={() => { void pushNavigation.flush(); }}>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} backgroundColor={palette.bg} />
       <Stack.Navigator
         initialRouteName={authed ? 'Home' : 'Login'}
