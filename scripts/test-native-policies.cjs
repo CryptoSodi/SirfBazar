@@ -84,3 +84,13 @@ test('merchant shop photos do not request microphone or broad gallery access', (
   assert.doesNotMatch(source, /requestMediaLibraryPermissionsAsync/);
   assert.match(source, /mediaTypes: \['images'\]/);
 });
+
+for (const role of ['customer', 'merchant', 'rider']) {
+  test(`${role}: generated native configuration blocks unused overlay and shared storage permissions`, () => {
+    const config = require(`../apps/${role}-app/app.json`).expo;
+    for (const permission of ['SYSTEM_ALERT_WINDOW', 'READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE']) {
+      assert.ok(config.android.blockedPermissions.includes(`android.permission.${permission}`));
+    }
+    assert.equal(config.android.package, `pk.sirfbazar.${role}`);
+  });
+}

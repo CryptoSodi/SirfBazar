@@ -1,0 +1,21 @@
+def requiredEnv = { String name ->
+    def value = System.getenv(name)
+    if (!value) throw new GradleException("Missing local release setting: " + name)
+    return value
+}
+
+android {
+    signingConfigs {
+        sirfbazarRelease {
+            storeFile file(requiredEnv('SIRFBAZAR_KEYSTORE'))
+            storePassword requiredEnv('SIRFBAZAR_SIGNING_PASSWORD')
+            keyAlias requiredEnv('SIRFBAZAR_KEY_ALIAS')
+            keyPassword requiredEnv('SIRFBAZAR_SIGNING_PASSWORD')
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.sirfbazarRelease
+        }
+    }
+}
