@@ -81,6 +81,7 @@ export default function RiderLoginScreen() {
     <Field label="Sign-in code" value={code} onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" placeholder="••••••" maxLength={6} style={{ marginTop: 16 }} />
     <LinkButton onPress={() => void sendCode()} style={{ marginTop: 20 }}>Resend code</LinkButton>
     <Note icon="shield" style={{ marginTop: 22 }}>This signs you in. A customer’s delivery code is requested later, at drop-off.</Note>
+    <AccountPolicies color={palette.accent} textColor={palette.muted} />
     {!!message && <ToastMessage>{message}</ToastMessage>}
   </Page>;
   return <Page>
@@ -96,3 +97,4 @@ export default function RiderLoginScreen() {
     <Sheet visible={!!newGoogleToken} title="Join a delivery team?" onClose={() => setNewGoogleToken(null)}><Body muted>This Google account is not linked to a rider yet. If your shop added you by phone, choose Not now and sign in with that number. Otherwise, continue to request to join your shop.</Body><Button onPress={() => void createGoogleIdentity()} disabled={busy} style={{ marginTop: 16 }}>Continue as new rider</Button><Button variant="secondary" onPress={() => setNewGoogleToken(null)} style={{ marginTop: 10 }}>Not now</Button></Sheet>
   </Page>;
 }
+import { AccountPolicies } from '../components/AccountPolicies';

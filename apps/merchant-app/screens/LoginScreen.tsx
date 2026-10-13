@@ -136,7 +136,9 @@ export default function LoginScreen() {
             <Text style={[s.btnGhostText, { fontSize: 16 }]}>{signup ? 'Sign in' : 'Sign up — create a shop'}</Text>
           </TouchableOpacity>
         </View>
+        <AccountPolicies color="#A7F3D0" textColor="#E2E8F0" />
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView>;
 }
+import { AccountPolicies } from '../components/AccountPolicies';

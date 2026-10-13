@@ -49,14 +49,19 @@ export default function OnboardScreen() {
 
   const pickPhoto = async (fromCamera: boolean) => {
     setError('');
-    const perm = fromCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return setError('Permission needed to add a photo.');
-    const res = fromCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.6, allowsEditing: true, aspect: [16, 9] })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.6, allowsEditing: true, aspect: [16, 9] });
-    if (!res.canceled && res.assets?.[0]) setPhoto(res.assets[0].uri);
+    try {
+      if (fromCamera && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+        setError('Camera permission is needed to take a photo. You can choose an existing photo instead.');
+        return;
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6, allowsEditing: true, aspect: [16, 9] };
+      const res = fromCamera
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+      if (!res.canceled && res.assets?.[0]) setPhoto(res.assets[0].uri);
+    } catch {
+      setError('Could not open the photo picker. Try again or choose another photo.');
+    }
   };
 
   const useCurrentLocation = async () => {
