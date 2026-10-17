@@ -29,6 +29,7 @@ module.exports = async (page, baseUrl) => {
   await page.context().addInitScript(({ user }) => {
     localStorage.setItem('sbs.accessToken', 'fixture.' + btoa(JSON.stringify({ role: 'MERCHANT_OWNER', exp: 4102444800 })) + '.fixture');
     localStorage.setItem('sbs.user', JSON.stringify(user));
+    localStorage.setItem(`sb:merchant-tour:v2:${user.merchant.id}:${user.id}`, 'done');
     localStorage.setItem('sirfbazar.merchant.theme', 'light');
   }, { user });
   await page.setViewportSize({ width: 1440, height: 1000 });

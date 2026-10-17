@@ -4,9 +4,10 @@ import { api, errorMessage, pkr } from '../lib/api';
 import { Modal, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
 import { ReferenceIcon, type ReferenceIconName } from '../components/ReferenceIcon';
 import { CardSkeleton, InlineSkeleton, LoadingFrame } from '../components/Skeleton';
-import { readMemory, writeMemory } from '../lib/memoryCache';
+import { invalidateMemory, readMemory, writeMemory } from '../lib/memoryCache';
 import { readListingsPage, type MerchantListing, type Paged } from '../lib/merchant-contracts';
 import BulkImport from '../components/BulkImport';
+import AddProduct from '../components/AddProduct';
 import { parseRupees, parseStock, type BulkItem, type UploadResult } from '../lib/bulk-import';
 import { categoryPath, type CatalogCategory } from '../lib/catalog-categories';
 import { useCatalogAutoLoad } from '../lib/useCatalogAutoLoad';
@@ -53,10 +54,10 @@ function CategoryNode({ category, selected, onSelect, depth = 0 }: { category: C
 }
 
 function ProductViewTabs({ view, onChange }: { view: 'catalog' | 'shop'; onChange: (view: 'catalog' | 'shop') => void }) {
-  return <div className="product-view-tabs" role="group" aria-label="Product view"><button type="button" className={view === 'catalog' ? 'active' : ''} aria-pressed={view === 'catalog'} onClick={() => onChange('catalog')}>Browse catalog</button><button type="button" className={view === 'shop' ? 'active' : ''} aria-pressed={view === 'shop'} onClick={() => onChange('shop')}>My shop listings</button></div>;
+  return <div className="product-view-tabs" role="group" aria-label="Product view"><button type="button" data-tour="catalog-browse" className={view === 'catalog' ? 'active' : ''} aria-pressed={view === 'catalog'} onClick={() => onChange('catalog')}>Browse catalog</button><button type="button" className={view === 'shop' ? 'active' : ''} aria-pressed={view === 'shop'} onClick={() => onChange('shop')}>My shop listings</button></div>;
 }
 
-function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view: 'catalog' | 'shop') => void; onAdded: () => void; onImport: () => void; refreshKey: number }) {
+function CatalogPage({ onView, onAdded, onImport, onCreate, refreshKey }: { onView: (view: 'catalog' | 'shop') => void; onAdded: () => void; onImport: () => void; onCreate: () => void; refreshKey: number }) {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [categoryId, setCategoryId] = useState('');
@@ -147,7 +148,11 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
       setBulkResult(response);
       const completed = new Set(response.rows.filter((row) => row.status === 'CREATED' || row.status === 'SKIPPED').map((row) => row.rowId));
       setSelected((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !completed.has(id))));
-      if (response.created) { onAdded(); setRevision((value) => value + 1); }
+      if (response.created) {
+        setResult((current) => current ? { ...current, items: current.items.map((item) => completed.has(item.productId) ? { ...item, alreadyListed: true } : item) } : current);
+        invalidateMemory('catalog:');
+        onAdded();
+      }
       if (!response.failed.length) setBulkRequest(null);
     } catch (cause) { setBulkError(`${errorMessage(cause)} ${bulkRequest ? 'Retry the same request to reconcile its result.' : 'Check each selected price and stock value.'}`); }
     finally { setBulkBusy(false); }
@@ -209,7 +214,7 @@ function CatalogPage({ onView, onAdded, onImport, refreshKey }: { onView: (view:
   return <div className="catalog-workspace">
     <section className="page-heading">
       <div><h1>Products</h1><p>Find the right products. Set your price. Stock your shop.</p></div>
-      <button className="btn catalog-import" type="button" aria-label="Import products" onClick={onImport}><ReferenceIcon name="upload" size="sm" /><span>Import products</span></button>
+      <div className="catalog-heading-actions"><button className="btn catalog-import" type="button" onClick={onImport}><ReferenceIcon name="upload" size="sm" /><span>Import products</span></button><button className="btn primary" type="button" onClick={onCreate}><ReferenceIcon name="plus" size="sm" /><span>Add product</span></button></div>
     </section>
     <ProductViewTabs view="catalog" onChange={onView} />
     <div className="catalog-layout catalog-bulk-layout">
@@ -272,19 +277,26 @@ export default function Products() {
   const [editing, setEditing] = useState<MP | null>(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'low' | 'paused'>('all');
+  const [savingIds, setSavingIds] = useState<Set<string>>(() => new Set());
   const requestNumber = useRef(0);
+  const activeListingKey = useRef('products:1::all');
   const [revision, setRevision] = useState(0);
+  const [catalogRevision, setCatalogRevision] = useState(0);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const { toast, node } = useToast();
 
   const load = async () => {
     const current = ++requestNumber.current;
     const cacheKey = `products:${page}:${query.toLowerCase()}:${filter}`;
-    const cachedProducts = readMemory<Paged<MP>>(cacheKey);
-    setResult(cachedProducts ?? null);
-    setItems(cachedProducts?.items ?? []);
-    setLoading(!cachedProducts);
+    if (activeListingKey.current !== cacheKey) {
+      activeListingKey.current = cacheKey;
+      const cachedProducts = readMemory<Paged<MP>>(cacheKey);
+      setResult(cachedProducts ?? null);
+      setItems(cachedProducts?.items ?? []);
+      setLoading(!cachedProducts);
+    }
     setError('');
     try {
       const qs = new URLSearchParams({ page: String(page), pageSize: '24' });
@@ -313,27 +325,58 @@ export default function Products() {
   }, [page, query, filter, revision]);
   useEffect(() => { const refresh = () => setRevision((value) => value + 1); window.addEventListener('sb:products', refresh); return () => window.removeEventListener('sb:products', refresh); }, []);
 
+  const updateListing = (id: string, patch: Partial<MP>) => {
+    // A GET started before this successful mutation must not restore stale values.
+    requestNumber.current++;
+    setLoading(false);
+    const leavesFilter = (item: MP) => item.id === id && (
+      (filter === 'paused' && patch.isAvailable === true) ||
+      (filter === 'low' && patch.stockQuantity !== undefined && patch.stockQuantity > item.lowStockThreshold)
+    );
+    setItems((current) => current.filter((item) => !leavesFilter(item)).map((item) => item.id === id ? { ...item, ...patch } : item));
+    setResult((current) => {
+      if (!current) return current;
+      const removed = current.items.some(leavesFilter);
+      return {
+        ...current,
+        total: Math.max(0, current.total - Number(removed)),
+        items: current.items.filter((item) => !leavesFilter(item)).map((item) => item.id === id ? { ...item, ...patch } : item),
+      };
+    });
+    setUpdatedAt(new Date());
+    invalidateMemory('products:');
+  };
+
   const toggleAvailability = async (mp: MP) => {
+    if (savingIds.has(mp.id)) return;
+    setSavingIds((current) => new Set(current).add(mp.id));
     try {
       await api.put(`/merchant/products/${mp.id}`, { isAvailable: !mp.isAvailable });
+      updateListing(mp.id, { isAvailable: !mp.isAvailable });
       toast(mp.isAvailable ? 'Hidden from store' : 'Listed in store');
     } catch (e: any) {
       toast(e.message, false);
+    } finally {
+      setSavingIds((current) => { const next = new Set(current); next.delete(mp.id); return next; });
     }
   };
 
   const removeListing = async (mp: MP) => {
     const name = mp.product?.name ?? 'this product';
     if (!confirm(`Remove ${name} from your storefront? Existing order records will be preserved.`)) return;
+    if (savingIds.has(mp.id)) return;
+    setSavingIds((current) => new Set(current).add(mp.id));
     try {
       await api.del(`/merchant/products/${mp.id}`);
-      toast(`${name} removed from the storefront`);
+      updateListing(mp.id, { isAvailable: false });
+      toast(`${name} hidden from the storefront`);
     } catch (e: any) { toast(e.message, false); }
+    finally { setSavingIds((current) => { const next = new Set(current); next.delete(mp.id); return next; }); }
   };
 
   const visible = items;
 
-  if (view === 'catalog') return <><CatalogPage onView={setView} onAdded={() => setRevision((value) => value + 1)} onImport={() => setBulkOpen(true)} refreshKey={revision} />{bulkOpen && <BulkImport onClose={() => setBulkOpen(false)} onSaved={() => setRevision((value) => value + 1)} />}{node}</>;
+  if (view === 'catalog') return <><CatalogPage onView={setView} onAdded={() => setRevision((value) => value + 1)} onImport={() => setBulkOpen(true)} onCreate={() => setAddOpen(true)} refreshKey={catalogRevision} />{bulkOpen && <BulkImport onClose={() => setBulkOpen(false)} onSaved={() => { invalidateMemory('catalog:', 'products:'); setCatalogRevision((value) => value + 1); setRevision((value) => value + 1); }} />}{addOpen && <AddProduct onClose={() => setAddOpen(false)} onSaved={() => { invalidateMemory('catalog:', 'products:'); setRevision((value) => value + 1); setCatalogRevision((value) => value + 1); toast('Product added to your shop. Shared catalogue review is pending.'); setView('shop'); }} />}{node}</>;
 
   return (
     <div className="products-shop">
@@ -347,9 +390,7 @@ export default function Products() {
           onChange={(e) => setQ(e.target.value)}
         />
         <button className="btn" type="button" onClick={() => setBulkOpen(true)}><ReferenceIcon name="upload" size="sm" /> Import products</button>
-        <button className="btn primary" onClick={() => setCatalogOpen(true)}>
-          <ReferenceIcon name="plus" size="sm" /> Add product
-        </button>
+        <button className="btn primary" onClick={() => setAddOpen(true)}><ReferenceIcon name="plus" size="sm" /> Add product</button>
         </div>
       </section>
 
@@ -374,6 +415,7 @@ export default function Products() {
                   <Thumb name={p.name} imageUrl={p.imageUrl} />
                   <div>
                     <div className="font-medium text-slate-800">{p.name}</div>
+                    {p.approvalStatus === 'PENDING' && <div className="text-xs text-slate-500">In your shop only · awaiting shared catalogue review</div>}
                     <div className="text-xs text-slate-400">
                       {[p.brand, p.size ?? p.unit, mp.merchantSku ? `SKU ${mp.merchantSku}` : null].filter(Boolean).join(' · ') || '—'}
                     </div>
@@ -408,6 +450,7 @@ export default function Products() {
                   role="switch"
                   aria-checked={mp.isAvailable}
                   aria-label={`${mp.product.name}: ${mp.isAvailable ? 'available' : 'paused'}`}
+                  disabled={savingIds.has(mp.id)}
                   onClick={() => toggleAvailability(mp)}
                   className={`inline-flex h-7 w-11 items-center rounded-full px-1 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 ${
                     mp.isAvailable ? 'justify-end bg-emerald-500' : 'justify-start bg-slate-300'
@@ -421,7 +464,7 @@ export default function Products() {
                 <button className={btnGhost} onClick={() => setEditing(mp)}>
                   Edit
                 </button>
-                <button className="btn tiny danger" onClick={() => void removeListing(mp)}>Remove</button>
+                <button className="btn tiny danger" disabled={savingIds.has(mp.id)} onClick={() => void removeListing(mp)}>Remove</button>
               </td>
             </tr>
           );
@@ -450,9 +493,9 @@ export default function Products() {
         <EditModal
           mp={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => {
+          onSaved={(changes) => {
+            updateListing(editing.id, changes);
             setEditing(null);
-            setRevision((value) => value + 1);
           }}
           toast={toast}
         />
@@ -464,6 +507,7 @@ export default function Products() {
           toast={toast}
         />
       )}
+      {addOpen && <AddProduct onClose={() => setAddOpen(false)} onSaved={() => { invalidateMemory('catalog:', 'products:'); setPage(1); setFilter('all'); setRevision((value) => value + 1); toast('Product added to your shop. Shared catalogue review is pending.'); }} />}
       {bulkOpen && <BulkImport onClose={() => setBulkOpen(false)} onSaved={() => setRevision((value) => value + 1)} />}
       {node}
     </div>
@@ -490,7 +534,7 @@ function EditModal({
 }: {
   mp: MP;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (changes: Pick<MP, 'pricePaisa' | 'stockQuantity' | 'merchantSku'>) => void;
   toast: (t: string, ok?: boolean) => void;
 }) {
   // Edit in rupees for usability; convert to paisa on save.
@@ -515,7 +559,7 @@ function EditModal({
     try {
       await api.put(`/merchant/products/${mp.id}`, { pricePaisa, stockQuantity, merchantSku: sku.trim() || null });
       toast('Listing updated');
-      onSaved();
+      onSaved({ pricePaisa, stockQuantity, merchantSku: sku.trim() || null });
     } catch (e: any) {
       toast(e.message, false);
     } finally {

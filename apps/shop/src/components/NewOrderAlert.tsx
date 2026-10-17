@@ -80,7 +80,7 @@ export function NewOrderAlert() {
     };
   }, [load]);
 
-  const visible = useMemo(() => orders.filter((order) => !closed[order.id]), [closed, orders]);
+  const visible = useMemo(() => orders.filter((order) => !closed[order.id] && !order.pendingRevision), [closed, orders]);
   const order = visible[0];
 
   useEffect(() => {

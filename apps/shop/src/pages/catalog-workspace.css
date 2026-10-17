@@ -3,6 +3,13 @@
 .catalog-workspace .page-heading { margin-block-end:20px; align-items:center; }
 .catalog-workspace .page-heading p { font-size:13px; }
 .catalog-workspace .catalog-import { flex:none; background:var(--surface); color:var(--ink); border:1px solid var(--control); }
+.catalog-workspace .catalog-heading-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.add-product-form { display:grid; gap:16px; }
+.add-product-form label { display:grid; gap:6px; color:var(--ink); font-size:14px; font-weight:600; }
+.add-product-form .field-control { width:100%; font-weight:400; }
+.add-product-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.add-product-note { margin:0; color:var(--muted); line-height:1.5; }
+.add-product-actions { display:flex; justify-content:flex-end; gap:10px; padding-top:4px; }
 .catalog-workspace .product-view-tabs { width:100%; gap:26px; padding:0; margin-block-end:24px; background:none; border:0; border-block-end:1px solid var(--line); border-radius:0; }
 .catalog-workspace .product-view-tabs button { flex:none; min-height:44px; padding:0 0 12px; border-radius:0; position:relative; font-size:13px; font-weight:600; }
 .catalog-workspace .product-view-tabs button.active { background:none; box-shadow:none; }
@@ -115,9 +122,9 @@
 }
 @media(max-width:700px) {
   .catalog-workspace { padding-block-end:88px; }
-  .catalog-workspace .page-heading { flex-direction:row; align-items:flex-start; }
-  .catalog-workspace .catalog-import { min-width:40px; padding-inline:10px; }
-  .catalog-workspace .catalog-import span { display:none; }
+  .catalog-workspace .page-heading { flex-direction:column; align-items:stretch; }
+  .catalog-workspace .catalog-import { min-height:44px; align-self:flex-start; padding-inline:14px; }
+  .add-product-pair { grid-template-columns:1fr; }
   .catalog-workspace .catalog-bulk-layout { grid-template-columns:minmax(0,1fr); gap:24px; }
   .catalog-workspace .catalog-categories { padding:10px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
   .catalog-workspace .catalog-category-heading { padding:0; min-height:40px; }

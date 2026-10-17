@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
 
@@ -70,6 +70,7 @@ export class MerchantRegistrationStartDto {
   @IsString() @IsNotEmpty() lastName: string;
   @IsIn(['mobile', 'email']) channel: 'mobile' | 'email';
   @IsString() @IsNotEmpty() contact: string;
+  @IsOptional() @IsEmail() email?: string;
   @Matches(/^\d{5}-?\d{7}-?\d$/, { message: 'cnic must contain 13 digits' }) cnic: string;
   @IsString() @MinLength(8) password: string;
 }

@@ -2,10 +2,11 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access.service';
-import { OrderStatus, PaymentStatus, ProductApprovalStatus, StaffPermission, UserRole } from '../common/constants';
+import { OrderStatus, PaymentStatus, StaffPermission, UserRole } from '../common/constants';
 import { generateOrderNumber } from '../common/utils/ids';
 import { merchantPosTrialView } from '../common/merchant-access-policy';
 import { REVIEW_SHOP_ID, REVIEW_CUSTOMER_ID, reviewPosEntitlement } from '../auth/review-access';
+import { canSellShopProduct, shopProductApprovalWhere } from '../common/shop-product-visibility';
 
 interface SaleItemInput {
   merchantProductId: string;
@@ -77,7 +78,7 @@ export class PosService {
       imageUrl: row.product.imageUrl, unit: row.product.unit, barcode: row.product.barcode,
       merchantSku: row.merchantSku, pricePaisa: row.discountPricePaisa ?? row.pricePaisa,
       stockQuantity: row.stockQuantity,
-      isAvailable: row.isAvailable && row.product.approvalStatus === ProductApprovalStatus.APPROVED &&
+      isAvailable: row.isAvailable && canSellShopProduct(row.product, row.merchantId) &&
         !row.product.isRestricted && !row.product.requiresPrescription,
     };
   }
@@ -179,7 +180,7 @@ export class PosService {
         const dec = await tx.merchantProduct.updateMany({
           where: { id: l.offer.id, merchantId: ctx.merchantId, isAvailable: true, stockQuantity: { gte: l.qty },
             pricePaisa: l.offer.pricePaisa, discountPricePaisa: l.offer.discountPricePaisa,
-            product: { approvalStatus: ProductApprovalStatus.APPROVED, isRestricted: false, requiresPrescription: false } },
+            product: { AND: [shopProductApprovalWhere(ctx.merchantId), { isRestricted: false, requiresPrescription: false }] } },
           data: { stockQuantity: { decrement: l.qty } },
         });
         if (dec.count === 0) {

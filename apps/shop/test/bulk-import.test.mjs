@@ -51,8 +51,36 @@ test('common product sheet headings are automatically mapped without treating co
   assert.equal(csv.guessCsvField('Stock quantity'), 'stockQuantity');
   assert.equal(csv.guessCsvField('Catalogue product ID'), 'productId');
   assert.equal(csv.guessCsvField('SKU or Barcode'), 'merchantSku');
+  assert.equal(csv.guessCsvField('Merchant SKU or barcode'), 'merchantSku');
+  assert.equal(csv.guessCsvField('Stock quantity (units)'), 'stockQuantity');
   assert.equal(csv.guessCsvField('Cost price'), undefined);
   assert.equal(csv.guessCsvField('Stock value'), undefined);
+});
+
+test('blank Excel template has importable headings, instructions and leaf category IDs', () => {
+  const template = csv.productTemplateSheets([{ id: 'produce', name: 'Fruit & vegetables', children: [
+    { id: 'fruit', name: 'Fresh fruit' }, { id: 'vegetables', name: 'Fresh vegetables' },
+  ] }]);
+  assert.deepEqual(template.products, [csv.CSV_FIELDS.map(({ label }) => label)]);
+  assert.deepEqual(template.categories, [
+    ['Category', 'Category ID'],
+    ['Fruit & vegetables > Fresh fruit', 'fruit'],
+    ['Fruit & vegetables > Fresh vegetables', 'vegetables'],
+  ]);
+  assert.ok(template.guide.some((row) => row[0] === 'Upload'));
+  const mapping = Object.fromEntries(template.products[0].map((label, index) => [csv.guessCsvField(label), index]));
+  assert.deepEqual(Object.keys(mapping).sort(), csv.CSV_FIELDS.map(({ key }) => key).sort());
+  const rows = [template.products[0], ['', 'Apple', 'fruit', '1 kg', '000123', '650.50', '12']];
+  assert.deepEqual(csv.mapCsv(rows, mapping), [{
+    rowId: '2', name: 'Apple', categoryId: 'fruit', unit: '1 kg', merchantSku: '000123', pricePaisa: 65050, stockQuantity: 12,
+  }]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Products');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(template.guide), 'How to fill it in');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(template.categories), 'Categories');
+  const binary = Buffer.from(XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }));
+  const uploaded = csv.parseXlsxBytes(binary.buffer.slice(binary.byteOffset, binary.byteOffset + binary.byteLength), XLSX);
+  assert.deepEqual(csv.mapCsv(uploaded, mapping), csv.mapCsv(rows, mapping));
 });
 
 test('XLSX import reads the first worksheet, preserves text codes and validates row sizes', () => {

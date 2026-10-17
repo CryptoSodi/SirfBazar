@@ -97,7 +97,7 @@ test('production cannot select mocks, unknown providers or an empty audience', a
 });
 
 function fixture(options = {}) {
-  const users = (options.users || []).map(u => ({ status: 'ACTIVE', role: 'CUSTOMER', googleId: null, email: 'owner@gmail.com', ...u }));
+  const users = (options.users || []).map(u => ({ status: 'ACTIVE', role: 'CUSTOMER', googleId: null, email: 'owner@gmail.com', isEmailVerified: true, ...u }));
   const changes = [], issued = [], locks = [];
   const db = {
     $executeRaw: async (_sql, key) => { locks.push(key); },
@@ -112,6 +112,7 @@ function fixture(options = {}) {
       updateMany: async ({ where, data }) => {
         if (options.updateLost) return { count: 0 };
         const user = users.find(u => u.id === where.id && u.status === where.status &&
+          (where.isEmailVerified === undefined || u.isEmailVerified === where.isEmailVerified) &&
           (where.OR ? where.OR.some(condition => condition.googleId === u.googleId) : where.googleId === u.googleId));
         if (!user) return { count: 0 };
         Object.assign(user, data); changes.push(data); return { count: 1 };
@@ -153,6 +154,7 @@ for (const context of ['merchant', 'admin', 'rider']) test(`new ${context} login
 });
 for (const options of [
   { users: [{ id: 'owner', googleId: 'other-subject' }] },
+  { users: [{ id: 'owner', isEmailVerified: false }], owner: true },
   { users: [{ id: 'owner' }], profile: { emailAuthoritative: false } },
   { users: [{ id: 'owner', status: 'SUSPENDED' }] },
   { users: [{ id: 'owner', status: 'DELETED', googleId: 'google-subject' }] },

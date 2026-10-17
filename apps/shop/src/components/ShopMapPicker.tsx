@@ -1,7 +1,7 @@
 import { ReferenceIcon as UiIcon } from './ReferenceIcon';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { googleMapsApiKey as apiKey, googleMapsMapId as mapId, loadGoogleMaps } from '../auth/googleMaps';
+import { googleMapsApiKey as apiKey, googleMapsMapId as mapId, loadGoogleMaps, onGoogleMapsAuthenticationFailure } from '../auth/googleMaps';
 import './ShopMapPicker.css';
 
 type Point = { latitude: number; longitude: number };
@@ -41,10 +41,13 @@ export default function ShopMapPicker({ initial, onConfirm, onClose, returnFocus
   useEffect(() => {
     let active = true;
     let resizeTimer: number | undefined;
+    const stopListening = onGoogleMapsAuthenticationFailure(() => {
+      if (active) { setMapReady(false); setError('Google Maps is not authorized for this site. Check the testing key’s allowed website addresses.'); }
+    });
     setMapReady(false);
     if (!apiKey) {
       setError('Google Maps is not configured for this site. Enter the shop coordinates in the setup form instead.');
-      return () => { active = false; };
+      return () => { active = false; stopListening(); };
     }
     loadGoogleMaps().then(({ Map }) => {
       if (!active || !host.current) return;
@@ -76,7 +79,7 @@ export default function ShopMapPicker({ initial, onConfirm, onClose, returnFocus
       setMapReady(true);
       resizeTimer = window.setTimeout(() => { if (active) google.maps.event.trigger(instance, 'resize'); }, 0);
     }).catch(() => { if (active) setError('Google Maps could not load. Check the map key and try again.'); });
-    return () => { active = false; window.clearTimeout(resizeTimer); map.current = null; };
+    return () => { active = false; stopListening(); window.clearTimeout(resizeTimer); map.current = null; };
   }, [mapAttempt]);
 
   const locate = () => {

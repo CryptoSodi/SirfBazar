@@ -47,9 +47,9 @@ export function guessCsvField(heading: string): CsvField | undefined {
     name: ['name', 'productname', 'itemname', 'title'],
     categoryId: ['categoryid', 'catalogcategoryid'],
     unit: ['unit', 'measurementunit'],
-    merchantSku: ['sku', 'merchantsku', 'barcode', 'skuorbarcode'],
+    merchantSku: ['sku', 'merchantsku', 'barcode', 'skuorbarcode', 'merchantskuorbarcode'],
     priceRupees: ['price', 'saleprice', 'sellingprice', 'retailprice', 'pricers', 'salepricers'],
-    stockQuantity: ['stock', 'quantity', 'stockquantity', 'unitsinstock'],
+    stockQuantity: ['stock', 'quantity', 'stockquantity', 'stockquantityunits', 'unitsinstock'],
   };
   return CSV_FIELDS.find(({ key }) => aliases[key].includes(normalized))?.key;
 }
@@ -115,6 +115,38 @@ export const CSV_FIELDS: { key: CsvField; label: string }[] = [
   { key: 'merchantSku', label: 'Merchant SKU or barcode' }, { key: 'priceRupees', label: 'Sale price (Rs)' },
   { key: 'stockQuantity', label: 'Stock quantity (units)' },
 ];
+
+export type TemplateCategory = { id: string; name: string; children?: TemplateCategory[] };
+
+/** Products must remain the first sheet: the importer reads only that sheet. */
+export function productTemplateSheets(categories: TemplateCategory[]) {
+  const categoryRows: string[][] = [['Category', 'Category ID']];
+  const addCategories = (nodes: TemplateCategory[], ancestors: string[]) => {
+    for (const category of nodes) {
+      const path = [...ancestors, category.name];
+      if (category.children?.length) addCategories(category.children, path);
+      else categoryRows.push([path.join(' > '), category.id]);
+    }
+  };
+  addCategories(categories, []);
+  return {
+    products: [CSV_FIELDS.map(({ label }) => label)],
+    guide: [
+      ['SirfBazar product import', 'How to complete this workbook'],
+      ['Products', 'Enter one new product per row in the Products worksheet. Keep the heading row unchanged.'],
+      ['Product name', 'Required for a new product. Use a clear name customers will recognise.'],
+      ['Category ID', 'Required for a new product. Copy a Category ID from the Categories worksheet.'],
+      ['Unit', 'Required for a new product. For example: 1 kg, 500 g, 1 litre, or each.'],
+      ['Merchant SKU or barcode', 'Optional. Format this column as Text before entering a code with leading zeros.'],
+      ['Sale price (Rs)', 'Required. Enter a number greater than zero, such as 650 or 650.50. Do not type Rs.'],
+      ['Stock quantity (units)', 'Required. Enter a whole number, including 0 if currently out of stock.'],
+      ['Catalogue product ID', 'Leave blank for a new product. Use only when matching an existing catalogue product.'],
+      ['Upload', 'Save as .xlsx, upload it in Import products, check the preview, then confirm. Maximum 1,000 products or 2 MiB per file.'],
+      ['Review', 'New products appear only in your shop first. Admin approval adds them to the shared catalogue.'],
+    ],
+    categories: categoryRows,
+  };
+}
 
 export function mapCsv(rows: string[][], mapping: CsvMapping): BulkItem[] {
   if (mapping.priceRupees === undefined || mapping.stockQuantity === undefined) throw Error('Map sale price and stock quantity columns. Cost and stock value are different fields.');

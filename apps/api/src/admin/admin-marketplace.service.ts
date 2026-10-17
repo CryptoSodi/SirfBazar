@@ -74,7 +74,7 @@ export class AdminMarketplaceService {
       },
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
-    return { ...merchant, trial: merchantTrial(merchant.createdAt) };
+    return { ...merchant, documents: merchant.documents.filter((document) => document.documentUrl !== 'PENDING_PRIVATE_UPLOAD'), trial: merchantTrial(merchant.createdAt) };
   }
 
   async setMerchantApproval(
@@ -95,6 +95,18 @@ export class AdminMarketplaceService {
     }
     await serializable(this.prisma, async (tx) => {
       const before = await tx.merchant.findUniqueOrThrow({ where: { id: merchantId } });
+      if (status === MerchantApprovalStatus.APPROVED) {
+        const identityRequired = before.approvalStatus === MerchantApprovalStatus.DRAFT || !!(await tx.merchantDocument.findFirst({
+          where: { merchantId, documentType: 'IDENTITY', documentUrl: 'PENDING_PRIVATE_UPLOAD' }, select: { id: true },
+        }));
+        if (identityRequired) {
+          const identity = await tx.merchantDocument.findFirst({
+            where: { merchantId, documentType: 'IDENTITY', documentUrl: { startsWith: '/api/merchant/documents/' } },
+            select: { id: true },
+          });
+          if (!identity) throw new BadRequestException('The owner must upload an ID-card image before this shop can be activated.');
+        }
+      }
       await tx.merchant.update({ where: { id: merchantId }, data: {
         approvalStatus: status, isOnline: status === MerchantApprovalStatus.APPROVED,
       } });
@@ -385,8 +397,8 @@ export class AdminMarketplaceService {
           title: status === 'APPROVED' ? 'Product approved' : 'Product rejected',
           body:
             status === 'APPROVED'
-              ? `"${product.name}" was approved and is now visible to customers.`
-              : `"${product.name}" was rejected${reason ? `: ${reason}` : '.'}`,
+              ? `"${product.name}" is approved for the shared catalogue. Your shop listing remains available.`
+              : `"${product.name}" was rejected and is no longer available in your shop${reason ? `: ${reason}` : '.'}`,
           type:
             status === 'APPROVED'
               ? NotificationType.PRODUCT_APPROVED

@@ -32,6 +32,7 @@ export default function Products() {
         <input className={`${inputCls} max-w-xs`} placeholder="Search name…" value={q} onChange={(e) => setQ(e.target.value)} />
         <button className={btnCls} onClick={() => setEditing('new')}>+ New product</button>
       </div>
+      <p className="mb-4 text-sm text-slate-600">Pending merchant products can appear in their own shop. Approval adds them to the shared catalogue for other shops.</p>
       {error && <ToastMessage>{error}</ToastMessage>}
       <Table headers={['Product', 'Category', 'Unit', 'Listings', 'Status', '']}>
         {items.map((p) => (

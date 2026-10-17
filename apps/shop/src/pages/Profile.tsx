@@ -2,7 +2,7 @@ import { ToastMessage } from '../components/Toast';
 import { useEffect, useRef, useState } from 'react';
 import { api, captureSession, pkr, sessionIsCurrent } from '../lib/api';
 import { AvailabilitySwitch } from '../components/AvailabilitySwitch';
-import { Badge, Modal, Stat, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
+import { Badge, Modal, btnCls, btnGhost, inputCls, useToast } from '../components/ui';
 import { useThemeStudio, type ThemeMode } from '../components/ThemeStudio';
 import { ReferenceIcon } from '../components/ReferenceIcon';
 import { PageSkeleton } from '../components/Skeleton';
@@ -10,6 +10,7 @@ import { readMemory, writeMemory } from '../lib/memoryCache';
 import type { MerchantProfile } from '../lib/merchant-contracts';
 import ShopMapPicker from '../components/ShopMapPicker';
 import { GoogleAccountLink } from '../components/GoogleAccountLink';
+import { setShopAvailability } from '../lib/shopAvailability';
 
 /** Editable fields accepted by PUT /merchant/profile (UpdateMerchantProfileDto). */
 type Form = {
@@ -187,30 +188,16 @@ export default function Profile() {
     }
   };
 
-  const toggleState = async (path: string, label: string) => {
-    setStateBusy(true);
-    try {
-      await api.post(`/merchant/${path}`);
-      toast(label);
-      await load();
-      window.dispatchEvent(new Event('sb:shop-status'));
-    } catch (e: any) {
-      toast(e.message, false);
-    } finally {
-      setStateBusy(false);
-    }
-  };
-
   const toggleAvailability = async () => {
     if (!canEdit || stateBusyRef.current) return;
     stateBusyRef.current = true; setStateBusy(true);
     const captured = captureSession();
     try {
-      const saved = await api.post(`/merchant/${merchant.isOnline ? 'offline' : 'online'}`);
+      const saved = await setShopAvailability(!(merchant.isOnline && merchant.isOpen));
       if (!sessionIsCurrent(captured)) return;
-      if (typeof saved?.isOnline !== 'boolean') throw new Error('The saved shop availability could not be confirmed.');
-      setMerchant((current: any) => ({ ...current, isOnline: saved.isOnline }));
-      toast(`Shop availability saved: ${saved.isOnline ? 'Online' : 'Offline'}.`);
+      if (typeof saved?.isOnline !== 'boolean' || typeof saved?.isOpen !== 'boolean') throw new Error('The saved shop availability could not be confirmed.');
+      setMerchant((current: any) => ({ ...current, isOnline: saved.isOnline, isOpen: saved.isOpen }));
+      toast(saved.isOnline && saved.isOpen ? 'Shop is on. Orders follow your opening hours.' : 'Shop closed. Customers cannot order right now.');
       window.dispatchEvent(new Event('sb:shop-status'));
     } catch {
       if (!sessionIsCurrent(captured)) return;
@@ -261,6 +248,7 @@ export default function Profile() {
 
   const isOnline = !!merchant.isOnline;
   const isOpen = !!merchant.isOpen;
+  const shopOn = isOnline && isOpen;
 
   return (
     <div>
@@ -282,10 +270,9 @@ export default function Profile() {
           <div className="section-divider" /><h2>Appearance</h2><p className="small muted" style={{ marginTop: 6 }}>Choose what feels comfortable. Your shop’s data stays unchanged.</p>
           <div className="swatch-row">{(['light', 'dark', 'system'] as ThemeMode[]).map((choice) => <button type="button" key={choice} className={`theme-swatch ${choice}`} aria-pressed={mode === choice} onClick={() => setMode(choice)}><span aria-hidden="true" /><b>{choice[0].toUpperCase() + choice.slice(1)}</b><small>{choice === 'system' ? 'Follow device' : `Always ${choice}`}</small></button>)}</div>
         </section>
-        <section className="panel panel-pad"><h2>Storefront controls</h2><p className="small muted" style={{ marginTop: 5 }}>Separate settings. Separate API actions.</p>
-          <div className="setting-line"><div><b>Shop open</b><p>{isOpen ? 'Open' : 'Closed'} for new orders.</p></div><button type="button" className="btn tiny" disabled={!canEdit || stateBusy} onClick={() => toggleState(isOpen ? 'close' : 'open', isOpen ? 'Shop closed' : 'Shop opened')}>{isOpen ? 'Close shop' : 'Open shop'}</button></div>
-          <div className="setting-line"><div><b>Shop availability</b><p>{isOnline ? 'Online' : 'Offline'} in customer-facing availability.</p>{!canEdit && <p>You need shop settings permission to change availability.</p>}</div><AvailabilitySwitch online={isOnline} disabled={!canEdit} busy={stateBusy} onToggle={() => void toggleAvailability()} /></div>
-          <p className="small muted" style={{ marginTop: 18 }}>Changing these flags does not record a delivery, cancel an order or prove storefront availability.</p>
+        <section className="panel panel-pad"><h2>Storefront controls</h2><p className="small muted" style={{ marginTop: 5 }}>Choose whether your shop can take customer orders.</p>
+          <div className="setting-line"><div><b>Shop status</b><p>{shopOn ? 'Shop on — customers can order during your opening hours.' : 'Shop closed — customers cannot order from your shop.'}</p>{!canEdit && <p>You need shop settings permission to change this.</p>}</div><AvailabilitySwitch open={shopOn} disabled={!canEdit} busy={stateBusy} onToggle={() => void toggleAvailability()} /></div>
+          <p className="small muted" style={{ marginTop: 18 }}>Turning the shop on does not override your opening hours. Closing it does not cancel existing orders.</p>
           <div className="section-divider" /><h3>Shop access</h3><p className="small muted" style={{ marginTop: 7 }}>New shops start active. Admin can disable or reactivate access.</p><div style={{ marginTop: 12 }}><Badge value={merchant.approvalStatus === 'APPROVED' ? 'ACTIVE' : merchant.approvalStatus === 'SUSPENDED' ? 'DISABLED' : merchant.approvalStatus} /></div>
           <div className="section-divider" /><h3>POS trial</h3><p className="small muted" style={{ marginTop: 7 }}>{posTrialSummary(merchant.posTrial)}</p>
           <div className="section-divider" /><div className="definition"><span>Rating</span><b>{(merchant.ratingAverage ?? 0).toFixed(1)} / 5 · {merchant.ratingCount ?? 0} reviews</b></div><div className="definition"><span>Commission</span><b>{merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}</b></div><div className="definition"><span>Shop type</span><b>{String(merchant.shopType ?? '—').replace(/_/g, ' ')}</b></div>
@@ -293,60 +280,6 @@ export default function Profile() {
       </div>
 
       <section className="panel" style={{ marginTop: 20 }}><div className="panel-head"><div><h2>Merchant documents</h2><p>Verification files attached to this merchant profile.</p></div><button type="button" className="btn primary" disabled={!canEdit} onClick={() => setDocumentOpen(true)}><ReferenceIcon name="upload" size="sm" /> Add document</button></div><div className="table-wrap"><table><thead><tr><th>Document</th><th>Status</th><th>Submitted</th><th>File</th></tr></thead><tbody>{(merchant.documents ?? []).map((document: any) => <tr key={document.id}><td>{String(document.documentType).replace(/_/g, ' ')}</td><td><Badge value={document.verificationStatus} /></td><td>{new Date(document.createdAt).toLocaleDateString()}</td><td><button type="button" className="btn tiny" onClick={() => void openDocument(document)}>Open</button></td></tr>)}{(merchant.documents ?? []).length === 0 && <tr><td colSpan={4}>No merchant documents have been submitted.</td></tr>}</tbody></table></div></section>
-
-      {/* Live state controls */}
-      <div hidden className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Online status</div>
-              <div className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-800">
-                <span className={`inline-block h-2.5 w-2.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                {isOnline ? 'Online' : 'Offline'}
-              </div>
-              <div className="mt-0.5 text-xs text-slate-400">Whether the shop appears to customers and can take orders.</div>
-            </div>
-            <button
-              className={isOnline ? btnGhost : btnCls}
-              disabled={!canEdit || stateBusy}
-              onClick={() => toggleState(isOnline ? 'offline' : 'online', isOnline ? 'Shop is now offline' : 'Shop is now online')}
-            >
-              {isOnline ? 'Go offline' : 'Go online'}
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Store hours</div>
-              <div className="mt-1 flex items-center gap-2 text-lg font-bold text-slate-800">
-                <span className={`inline-block h-2.5 w-2.5 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                {isOpen ? 'Open' : 'Closed'}
-              </div>
-              <div className="mt-0.5 text-xs text-slate-400">Manually open or close the storefront for new orders.</div>
-            </div>
-            <button
-              className={isOpen ? btnGhost : btnCls}
-              disabled={!canEdit || stateBusy}
-              onClick={() => toggleState(isOpen ? 'close' : 'open', isOpen ? 'Shop closed' : 'Shop opened')}
-            >
-              {isOpen ? 'Close shop' : 'Open shop'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Read-only summary */}
-      <div hidden className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Rating" value={<>{(merchant.ratingAverage ?? 0).toFixed(1)} <ReferenceIcon name="star" /></>} hint={`${merchant.ratingCount ?? 0} reviews`} />
-        <Stat
-          label="Commission"
-          value={merchant.commissionType === 'FIXED' ? pkr(merchant.commissionValue) : `${merchant.commissionValue ?? 0}%`}
-          hint="Set by admin"
-        />
-        <Stat label="Shop type" value={String(merchant.shopType ?? '—').replace(/_/g, ' ')} hint={merchant.email ?? 'No email on file'} />
-      </div>
 
       {false && !canEdit && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">

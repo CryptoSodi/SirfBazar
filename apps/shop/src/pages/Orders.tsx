@@ -118,7 +118,7 @@ export default function Orders() {
               </td>
               <td className="px-4 py-2.5">{itemCount(o)}</td>
               <td className="px-4 py-2.5 font-semibold">{pkr(o.totalAmountPaisa)}</td>
-              <td className="px-4 py-2.5"><Badge value={o.status} /></td>
+              <td className="px-4 py-2.5">{o.pendingRevision ? <span className="badge">Waiting for customer</span> : <Badge value={o.status} />}</td>
               <td className="px-4 py-2.5 text-sm">{o.rider?.fullName ?? '—'}</td>
               <td className="px-4 py-2.5 text-xs text-slate-500">{fmtTime(o.createdAt)}</td>
               <td><button type="button" className="ops-button" onClick={() => { setSelectedId(o.id); setSearchParams({ order: o.id }); }} aria-label={`View order ${o.orderNumber}`}>View</button></td>
@@ -205,7 +205,7 @@ function OrderModal({
   }, [loadOrder, uncertain]);
 
   const act = async (action: string, expectedStatus: string | string[], okMsg: string, body?: unknown) => {
-    if (actionInFlight.current) return;
+    if (actionInFlight.current || order?.pendingRevision) return;
     actionInFlight.current = true;
     setBusy(true);
     setActionError('');
@@ -260,6 +260,7 @@ function OrderModal({
   if (!order) return <Modal title="Order details" onClose={onClose}><div className="p-4" role={detailError ? 'alert' : undefined}>{detailError ? <>Unable to load this order. {detailError} <button type="button" className="ops-button" onClick={() => { setDetailError(''); setDetailLoading(true); loadOrder().catch((e) => setDetailError(errorMessage(e))).finally(() => setDetailLoading(false)); }}>Retry</button></> : detailLoading ? <InlineSkeleton label="Loading order details" rows={5} /> : 'Order details unavailable.'}</div></Modal>;
 
   const s: string = order.status;
+  const awaitingCustomer = order.pendingRevision?.status === 'PENDING';
   const items = order.items;
   const addr = order.deliveryAddress;
 
@@ -275,7 +276,7 @@ function OrderModal({
         {/* Customer + delivery */}
         <section className="order-workflow" aria-labelledby="order-next-step">
           <h3 id="order-next-step">Next step</h3>
-          {!profile ? profileError ? <><ToastMessage>Unable to check your permissions. Retry before updating this order.</ToastMessage><button type="button" className={btnGhost} onClick={retryProfile}>Retry permission check</button></> : <p role="status">Checking your shop permissions…</p> : !can(profile, 'ORDERS') ? <p>You need order-management permission to update this order. Ask the shop owner.</p> : <>
+          {awaitingCustomer ? <div role="status"><strong>Waiting for customer approval</strong><p>The proposed changes are with the customer. The original order is unchanged, and shop actions will be available after they respond or the proposal expires.</p><p>Response due by {fmtTime(order.pendingRevision?.expiresAt)}.</p></div> : !profile ? profileError ? <><ToastMessage>Unable to check your permissions. Retry before updating this order.</ToastMessage><button type="button" className={btnGhost} onClick={retryProfile}>Retry permission check</button></> : <p role="status">Checking your shop permissions…</p> : !can(profile, 'ORDERS') ? <p>You need order-management permission to update this order. Ask the shop owner.</p> : <>
             {s === 'SENT_TO_MERCHANT' && <>
               <p>Accept to start preparing. The buyer will see the update immediately after it is saved.</p>
               <div className="order-workflow-actions">
@@ -347,7 +348,7 @@ function OrderModal({
                     <span className="ml-1 text-xs text-slate-400">({it.itemStatus.replace(/_/g, ' ').toLowerCase()})</span>
                   )}
                 </span>
-                <span className="row"><span>{pkr(it.totalPricePaisa)}</span>{['SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING'].includes(s) && it.itemStatus === 'CONFIRMED' && profile && can(profile, 'ORDERS') && <button type="button" className="btn tiny" onClick={() => setUnavailableItem(it)}>Unavailable</button>}</span>
+                <span className="row"><span>{pkr(it.totalPricePaisa)}</span>{!awaitingCustomer && ['SENT_TO_MERCHANT', 'MERCHANT_ACCEPTED', 'PREPARING'].includes(s) && it.itemStatus === 'CONFIRMED' && profile && can(profile, 'ORDERS') && <button type="button" className="btn tiny" onClick={() => setUnavailableItem(it)}>Unavailable</button>}</span>
               </li>
             ))}
             {items.length === 0 && <li className="py-1 text-slate-400">No items.</li>}
@@ -382,8 +383,8 @@ function OrderModal({
           </ul>
         </details>
 
-        {rejecting && s === 'SENT_TO_MERCHANT' && <div className="rounded-xl border border-red-200 bg-red-50 p-3"><label htmlFor="rejection-reason" className="block text-xs font-semibold text-red-900">Reason for rejecting this order</label><textarea id="rejection-reason" className={`${inputCls} mt-2`} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} required /><div className="mt-2 flex gap-2"><button type="button" className={btnDanger} disabled={busy || uncertain || !reason.trim()} onClick={() => act('reject', 'MERCHANT_REJECTED', 'Order rejected', { reason: reason.trim() })}>Confirm rejection</button><button type="button" className={btnGhost} disabled={busy} onClick={() => setRejecting(false)}>Cancel</button></div></div>}
-        {unavailableItem && <UnavailableItemModal orderId={orderId} item={unavailableItem} onClose={() => setUnavailableItem(null)} onSaved={async () => { setUnavailableItem(null); await loadOrder(); reload(); toast('Item availability update sent to the customer'); }} />}
+        {rejecting && s === 'SENT_TO_MERCHANT' && !awaitingCustomer && <div className="rounded-xl border border-red-200 bg-red-50 p-3"><label htmlFor="rejection-reason" className="block text-xs font-semibold text-red-900">Reason for rejecting this order</label><textarea id="rejection-reason" className={`${inputCls} mt-2`} rows={3} value={reason} onChange={(e) => setReason(e.target.value)} required /><div className="mt-2 flex gap-2"><button type="button" className={btnDanger} disabled={busy || uncertain || !reason.trim()} onClick={() => act('reject', 'MERCHANT_REJECTED', 'Order rejected', { reason: reason.trim() })}>Confirm rejection</button><button type="button" className={btnGhost} disabled={busy} onClick={() => setRejecting(false)}>Cancel</button></div></div>}
+        {unavailableItem && !awaitingCustomer && <UnavailableItemModal orderId={orderId} item={unavailableItem} onClose={() => setUnavailableItem(null)} onSaved={async () => { setUnavailableItem(null); await loadOrder(); reload(); toast('Item availability update sent to the customer'); }} />}
       </div>
     </Modal>
   );
