@@ -1,16 +1,18 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { api, clearSession, getUser, isLoggedIn, isMerchant, logout } from './lib/api';
 import { readProfile, type MerchantProfile } from './lib/merchant-contracts';
 import { ReferenceIcon, type ReferenceIconName } from './components/ReferenceIcon';
 import { NotificationBell } from './components/NotificationBell';
 import { NewOrderAlert } from './components/NewOrderAlert';
+import { MerchantTour } from './components/MerchantTour';
 import { ThemeControl, ThemeProvider } from './components/ThemeStudio';
 import { PageSkeleton } from './components/Skeleton';
 import { readMemory, writeMemory } from './lib/memoryCache';
 import SignInPage from './auth/SignInPage';
 import SignupFlowPage from './auth/SignupFlowPage';
 import RecoveryPage from './auth/RecoveryPage';
+import CompleteIdentityPage from './auth/CompleteIdentityPage';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Orders = lazy(() => import('./pages/Orders'));
@@ -38,12 +40,16 @@ function initials(name?: string | null) {
   return (name || 'Merchant').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell() {
   const location = useLocation();
   const [profile, setProfile] = useState<MerchantProfile | null>(() => readMemory<MerchantProfile>('merchant:profile') ?? null);
+  const [profileVerified, setProfileVerified] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return localStorage.getItem('sb:sidebar-collapsed') === 'true'; } catch { return false; } });
   const [accountOpen, setAccountOpen] = useState(false);
+  const [tourReplay, setTourReplay] = useState(0);
+  const [workspaceStyles, setWorkspaceStyles] = useState<'loading' | 'ready' | 'error'>('loading');
   const accountRef = useRef<HTMLDivElement>(null);
   const user = getUser();
   const current = NAV.find((item) => item.href === location.pathname) ?? NAV[0];
@@ -52,11 +58,18 @@ function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet'; link.href = '/merchant-v2.css'; link.id = 'merchant-v2-reference-css';
+    let active = true;
+    link.onload = () => { if (active) { document.body.classList.add('merchant-v2-active'); setWorkspaceStyles('ready'); } };
+    link.onerror = () => { if (active) setWorkspaceStyles('error'); };
     document.head.appendChild(link);
-    document.body.classList.add('merchant-v2-active');
-    return () => { link.remove(); document.body.classList.remove('merchant-v2-active'); };
+    return () => { active = false; link.remove(); document.body.classList.remove('merchant-v2-active'); };
   }, []);
   useEffect(() => { setMenuOpen(false); setAccountOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    const replayTour = () => setTourReplay((value) => value + 1);
+    window.addEventListener('sb:tour-replay', replayTour);
+    return () => window.removeEventListener('sb:tour-replay', replayTour);
+  }, []);
   useEffect(() => { try { localStorage.setItem('sb:sidebar-collapsed', String(sidebarCollapsed)); } catch { /* Storage is optional. */ } }, [sidebarCollapsed]);
   useEffect(() => {
     if (!accountOpen) return;
@@ -68,15 +81,20 @@ function Shell({ children }: { children: React.ReactNode }) {
   }, [accountOpen]);
   useEffect(() => {
     let active = true;
-    const refresh = () => void Promise.all([api.get('/auth/me'), api.get('/merchant/profile')]).then(([identity, shop]) => {
+    const refresh = () => { setProfileVerified(false); setProfileError(''); void Promise.all([api.get('/auth/me'), api.get('/merchant/profile')]).then(([identity, shop]) => {
       if (!isMerchant(identity) || identity.id !== getUser()?.id) { clearSession(); return; }
-      if (active) { const nextProfile = readProfile(shop); setProfile(nextProfile); writeMemory('merchant:profile', nextProfile); }
-    }).catch(() => undefined);
+      if (active) { const nextProfile = readProfile(shop); setProfile(nextProfile); setProfileVerified(true); writeMemory('merchant:profile', nextProfile); }
+    }).catch(() => { if (active) setProfileError('We could not check your shop status. Check your connection and try again.'); }); };
     refresh();
     window.addEventListener('sb:shop-status', refresh);
     return () => { active = false; window.removeEventListener('sb:shop-status', refresh); };
   }, []);
   if (!isLoggedIn()) return <Navigate to="/sign-in" replace />;
+  if (workspaceStyles !== 'ready') return <div role="status" style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center' }}>{workspaceStyles === 'error' ? 'The workspace could not load its styles. Refresh the page to try again.' : 'Opening your workspace…'}</div>;
+
+  if (profileError) return <main className="merchant-identity-recovery"><div className="panel" role="alert"><p>{profileError}</p><button type="button" className="btn primary" onClick={() => window.dispatchEvent(new Event('sb:shop-status'))}>Retry</button></div></main>;
+  if (!profileVerified) return <div role="status" style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center' }}>Checking your shop…</div>;
+  if (profile?.approvalStatus === 'DRAFT') return <CompleteIdentityPage onComplete={() => window.dispatchEvent(new Event('sb:shop-status'))} />;
 
   const shopName = profile?.shopName ?? user?.merchant?.shopName ?? 'Your shop';
   const owner = user?.fullName ?? user?.phoneNumber ?? 'Shop owner';
@@ -88,7 +106,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="store-card" title={shopName}><span className="store-monogram">{initials(shopName)}</span><span className="store-copy"><b>{shopName}</b><small>{profile?.approvalStatus === 'APPROVED' ? 'Your merchant workspace' : profile?.approvalStatus ?? 'Merchant workspace'}</small></span></div>
       <div className="kicker">Your workspace</div>
       <nav className="nav">
-        {NAV.map((item) => <Link key={item.href} to={item.href} className={location.pathname === item.href ? 'active' : ''} aria-label={item.label} title={sidebarCollapsed ? item.label : undefined} aria-current={location.pathname === item.href ? 'page' : undefined}><ReferenceIcon name={item.icon} /><span className="nav-label">{item.label}</span></Link>)}
+        {NAV.map((item) => <Link key={item.href} to={item.href} data-tour={`nav-${item.href === '/' ? 'overview' : item.href.slice(1)}`} className={location.pathname === item.href ? 'active' : ''} aria-label={item.label} title={sidebarCollapsed ? item.label : undefined} aria-current={location.pathname === item.href ? 'page' : undefined}><ReferenceIcon name={item.icon} /><span className="nav-label">{item.label}</span></Link>)}
       </nav>
       <div className="sidebar-lower">
         <div className="user"><div className="user-row"><span className="avatar">{initials(owner)}</span><span className="user-copy"><b>{owner}</b><small>Shop owner · Merchant</small></span></div><img className="slogan-svg" src="/brand/sirfbazar-slogan-urdu.svg" alt="بازار وہی، طریقہ نیا" /></div>
@@ -97,12 +115,13 @@ function Shell({ children }: { children: React.ReactNode }) {
     {menuOpen && <button type="button" className="mobile-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
     <section className="workspace">
       <header className="topbar">
-        <button className="icon-btn mobile-menu" type="button" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><ReferenceIcon name="menu" /></button>
+        <button className="icon-btn mobile-menu" data-tour="mobile-menu" type="button" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><ReferenceIcon name="menu" /></button>
         <div className="breadcrumbs"><span className="base">Merchant workspace</span><span>/</span><strong>{current.label}</strong></div>
-        <div className="top-controls"><span className="top-text">{date}</span><span className="subtle-divider" /><ThemeControl /><NotificationBell /><div className="account-control" ref={accountRef}><button type="button" className="avatar account-trigger" aria-label="Open account menu" aria-expanded={accountOpen} aria-controls="merchant-account-menu" onClick={() => setAccountOpen((value) => !value)}>{initials(owner)}</button>{accountOpen && <div className="account-menu" id="merchant-account-menu"><div className="account-menu-identity"><strong>{owner}</strong><small>{shopName}</small></div><Link to="/profile" onClick={() => setAccountOpen(false)}><ReferenceIcon name="settings" size="sm" /> Shop settings</Link><Link to="/support" onClick={() => setAccountOpen(false)}><ReferenceIcon name="support" size="sm" /> Help & support</Link><button type="button" onClick={() => void logout()}><ReferenceIcon name="back" size="sm" /> Sign out</button></div>}</div></div>
+        <div className="top-controls"><span className="top-text">{date}</span><span className="subtle-divider" /><ThemeControl /><NotificationBell /><div className="account-control" ref={accountRef}><button type="button" className="avatar account-trigger" aria-label="Open account menu" aria-expanded={accountOpen} aria-controls="merchant-account-menu" onClick={() => setAccountOpen((value) => !value)}>{initials(owner)}</button>{accountOpen && <div className="account-menu" id="merchant-account-menu"><div className="account-menu-identity"><strong>{owner}</strong><small>{shopName}</small></div><Link to="/profile" onClick={() => setAccountOpen(false)}><ReferenceIcon name="settings" size="sm" /> Shop settings</Link><Link to="/support" onClick={() => setAccountOpen(false)}><ReferenceIcon name="support" size="sm" /> Help & support</Link><button type="button" className="tour-replay" onClick={() => { setAccountOpen(false); setTourReplay((value) => value + 1); }}><ReferenceIcon name="overview" size="sm" /> Tour the workspace</button><button type="button" onClick={() => void logout()}><ReferenceIcon name="back" size="sm" /> Sign out</button></div>}</div></div>
       </header>
-      <main id="main-content"><Suspense fallback={<PageSkeleton label="Loading workspace" />}>{children}</Suspense></main>
+      <main id="main-content"><Suspense fallback={<PageSkeleton label="Loading workspace" />}><Outlet /></Suspense></main>
     </section>
+    {profileVerified && profile?.id && user?.id && <MerchantTour shopId={profile.id} userId={user.id} replay={tourReplay} />}
   </div>;
 }
 
@@ -119,7 +138,9 @@ export default function App() {
     <Route path="/login" element={<Navigate to="/sign-in" replace />} />
     <Route path="/register" element={<Navigate to="/sign-up" replace />} />
     <Route path="/workspace" element={<Navigate to="/" replace />} />
-    {PAGES.map(([path, Page]) => <Route key={path} path={path} element={<Shell><Page /></Shell>} />)}
+    <Route element={<Shell />}>
+      {PAGES.map(([path, Page]) => <Route key={path} path={path} element={<Page />} />)}
+    </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></BrowserRouter></ThemeProvider>;
 }

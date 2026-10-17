@@ -7,6 +7,7 @@ import { paged, parsePage } from '../common/utils/pagination';
 import { resolveCategoryBranch } from '../common/utils/category-tree';
 import { isMerchantOpenAt } from '../common/merchant-hours';
 import { reviewMerchantFilter, reviewAccount, reviewProductFilter, REVIEW_SHOP_ID } from '../auth/review-access';
+import { shopProductApprovalWhere } from '../common/shop-product-visibility';
 import {
   LocationQuery,
   NearbyMerchantsQuery,
@@ -496,9 +497,12 @@ export class CatalogService {
       where: { id: productId },
       include: { category: { select: { id: true, name: true, slug: true } } },
     });
-    if (!product || product.approvalStatus !== ProductApprovalStatus.APPROVED || (product.createdByMerchantId === REVIEW_SHOP_ID && !reviewAccount(userId))) {
+    if (!product || (product.approvalStatus !== ProductApprovalStatus.APPROVED &&
+      !(product.approvalStatus === ProductApprovalStatus.PENDING && product.createdByMerchantId)) ||
+      (product.createdByMerchantId === REVIEW_SHOP_ID && !reviewAccount(userId))) {
       throw new NotFoundException('Product not found');
     }
+    const shopOnly = product.approvalStatus === ProductApprovalStatus.PENDING ? product.createdByMerchantId : null;
 
     const hasLocation = query.latitude != null && query.longitude != null;
     const reachByMerchant = new Map<string, MerchantReach>();
@@ -510,6 +514,9 @@ export class CatalogService {
       for (const { merchant, reach } of inRange) reachByMerchant.set(merchant.id, reach);
       merchantFilter = { merchantId: { in: [...reachByMerchant.keys()] } };
     }
+    if (shopOnly) merchantFilter.merchantId = hasLocation
+      ? { in: [...reachByMerchant.keys()].filter((id) => id === shopOnly) }
+      : shopOnly;
 
     const offerRows = await this.prisma.merchantProduct.findMany({
       where: { productId, ...merchantFilter, merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true, ...reviewMerchantFilter(userId) } },
@@ -664,7 +671,7 @@ export class CatalogService {
       merchantId,
       merchant: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true, ...reviewMerchantFilter(userId) },
       product: {
-        approvalStatus: ProductApprovalStatus.APPROVED,
+        AND: [shopProductApprovalWhere(merchantId), {
         ...(query.categoryId ? { categoryId: { in: await resolveCategoryBranch(this.prisma, query.categoryId) } } : {}),
         ...(query.q?.trim()
           ? {
@@ -674,6 +681,7 @@ export class CatalogService {
               ],
             }
           : {}),
+        }],
       },
     };
 

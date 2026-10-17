@@ -8,6 +8,7 @@ import { MerchantApprovalStatus } from '../common/constants';
 import { lockOwners } from '../common/owner-lock';
 import { serializable } from '../common/transaction';
 import { requireReviewCartBoundary } from '../auth/review-access';
+import { canSellShopProduct } from '../common/shop-product-visibility';
 
 export interface CartOwner {
   customerId?: string;
@@ -319,7 +320,7 @@ export class CartService {
         unitPricePaisa: currentPrice,
         totalPaisa: currentPrice * item.quantity,
         priceChanged: currentPrice !== item.unitPricePaisa,
-        inStock: mp.isAvailable && mp.stockQuantity >= item.quantity,
+        inStock: mp.isAvailable && canSellShopProduct(mp.product, mp.merchantId) && mp.stockQuantity >= item.quantity,
         stockQuantity: mp.stockQuantity,
       });
       group.subtotalPaisa += currentPrice * item.quantity;
@@ -379,7 +380,7 @@ export class CartService {
     if (requireAcceptingOrders && (!mp.merchant.isOnline || !mp.merchant.isOpen)) {
       throw new BadRequestException(`${mp.merchant.shopName} is not accepting orders right now. Choose another shop or try again later.`);
     }
-    if (mp.product.approvalStatus !== 'APPROVED') {
+    if (!canSellShopProduct(mp.product, mp.merchantId)) {
       throw new BadRequestException('This product is not available');
     }
     return mp;

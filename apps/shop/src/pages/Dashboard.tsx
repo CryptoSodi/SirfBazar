@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast';
 import { ReferenceIcon, type ReferenceIconName } from '../components/ReferenceIcon';
 import { DashboardSkeleton } from '../components/Skeleton';
 import { readMemory, writeMemory } from '../lib/memoryCache';
+import { setShopAvailability } from '../lib/shopAvailability';
 
 type Listing = { id: string; stockQuantity: number; lowStockThreshold?: number | null; product?: { name?: string; size?: string | null; unit?: string | null } };
 type Day = { date: string; orders: number; salesPaisa: number };
@@ -74,18 +75,18 @@ export default function Dashboard() {
   const lowStock = useMemo(() => listings.filter((item) => item.lowStockThreshold != null && item.stockQuantity <= item.lowStockThreshold).slice(0, 3), [listings]);
   const bars = earnings?.byDay?.slice(-7) ?? [];
   const maxBar = Math.max(1, ...bars.map((item) => item.salesPaisa));
-  const isOnline = stats?.isOnline ?? false;
+  const shopOn = !!stats?.isOnline && !!stats?.isOpen;
 
   async function toggleOnline() {
     if (busyRef.current || !can(profile, 'STORE')) return;
     busyRef.current = true; setBusy(true);
     const captured = captureSession();
     try {
-      const saved = await api.post(isOnline ? '/merchant/offline' : '/merchant/online');
+      const saved = await setShopAvailability(!shopOn);
       if (!sessionIsCurrent(captured)) return;
-      if (typeof saved?.isOnline !== 'boolean') throw new Error('The saved shop availability could not be confirmed.');
-      setStats((current) => current ? { ...current, isOnline: saved.isOnline } : current);
-      toast(`Shop availability saved: ${saved.isOnline ? 'Online' : 'Offline'}.`);
+      if (typeof saved?.isOnline !== 'boolean' || typeof saved?.isOpen !== 'boolean') throw new Error('The saved shop availability could not be confirmed.');
+      setStats((current) => current ? { ...current, isOnline: saved.isOnline, isOpen: saved.isOpen } : current);
+      toast(saved.isOnline && saved.isOpen ? 'Shop is on. Orders follow your opening hours.' : 'Shop closed. Customers cannot order right now.');
       window.dispatchEvent(new Event('sb:shop-status'));
     } catch (cause) {
       if (!sessionIsCurrent(captured)) return;
@@ -104,7 +105,7 @@ export default function Dashboard() {
     ['Delivering', stats.activeDeliveries, 'Assigned and on the way', 'rider', ''],
   ];
   return <>
-    <div className="page-heading"><div><div className="kicker">{new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Karachi' }).format(new Date()).toUpperCase()}</div><h1>Your shop, in focus.</h1><p>Orders to prepare. Riders to assign. Everything in one place.</p></div><div className="heading-actions"><div><AvailabilitySwitch online={isOnline} disabled={!can(profile, 'STORE')} busy={busy} onToggle={() => void toggleOnline()} />{!can(profile, 'STORE') && <small className="small muted" style={{ display: 'block' }}>You need shop settings permission to change availability.</small>}</div><Link className="btn primary" to="/products"><ReferenceIcon name="plus" /> Add product</Link></div></div>
+    <div className="page-heading" data-tour="dashboard-heading"><div><div className="kicker">{new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Karachi' }).format(new Date()).toUpperCase()}</div><h1>Your shop, in focus.</h1><p>Orders to prepare. Riders to assign. Everything in one place.</p></div><div className="heading-actions dashboard-heading-actions"><div><AvailabilitySwitch open={shopOn} disabled={!can(profile, 'STORE') || profile.approvalStatus !== 'APPROVED'} busy={busy} onToggle={() => void toggleOnline()} />{!can(profile, 'STORE') && <small className="small muted" style={{ display: 'block' }}>You need shop settings permission to change availability.</small>}</div>{import.meta.env.DEV && <button className="btn" type="button" onClick={() => window.dispatchEvent(new Event('sb:tour-replay'))}><ReferenceIcon name="overview" /> Test walkthrough</button>}<Link className="btn primary" to="/products"><ReferenceIcon name="plus" /> Add product</Link></div></div>
     {partialError && <div className="state-banner warn" role="alert"><ReferenceIcon name="alert" /><span>{partialError}</span><button className="btn tiny" onClick={() => void load()}>Refresh</button></div>}
     {stats.todayOrders === 0 && <div className="state-banner"><ReferenceIcon name="store" /><span><b>Your workspace is ready. Make it your own.</b><small>Add products and check your shop hours and delivery area. No admin approval is needed for new shops.</small></span><Link className="btn tiny" to="/profile">Shop setup <ReferenceIcon name="arrow" size="sm" /></Link></div>}
     <section className="metrics" aria-label="Today’s shop summary">

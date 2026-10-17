@@ -1,7 +1,7 @@
 import './availability-switch.css';
 
-export function AvailabilitySwitch({ online, disabled, busy, onToggle }: {
-  online: boolean;
+export function AvailabilitySwitch({ open, disabled, busy, onToggle }: {
+  open: boolean;
   disabled?: boolean;
   busy?: boolean;
   onToggle: () => void;
@@ -10,14 +10,14 @@ export function AvailabilitySwitch({ online, disabled, busy, onToggle }: {
     type="button"
     className="availability-switch"
     role="switch"
-    aria-label="Shop availability"
-    aria-checked={online}
+    aria-label="Accept customer orders"
+    aria-checked={open}
     aria-busy={busy || undefined}
     disabled={disabled || busy}
     onClick={onToggle}
   >
-    <span className={`availability-track${online ? ' online' : ''}`} aria-hidden="true"><span className="availability-thumb" /></span>
-    <span className="availability-label">{online ? 'Online' : 'Offline'}</span>
+    <span className={`availability-track${open ? ' online' : ''}`} aria-hidden="true"><span className="availability-thumb" /></span>
+    <span className="availability-label">{open ? 'Shop on' : 'Shop closed'}</span>
     {busy && <span className="availability-saving" role="status">Saving…</span>}
   </button>;
 }

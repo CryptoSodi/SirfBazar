@@ -209,17 +209,58 @@ test('replacement proposal rechecks stock and price atomically before changing i
   assert.equal(f.state().listings[2].stockQuantity, 1);
 });
 
-test('fulfillment cannot advance while a revision awaits customer approval', async () => {
+test('merchant decisions and fulfillment cannot advance while a revision awaits customer approval', async () => {
   const f = fixture();
   const revision = await f.merchantOrders.createRevision('owner', 'order-1', requestId, [{ originalItemId: 'item-1', action: 'REMOVE' }]);
   const tx = {
     order: { findUnique: async () => ({ id: 'order-1', status: 'PREPARING', parentOrderId: null }) },
     orderRevision: { findFirst: async () => ({ id: revision.id }) },
   };
-  await assert.rejects(
-    new OrderStatusService({}, {}).applyInTransaction(tx, 'order-1', 'READY_FOR_PICKUP', { role: 'MERCHANT' }),
-    /approval is required/,
-  );
+  for (const nextStatus of ['MERCHANT_ACCEPTED', 'MERCHANT_REJECTED', 'PREPARING', 'READY_FOR_PICKUP']) {
+    await assert.rejects(
+      new OrderStatusService({}, {}).applyInTransaction(tx, 'order-1', nextStatus, { role: 'MERCHANT' }),
+      /Wait for the customer to respond/,
+    );
+  }
+});
+
+test('merchant order list exposes a pending customer revision to suppress order actions and alerts', async () => {
+  const f = fixture();
+  const revision = await f.merchantOrders.createRevision('owner', 'order-1', requestId, [{ originalItemId: 'item-1', action: 'REMOVE' }]);
+  f.db.order.findMany = async ({ include }) => {
+    assert.deepEqual(include.revisions.where, { status: 'PENDING' });
+    return [{ ...structuredClone(f.state().order), revisions: [{ id: revision.id, status: 'PENDING', expiresAt: revision.expiresAt }] }];
+  };
+  f.db.order.count = async () => 1;
+  const rows = await f.merchantOrders.list('owner', { status: 'SENT_TO_MERCHANT' });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].pendingRevision.id, revision.id);
+  assert.equal('revisions' in rows[0], false);
+});
+
+test('customer response or proposal expiry starts a fresh merchant acceptance window', async () => {
+  const order = { id: 'order-1', orderNumber: 'SB-1', customerId: 'buyer-1', customer: { userId: 'buyer-user' }, createdAt: new Date(Date.now() - 40 * 60_000) };
+  let resolvedAt = new Date();
+  let rejections = 0;
+  const db = {
+    order: { findMany: async ({ where }) => { assert.equal(where.status, 'SENT_TO_MERCHANT'); return [order]; } },
+    orderRevision: { findFirst: async ({ where }) => { assert.deepEqual(where.status.in, ['APPROVED', 'REJECTED', 'EXPIRED']); return { resolvedAt }; } },
+  };
+  db.$transaction = async (work) => work(db);
+  const orders = Object.create(OrdersService.prototype);
+  Object.assign(orders, {
+    prisma: db,
+    logger: { log() {} },
+    statusService: { applyInTransaction: async () => { rejections++; return { status: 'MERCHANT_REJECTED' }; }, broadcastStatus() {} },
+    restoreStockInTransaction: async () => {},
+    refundIfPaidInTransaction: async () => null,
+    notifications: { notify: async () => {} },
+  });
+  await orders.expireUnacceptedOrders(10);
+  assert.equal(rejections, 0, 'a recently resolved proposal must not time out immediately');
+  resolvedAt = new Date(Date.now() - 11 * 60_000);
+  await orders.expireUnacceptedOrders(10);
+  assert.equal(rejections, 1, 'the ordinary timeout applies after the new window has elapsed');
 });
 
 test('customer rejection and expiry preserve the original order and do not change stock', async () => {

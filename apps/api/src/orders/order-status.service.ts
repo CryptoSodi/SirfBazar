@@ -29,7 +29,10 @@ export class OrderStatusService {
   async applyInTransaction(tx: Prisma.TransactionClient, orderId: string, status: OrderStatus, by: StatusChangeBy, extraFields: Record<string, unknown> = {}, expected?: string[]) {
     const before = await tx.order.findUnique({ where: { id: orderId }, select: { id: true, status: true, parentOrderId: true } });
     if (!before) throw new NotFoundException('Order not found');
-    const fulfillmentStatuses: OrderStatus[] = [
+    const statusesBlockedByRevision: OrderStatus[] = [
+      OrderStatus.MERCHANT_ACCEPTED,
+      OrderStatus.MERCHANT_REJECTED,
+      OrderStatus.PREPARING,
       OrderStatus.READY_FOR_PICKUP,
       OrderStatus.RIDER_ASSIGNED,
       OrderStatus.RIDER_ARRIVED_AT_SHOP,
@@ -38,9 +41,9 @@ export class OrderStatusService {
       OrderStatus.RIDER_ARRIVED_AT_CUSTOMER,
       OrderStatus.DELIVERED,
     ];
-    if (fulfillmentStatuses.includes(status) && (tx as any).orderRevision?.findFirst) {
+    if (statusesBlockedByRevision.includes(status) && (tx as any).orderRevision?.findFirst) {
       const pendingRevision = await tx.orderRevision.findFirst({ where: { orderId, status: 'PENDING' }, select: { id: true } });
-      if (pendingRevision) throw new ConflictException('Customer approval is required before this order can be fulfilled.');
+      if (pendingRevision) throw new ConflictException('Wait for the customer to respond to the proposed order changes before updating this order.');
     }
     if (TERMINAL.includes(before.status) || (expected && !expected.includes(before.status))) {
       throw new ConflictException('Order status changed. Refresh before continuing.');

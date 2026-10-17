@@ -154,7 +154,9 @@ async function request(method: string, path: string, body?: unknown, retry = tru
   if (version !== authVersion) throw changed();
   if (!res.ok) {
     const msg = friendlyError(data?.message, res.status, path, data?.code);
-    throw new Error(msg);
+    const error = new Error(msg) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
   }
   return data;
 }
@@ -191,6 +193,30 @@ export async function uploadImage(uri: string): Promise<string> {
   if (version !== authVersion) throw changed();
   if (!res.ok) throw new Error(friendlyError(data?.message, res.status, '/uploads/image'));
   return data.url as string;
+}
+
+/** Complete a newly created shop's required private ID-card upload. */
+export async function uploadMerchantIdentity(uri: string): Promise<void> {
+  const version = authVersion;
+  const access = await serializeAuth(async () => version === authVersion ? AsyncStorage.getItem(KEYS.access) : null);
+  if (!access || version !== authVersion) throw changed();
+  const name = uri.split('/').pop() || 'identity.jpg';
+  const ext = (name.split('.').pop() || 'jpg').toLowerCase();
+  const form = new FormData();
+  form.append('documentType', 'IDENTITY');
+  form.append('file', { uri, name, type: `image/${ext === 'jpg' ? 'jpeg' : ext}` } as any);
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/merchant/documents/upload`, {
+      method: 'POST', headers: { authorization: `Bearer ${access}` }, body: form as any,
+    });
+  } catch { throw new Error('ID-card upload failed. Check your connection and retry.'); }
+  if (version !== authVersion) throw changed();
+  if (!response.ok) {
+    let body: any = null;
+    try { body = await response.json(); } catch { /* no response body */ }
+    throw new Error(friendlyError(body?.message, response.status, '/merchant/documents/upload'));
+  }
 }
 
 /** After /merchant/onboard returns fresh tokens, persist them + the user profile. */

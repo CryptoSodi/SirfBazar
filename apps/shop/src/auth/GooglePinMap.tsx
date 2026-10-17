@@ -1,6 +1,6 @@
 import { ToastMessage } from '../components/Toast';
 import { useEffect, useRef, useState } from 'react'
-import { googleMapsApiKey as apiKey, googleMapsMapId as mapId, loadGoogleMaps, loadGoogleMapsMarkers } from './googleMaps'
+import { googleMapsApiKey as apiKey, googleMapsMapId as mapId, loadGoogleMaps, loadGoogleMapsMarkers, onGoogleMapsAuthenticationFailure } from './googleMaps'
 
 type Coordinates = { lat: number; lng: number }
 type Props = { latitude: string; longitude: string; onSelect: (coordinates: Coordinates) => void; onError?: () => void }
@@ -31,6 +31,9 @@ export default function GooglePinMap({ latitude, longitude, onSelect, onError }:
     let cancelled = false
     let clickListener: google.maps.MapsEventListener | undefined
     let marker: google.maps.marker.AdvancedMarkerElement | undefined
+    const stopListening = onGoogleMapsAuthenticationFailure(() => {
+      if (!cancelled) { setError('Google Maps key is not authorized for this site. Use a local testing key that allows this address.'); onError?.() }
+    })
 
     async function initialize() {
       try {
@@ -66,6 +69,7 @@ export default function GooglePinMap({ latitude, longitude, onSelect, onError }:
     void initialize()
     return () => {
       cancelled = true
+      stopListening()
       clickListener?.remove()
       if (marker) marker.map = null
       mapRef.current = null

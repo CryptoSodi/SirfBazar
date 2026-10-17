@@ -62,7 +62,7 @@ export default function OrderDetailScreen() {
   }, [order?.status, order?.rider?.id, canAssign, loadRiders]);
 
   const act = async (action: string, expected: string[], body?: any) => {
-    if (lock.current || uncertain) return;
+    if (lock.current || uncertain || order?.pendingRevision) return;
     lock.current = true; setBusy(true);
     const confirmed = (fresh: any) => expected.includes(fresh.status) && (action !== 'assign-rider' || fresh.rider?.id === body?.riderId);
     try {
@@ -107,12 +107,12 @@ export default function OrderDetailScreen() {
     <Text style={[s.body, { fontWeight: '700', marginTop: 4 }]}>{statusLabel(order.status)} · {order.paymentMethod}</Text>
     <View style={[s.card, { marginTop: 14, gap: 12 }]}>
       <Text style={s.h2}>Next step</Text>
-      {order.status === 'SENT_TO_MERCHANT' && <>
+      {order.status === 'SENT_TO_MERCHANT' && !order.pendingRevision && <>
         <Text style={s.body}>Accept to start preparing. The buyer will see Preparing after it is saved.</Text>
         <TouchableOpacity accessibilityRole="button" style={s.btn} disabled={busy || uncertain} onPress={() => void act('accept', ['PREPARING'])}><IconLabel icon="check" style={s.btnText}>{busy ? 'Accepting…' : 'Accept order'}</IconLabel></TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" style={s.btnDanger} disabled={busy || uncertain} onPress={() => Alert.alert('Reject this order?', 'The buyer will be told that your shop cannot fulfil this order.', [{ text: 'Keep order', style: 'cancel' }, { text: 'Reject order', style: 'destructive', onPress: () => void act('reject', ['MERCHANT_REJECTED'], { reason: 'Unable to fulfil right now' }) }])}><IconLabel icon="close" style={s.btnDangerText}>Reject order</IconLabel></TouchableOpacity>
       </>}
-      {PREPARATION.includes(order.status) && <>
+      {PREPARATION.includes(order.status) && !order.pendingRevision && <>
         <Text style={s.body}>{order.status === 'READY_FOR_PICKUP' ? 'The order is packed. Assign a rider for pickup.' : 'Assign a rider while packing. Mark ready only when all items are packed.'}</Text>
         {order.rider ? <IconLabel icon="bike" style={s.body}>Assigned rider: {order.rider.fullName}</IconLabel> : !canAssign ? <Text style={s.body}>Ask the shop owner to assign a rider. Rider-management permission is required.</Text> : <>
           <Text style={s.h2}>Delivery rider</Text>

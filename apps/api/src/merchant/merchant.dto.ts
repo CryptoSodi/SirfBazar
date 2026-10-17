@@ -26,6 +26,11 @@ import { ShopType, StaffPermission } from '../common/constants';
 const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+export class SetShopAvailabilityDto {
+  @IsBoolean()
+  open: boolean;
+}
+
 export class OperatingHoursDto {
   @Type(() => Number) @IsInt() @Min(0) @Max(6)
   dayOfWeek: number;

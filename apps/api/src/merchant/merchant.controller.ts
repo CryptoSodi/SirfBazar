@@ -14,6 +14,7 @@ import {
   CreateRiderDto,
   CreateStaffDto,
   OnboardMerchantDto,
+  SetShopAvailabilityDto,
   UpdateMerchantProductDto,
   UpdateMerchantProfileDto,
   UpdateRiderDto,
@@ -96,6 +97,11 @@ export class MerchantController {
   @Post('offline')
   offline(@CurrentUser() user: AuthUser) {
     return this.merchant.setOnline(user.userId, false);
+  }
+
+  @Post('availability')
+  availability(@CurrentUser() user: AuthUser, @Body() dto: SetShopAvailabilityDto) {
+    return this.merchant.setAvailability(user.userId, dto.open);
   }
 
   @Post('open')
