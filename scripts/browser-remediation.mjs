@@ -460,8 +460,9 @@ try {
   assert.equal(await importDialog.evaluate((node) => node.contains(document.activeElement)), true, 'import modal receives keyboard focus');
   await shopPage.keyboard.press('Tab');
   assert.equal(await importDialog.evaluate((node) => node.contains(document.activeElement)), true, 'import modal contains Tab focus');
-  await importDialog.getByLabel('Or paste CSV').fill('Item,Sale,Qty,SKU\n"Rice, Premium",120.50,7,00123');
-  await importDialog.getByRole('button', { name: 'Map columns' }).click();
+  await importDialog.getByText('Paste CSV instead').click();
+  await importDialog.getByLabel('CSV text').fill('Item,Sale,Qty,SKU\n"Rice, Premium",120.50,7,00123');
+  await importDialog.getByRole('button', { name: 'Map pasted columns' }).click();
   await importDialog.getByLabel('Product name').selectOption({ label: 'Item' });
   await importDialog.getByLabel('Sale price (Rs)').selectOption({ label: 'Sale' });
   await importDialog.getByLabel('Stock quantity (units)').selectOption({ label: 'Qty' });
@@ -497,11 +498,12 @@ try {
   await signupPage.goto(`${process.env.BROWSER_SHOP_URL}/sign-up`);
   await signupPage.getByLabel('First Name').fill('Test');
   await signupPage.getByLabel('Last Name').fill('Merchant');
-  await signupPage.getByLabel('Mobile Number', { exact: true }).fill('03000000000');
-  await signupPage.getByLabel(/National Identity Card/).fill('00000-0000000-0');
-  await signupPage.getByLabel(/Account Security Password/).fill('Dummy12345');
+  await signupPage.getByLabel(/Mobile number/i).fill('03000000000');
+  await signupPage.getByLabel(/^Password/).fill('Dummy12345');
   await signupPage.getByLabel(/I confirm that I am authorized/).check();
   await signupPage.getByRole('button', { name: /Continue to Shop Details/ }).click();
+  await signupPage.getByLabel(/National Identity Card/).fill('00000-0000000-0');
+  await signupPage.getByLabel(/CNIC image/).setInputFiles({ name: 'fixture-id.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2zQAAAABJRU5ErkJggg==', 'base64') });
   await signupPage.getByLabel(/Shop Name/).fill('Fixture Shop');
   await signupPage.getByLabel(/Shop Contact Number/).fill('03000000000');
   await signupPage.getByLabel(/Physical Address/).fill('Fixture Street, Lahore');
