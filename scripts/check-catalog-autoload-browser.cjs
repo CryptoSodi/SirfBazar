@@ -16,7 +16,7 @@ module.exports = async (page, baseUrl) => {
     const path = url.pathname;
     let data = [];
     if (path.endsWith('/auth/me')) data = user;
-    else if (path.endsWith('/merchant/profile')) data = { id: 'scroll-shop', shopName: 'Scroll Fixture', isOwner: true, permissions: ['INVENTORY'], approvalStatus: 'APPROVED' };
+    else if (path.endsWith('/merchant/profile')) data = { id: 'scroll-shop', shopName: 'Scroll Fixture', isOwner: true, permissions: ['INVENTORY'], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' };
     else if (path.endsWith('/products/categories')) data = [];
     else if (path.endsWith('/merchant/catalog')) {
       const batch = Number(url.searchParams.get('page'));
