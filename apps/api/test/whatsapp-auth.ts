@@ -7,7 +7,7 @@ import { AuthModule } from '../src/auth/auth.module';
 import { OTP_SERVICE } from '../src/auth/otp/otp.interface';
 
 // In-memory database double: no production data, credentials, or outbound messages.
-function fixture() {
+function fixture({ registration = false } = {}) {
   const rows: any[] = [];
   const sent: Array<{ phone: string; code: string; purpose: string }> = [];
   let deliveryError: Error | undefined;
@@ -20,7 +20,7 @@ function fixture() {
     }
     return row[key] === value;
   });
-  const user = { id: 'test-user', isPhoneVerified: true, status: 'ACTIVE', staffOf: [], merchant: null };
+  let user: any = registration ? null : { id: 'test-user', isPhoneVerified: true, status: 'ACTIVE', staffOf: [], merchant: null };
   const db: any = {
     $executeRaw: async () => 1,
     otpCode: {
@@ -42,7 +42,12 @@ function fixture() {
         return { count: selected.length };
       },
     },
-    user: { findFirst: async () => user, findUnique: async () => user, update: async () => user },
+    user: {
+      findFirst: async () => user,
+      findUnique: async () => user,
+      create: async ({ data }: any) => { user = { id: 'test-user', status: 'ACTIVE', staffOf: [], merchant: null, ...data }; return user; },
+      update: async () => user,
+    },
     customer: { upsert: async () => ({}) },
     refreshToken: { updateMany: async () => ({ count: 0 }) },
     $transaction: async (action: any) => {
@@ -130,7 +135,7 @@ async function main() {
     assert.ok(resend.rows[0].consumedAt, 'resend invalidates the previous challenge');
     assert.equal(resend.rows[1].consumedAt, null);
 
-    const register = fixture();
+    const register = fixture({ registration: true });
     const registration = await register.service.startMerchantRegistration({
       firstName: 'Test', lastName: 'Only', channel: 'mobile', contact: '03001234567',
       cnic: '0000000000000', password: 'test-only-password',

@@ -257,6 +257,7 @@ try {
     localStorage.setItem('sbs.accessToken', token);
     localStorage.setItem('sbs.refreshToken', 'fixture-refresh');
     localStorage.setItem('sbs.user', JSON.stringify({ id: 'owner-1', fullName: 'Fixture Cashier', merchant: { id: 'merchant-1' } }));
+    localStorage.setItem('sb:merchant-tour:v2:merchant-1:owner-1', 'done');
   });
   await ipos.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
@@ -322,6 +323,7 @@ try {
     localStorage.setItem('sbs.accessToken', token);
     localStorage.setItem('sbs.refreshToken', 'fixture-refresh');
     localStorage.setItem('sbs.user', JSON.stringify({ id: 'owner-1', fullName: 'Fixture Merchant', merchant: { id: 'merchant-1' } }));
+    localStorage.setItem('sb:merchant-tour:v2:merchant-1:owner-1', 'done');
   });
   const profileFixture = { id: 'merchant-1', shopName: 'Fixture Shop', address: 'Fixture Market', city: 'Lahore', area: 'Center', phoneNumber: '03000000000', isOwner: true, permissions: [], isOnline: true, isOpen: true, approvalStatus: 'APPROVED', documents: [], minimumOrderValuePaisa: 0 };
   let profileSave = null;
@@ -386,6 +388,7 @@ try {
     localStorage.setItem('sbs.accessToken', token);
     localStorage.setItem('sbs.refreshToken', 'fixture-refresh');
     localStorage.setItem('sbs.user', JSON.stringify({ id: 'owner-1', role: 'CUSTOMER', merchant: { id: 'merchant-1', name: 'Fixture Shop' } }));
+    localStorage.setItem('sb:merchant-tour:v2:merchant-1:owner-1', 'done');
   });
   const catalog = [
     { productId: 'product-rice', name: 'Fixture Basmati Rice', category: { name: 'Rice' }, unit: 'pack', alreadyListed: false },
