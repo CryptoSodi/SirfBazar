@@ -260,6 +260,7 @@ try {
   });
   await ipos.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/auth/me')) return route.fulfill(json({ id: 'owner-1', merchant: { id: 'merchant-1' } }));
     if (path.endsWith('/merchant/profile')) return route.fulfill(json({ id: 'merchant-1', shopName: 'Fixture Shop', isOwner: true, permissions: [], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' }));
     if (path.endsWith('/pos/capabilities')) return route.fulfill(json({ version: 2, merchantId: 'merchant-1', idempotentSales: true, barcodeLookup: true }));
     if (path.endsWith('/pos/products')) return route.fulfill(json([{ merchantProductId: 'offer-1', productId: 'product-1', name: 'Fixture milk', unit: 'pack', barcode: null, pricePaisa: 25000, stockQuantity: 4, isAvailable: true }]));
@@ -326,6 +327,7 @@ try {
   let profileSave = null;
   await profile.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/auth/me')) return route.fulfill(json({ id: 'owner-1', merchant: { id: 'merchant-1' } }));
     if (path.endsWith('/merchant/profile') && route.request().method() === 'GET') return route.fulfill(json(profileFixture));
     if (path.endsWith('/merchant/profile') && route.request().method() === 'PUT') {
       profileSave = route.request().postDataJSON();
