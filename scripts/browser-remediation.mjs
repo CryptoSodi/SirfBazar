@@ -401,6 +401,7 @@ try {
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path.endsWith('/auth/me')) return route.fulfill(json({ id: 'owner-1', merchant: { id: 'merchant-1', name: 'Fixture Shop' } }));
+    if (path.endsWith('/merchant/profile')) return route.fulfill(json({ id: 'merchant-1', shopName: 'Fixture Shop', isOwner: true, permissions: [], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' }));
     if (path.endsWith('/products/categories')) return route.fulfill(json([{ id: 'grocery', name: 'Grocery', children: [{ id: 'rice', name: 'Rice' }, { id: 'tea', name: 'Tea' }] }]));
     if (path.endsWith('/merchant/catalog')) {
       const category = url.searchParams.get('categoryId');
