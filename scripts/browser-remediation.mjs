@@ -257,9 +257,11 @@ try {
     localStorage.setItem('sbs.accessToken', token);
     localStorage.setItem('sbs.refreshToken', 'fixture-refresh');
     localStorage.setItem('sbs.user', JSON.stringify({ id: 'owner-1', fullName: 'Fixture Cashier', merchant: { id: 'merchant-1' } }));
+    localStorage.setItem('sb:merchant-tour:v2:merchant-1:owner-1', 'done');
   });
   await ipos.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/auth/me')) return route.fulfill(json({ id: 'owner-1', merchant: { id: 'merchant-1' } }));
     if (path.endsWith('/merchant/profile')) return route.fulfill(json({ id: 'merchant-1', shopName: 'Fixture Shop', isOwner: true, permissions: [], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' }));
     if (path.endsWith('/pos/capabilities')) return route.fulfill(json({ version: 2, merchantId: 'merchant-1', idempotentSales: true, barcodeLookup: true }));
     if (path.endsWith('/pos/products')) return route.fulfill(json([{ merchantProductId: 'offer-1', productId: 'product-1', name: 'Fixture milk', unit: 'pack', barcode: null, pricePaisa: 25000, stockQuantity: 4, isAvailable: true }]));
@@ -321,11 +323,13 @@ try {
     localStorage.setItem('sbs.accessToken', token);
     localStorage.setItem('sbs.refreshToken', 'fixture-refresh');
     localStorage.setItem('sbs.user', JSON.stringify({ id: 'owner-1', fullName: 'Fixture Merchant', merchant: { id: 'merchant-1' } }));
+    localStorage.setItem('sb:merchant-tour:v2:merchant-1:owner-1', 'done');
   });
   const profileFixture = { id: 'merchant-1', shopName: 'Fixture Shop', address: 'Fixture Market', city: 'Lahore', area: 'Center', phoneNumber: '03000000000', isOwner: true, permissions: [], isOnline: true, isOpen: true, approvalStatus: 'APPROVED', documents: [], minimumOrderValuePaisa: 0 };
   let profileSave = null;
   await profile.route('**/api/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/auth/me')) return route.fulfill(json({ id: 'owner-1', merchant: { id: 'merchant-1' } }));
     if (path.endsWith('/merchant/profile') && route.request().method() === 'GET') return route.fulfill(json(profileFixture));
     if (path.endsWith('/merchant/profile') && route.request().method() === 'PUT') {
       profileSave = route.request().postDataJSON();
@@ -384,6 +388,7 @@ try {
     localStorage.setItem('sbs.accessToken', token);
     localStorage.setItem('sbs.refreshToken', 'fixture-refresh');
     localStorage.setItem('sbs.user', JSON.stringify({ id: 'owner-1', role: 'CUSTOMER', merchant: { id: 'merchant-1', name: 'Fixture Shop' } }));
+    localStorage.setItem('sb:merchant-tour:v2:merchant-1:owner-1', 'done');
   });
   const catalog = [
     { productId: 'product-rice', name: 'Fixture Basmati Rice', category: { name: 'Rice' }, unit: 'pack', alreadyListed: false },
@@ -396,6 +401,7 @@ try {
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path.endsWith('/auth/me')) return route.fulfill(json({ id: 'owner-1', merchant: { id: 'merchant-1', name: 'Fixture Shop' } }));
+    if (path.endsWith('/merchant/profile')) return route.fulfill(json({ id: 'merchant-1', shopName: 'Fixture Shop', isOwner: true, permissions: [], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' }));
     if (path.endsWith('/products/categories')) return route.fulfill(json([{ id: 'grocery', name: 'Grocery', children: [{ id: 'rice', name: 'Rice' }, { id: 'tea', name: 'Tea' }] }]));
     if (path.endsWith('/merchant/catalog')) {
       const category = url.searchParams.get('categoryId');
@@ -454,8 +460,9 @@ try {
   assert.equal(await importDialog.evaluate((node) => node.contains(document.activeElement)), true, 'import modal receives keyboard focus');
   await shopPage.keyboard.press('Tab');
   assert.equal(await importDialog.evaluate((node) => node.contains(document.activeElement)), true, 'import modal contains Tab focus');
-  await importDialog.getByLabel('Or paste CSV').fill('Item,Sale,Qty,SKU\n"Rice, Premium",120.50,7,00123');
-  await importDialog.getByRole('button', { name: 'Map columns' }).click();
+  await importDialog.getByText('Paste CSV instead').click();
+  await importDialog.getByLabel('CSV text').fill('Item,Sale,Qty,SKU\n"Rice, Premium",120.50,7,00123');
+  await importDialog.getByRole('button', { name: 'Map pasted columns' }).click();
   await importDialog.getByLabel('Product name').selectOption({ label: 'Item' });
   await importDialog.getByLabel('Sale price (Rs)').selectOption({ label: 'Sale' });
   await importDialog.getByLabel('Stock quantity (units)').selectOption({ label: 'Qty' });
@@ -491,11 +498,12 @@ try {
   await signupPage.goto(`${process.env.BROWSER_SHOP_URL}/sign-up`);
   await signupPage.getByLabel('First Name').fill('Test');
   await signupPage.getByLabel('Last Name').fill('Merchant');
-  await signupPage.getByLabel('Mobile Number', { exact: true }).fill('03000000000');
-  await signupPage.getByLabel(/National Identity Card/).fill('00000-0000000-0');
-  await signupPage.getByLabel(/Account Security Password/).fill('Dummy12345');
+  await signupPage.getByLabel(/Mobile number/i).fill('03000000000');
+  await signupPage.getByLabel(/^Password/).fill('Dummy12345');
   await signupPage.getByLabel(/I confirm that I am authorized/).check();
   await signupPage.getByRole('button', { name: /Continue to Shop Details/ }).click();
+  await signupPage.getByLabel(/National Identity Card/).fill('00000-0000000-0');
+  await signupPage.getByLabel(/CNIC image/).setInputFiles({ name: 'fixture-id.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2zQAAAABJRU5ErkJggg==', 'base64') });
   await signupPage.getByLabel(/Shop Name/).fill('Fixture Shop');
   await signupPage.getByLabel(/Shop Contact Number/).fill('03000000000');
   await signupPage.getByLabel(/Physical Address/).fill('Fixture Street, Lahore');

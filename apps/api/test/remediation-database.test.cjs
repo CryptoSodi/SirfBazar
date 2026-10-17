@@ -117,12 +117,16 @@ test('PostgreSQL concurrent assignment and readiness converge without losing rid
   assert.equal((await prisma.rider.findUniqueOrThrow({ where: { id: f.riders[0].id } })).currentOrderId, order.id);
 });
 
-test('PostgreSQL onboarding is active immediately; admin disable/reactivate preserves account and trial', async () => {
+test('PostgreSQL onboarding activates after ID upload; admin disable/reactivate preserves account and trial', async () => {
   const user = await prisma.user.create({ data: { role: 'CUSTOMER', status: 'ACTIVE', phoneNumber: `saas-${randomUUID()}` } });
   const service = new MerchantService(prisma, access, { log: async () => {} }, { issueTokens: async () => ({ accessToken: 'fixture', refreshToken: 'fixture', user }) });
   const result = await service.onboard(user.id, { shopName: 'Disposable SaaS shop', shopType: 'GROCERY', address: 'Fixture', city: 'Lahore', phoneNumber: user.phoneNumber, latitude: 31.5, longitude: 74.3 });
   const shop = result.merchant;
-  assert.equal(shop.approvalStatus, 'APPROVED'); assert.equal(shop.isOnline, true); assert.equal(shop.isOpen, true);
+  assert.equal(shop.approvalStatus, 'DRAFT');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2zQAAAABJRU5ErkJggg==', 'base64');
+  await service.uploadDocument(user.id, 'IDENTITY', { buffer: png, mimetype: 'image/png' });
+  const activated = await prisma.merchant.findUniqueOrThrow({ where: { id: shop.id } });
+  assert.equal(activated.approvalStatus, 'APPROVED'); assert.equal(activated.isOnline, true); assert.equal(activated.isOpen, true);
   await admin.setMerchantApproval(user.id, shop.id, 'SUSPENDED', 'Disposable SaaS check');
   await assert.rejects(access.merchantContext(user.id), /disabled/);
   await assert.rejects(service.setOnline(user.id, true), /disabled/);

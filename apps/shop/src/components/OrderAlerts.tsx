@@ -72,7 +72,7 @@ export default function OrderAlerts({ merchantId }: { merchantId: string }) {
         if (!active || !current()) return;
         // A late snapshot must not undo a new order/acceptance received live.
         if (revision !== before) { syncAgain = true; return; }
-        const next = orders.map(({ id, orderNumber }) => ({ id, orderNumber }));
+        const next = orders.filter(order => !order.pendingRevision).map(({ id, orderNumber }) => ({ id, orderNumber }));
         announce(next);
         setPending(next);
         setSyncError(false);

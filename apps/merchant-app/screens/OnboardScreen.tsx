@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, clearAuth, finishOnboarding, getUser, uploadImage } from '../lib/api';
+import { api, clearAuth, finishOnboarding, getUser, uploadImage, uploadMerchantIdentity } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 const SHOP_TYPES = [
@@ -22,6 +22,8 @@ const label = (t: string) => t.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g,
 export default function OnboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [photo, setPhoto] = useState<string | null>(null);
+  const [identityPhoto, setIdentityPhoto] = useState<string | null>(null);
+  const [shopCreated, setShopCreated] = useState(false);
   const [shopName, setShopName] = useState('');
   const [shopType, setShopType] = useState('GROCERY');
   const [phone, setPhone] = useState('');
@@ -83,6 +85,14 @@ export default function OnboardScreen() {
   };
 
   const submit = async () => {
+    if (!identityPhoto) return setError('Choose an image of the shop owner’s CNIC.');
+    if (shopCreated) {
+      setBusy(true); setError('');
+      try { await uploadMerchantIdentity(identityPhoto); navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }); }
+      catch { setError('Your shop was saved, but the CNIC image did not upload. Check your connection and retry.'); }
+      finally { setBusy(false); }
+      return;
+    }
     if (!shopName.trim()) return setError('Shop name is required.');
     if (!phone.trim()) return setError('Phone number is required.');
     if (!address.trim()) return setError('Address is required.');
@@ -121,6 +131,8 @@ export default function OnboardScreen() {
       });
 
       await finishOnboarding(res); // store the fresh merchant tokens + profile
+      setShopCreated(true);
+      await uploadMerchantIdentity(identityPhoto);
       navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
     } catch (e: any) {
       setError(e?.message ?? 'Could not create your shop.');
@@ -158,6 +170,12 @@ export default function OnboardScreen() {
             <IconLabel icon="image" style={s.btnGhostText}>Gallery</IconLabel>
           </TouchableOpacity>
         </View>
+
+        <Text style={[s.h2, { marginTop: 18, marginBottom: 8 }]}>Owner CNIC image (required)</Text>
+        <TouchableOpacity style={s.btnGhost} onPress={async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 });
+          if (!result.canceled && result.assets?.[0]) setIdentityPhoto(result.assets[0].uri);
+        }}><Text style={s.btnGhostText}>{identityPhoto ? 'CNIC image selected · Change image' : 'Choose CNIC image'}</Text></TouchableOpacity>
 
         {/* Basics */}
         <Field label="Shop name">
@@ -248,9 +266,9 @@ export default function OnboardScreen() {
         {!!error && <ToastMessage>{error}</ToastMessage>}
 
         <TouchableOpacity style={[s.btn, { marginTop: 16 }]} onPress={submit} disabled={busy}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Create my shop</Text>}
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>{shopCreated ? 'Retry ID upload' : 'Create my shop'}</Text>}
         </TouchableOpacity>
-        <Text style={[s.faint, { textAlign: 'center', marginTop: 8 }]}>Your shop is reviewed before it goes live.</Text>
+        <Text style={[s.faint, { textAlign: 'center', marginTop: 8 }]}>Your shop opens after the required CNIC image is saved.</Text>
         <TouchableOpacity onPress={logout} style={{ marginTop: 14, alignItems: 'center' }}>
           <Text style={s.muted}>Log out</Text>
         </TouchableOpacity>

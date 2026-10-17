@@ -16,6 +16,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { AccessService } from '../common/access.service';
 import { PricingService } from '../common/pricing.service';
+import { canSellShopProduct, shopProductApprovalWhere } from '../common/shop-product-visibility';
 import { OrderStatusService } from './order-status.service';
 import {
   MerchantApprovalStatus,
@@ -133,7 +134,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     const groups = new Map<string, { merchant: (typeof listings)[number]['merchant']; items: Array<{ merchantProductId: string; productId: string; merchantId: string; name: string; quantity: number; unitPricePaisa: number }> }>();
     for (const item of cart.items) {
       const listing = byId.get(item.merchantProductId);
-      if (!listing || listing.product.approvalStatus !== 'APPROVED' || listing.product.isRestricted || listing.product.requiresPrescription || listing.product.category.isRestricted || !listing.product.category.isActive) {
+      if (!listing || !canSellShopProduct(listing.product, listing.merchantId) || listing.product.isRestricted || listing.product.requiresPrescription || listing.product.category.isRestricted || !listing.product.category.isActive) {
         throw new BadRequestException('A product in your basket is unavailable for checkout');
       }
       const merchant = listing.merchant;
@@ -1093,7 +1094,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
               stockQuantity: { gte: quantity },
               pricePaisa: proposed.pricePaisa,
               discountPricePaisa: proposed.discountPricePaisa,
-              product: { approvalStatus: 'APPROVED', isRestricted: false, requiresPrescription: false, category: { isRestricted: false, isActive: true } },
+              product: { AND: [shopProductApprovalWhere(merchantId), { isRestricted: false, requiresPrescription: false, category: { isRestricted: false, isActive: true } }] },
             },
             data: { stockQuantity: { decrement: quantity } },
           });
@@ -1285,6 +1286,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
       let refund;
       try {
         ({ changed, refund } = await serializable(this.prisma, async (tx) => {
+          // A customer decision (or proposal expiry) returns the unchanged order
+          // to the merchant. Give them a fresh acceptance window from that event.
+          const latestResolvedRevision = await tx.orderRevision.findFirst({
+            where: { orderId: order.id, status: { in: ['APPROVED', 'REJECTED', 'EXPIRED'] }, resolvedAt: { not: null } },
+            orderBy: { resolvedAt: 'desc' },
+            select: { resolvedAt: true },
+          });
+          if (latestResolvedRevision?.resolvedAt && latestResolvedRevision.resolvedAt >= cutoff) {
+            return { changed: null, refund: null };
+          }
           const result = await this.statusService.applyInTransaction(tx, order.id, OrderStatus.MERCHANT_REJECTED, { role: 'SYSTEM', notes: `Shop did not respond within ${timeoutMinutes} minutes` }, { cancellationReason: 'Merchant did not respond in time', cancelledAt: new Date() }, [OrderStatus.SENT_TO_MERCHANT]);
           await this.restoreStockInTransaction(tx, order.id);
           const refund = await this.refundIfPaidInTransaction(tx, order.id, order.customerId, 'Merchant did not respond in time');
@@ -1294,6 +1305,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         if (error instanceof ConflictException) continue;
         throw error;
       }
+      if (!changed) continue;
       this.statusService.broadcastStatus(changed);
       await this.notifications.notify({
         userId: order.customer.userId,

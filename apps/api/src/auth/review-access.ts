@@ -87,7 +87,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   CouponsController: ['listActive'],
   CustomersController: ['profile', 'updateProfile', 'deleteAccount', 'addresses', 'createAddress', 'updateAddress', 'deleteAddress', 'setDefault'],
   OrdersController: ['quote', 'place', 'list', 'detail', 'track', 'cancel', 'respondReplacement', 'respondRevision', 'rate'],
-  MerchantController: ['profile', 'updateProfile', 'addDocument', 'uploadDocument', 'documentFile', 'online', 'offline', 'open', 'close', 'dashboard', 'earnings', 'settlements', 'listProducts', 'browseCatalog', 'addProduct', 'bulkPreview', 'bulkUpload', 'updateProduct', 'removeProduct', 'listRiders', 'getRider', 'riderOrders', 'createRider', 'updateRider', 'removeRider', 'activateRider', 'deactivateRider', 'approveRider', 'rejectRider', 'listStaff', 'createStaff', 'updateStaff', 'removeStaff'],
+  MerchantController: ['profile', 'updateProfile', 'addDocument', 'uploadDocument', 'documentFile', 'online', 'offline', 'availability', 'open', 'close', 'dashboard', 'earnings', 'settlements', 'listProducts', 'browseCatalog', 'addProduct', 'bulkPreview', 'bulkUpload', 'updateProduct', 'removeProduct', 'listRiders', 'getRider', 'riderOrders', 'createRider', 'updateRider', 'removeRider', 'activateRider', 'deactivateRider', 'approveRider', 'rejectRider', 'listStaff', 'createStaff', 'updateStaff', 'removeStaff'],
   MerchantOrdersController: ['list', 'detail', 'accept', 'reject', 'preparing', 'ready', 'assignRider', 'itemUnavailable', 'createRevision'],
   RiderController: ['profile', 'online', 'offline', 'location', 'assigned', 'history', 'orderDetail', 'arrivedShop', 'pickedUp', 'arrivedCustomer', 'delivered', 'reportIssue'],
   SupportController: ['create', 'listOwn', 'get', 'addMessage'],

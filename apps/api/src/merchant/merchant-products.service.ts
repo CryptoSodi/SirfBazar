@@ -8,6 +8,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { serializable } from '../common/transaction';
 import { resolveCategoryBranch } from '../common/utils/category-tree';
 import { reviewProductFilter, requireReviewProductBoundary } from '../auth/review-access';
+import { canSellShopProduct } from '../common/shop-product-visibility';
 
 const slugify = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -121,37 +122,47 @@ export class MerchantProductsService {
       throw new BadRequestException('Provide productId (catalog product) or newProduct');
     }
 
+    if (dto.discountPricePaisa != null && dto.discountPricePaisa >= dto.pricePaisa) {
+      throw new BadRequestException('Discount price must be below the regular price');
+    }
+
     if (dto.newProduct) {
       const category = await this.prisma.category.findUnique({
         where: { id: dto.newProduct.categoryId },
       });
-      if (!category) throw new BadRequestException('Category not found');
-      let slug = slugify(dto.newProduct.name);
-      if (await this.prisma.product.findUnique({ where: { slug } })) {
-        slug = `${slug}-${randomBytes(2).toString('hex')}`;
-      }
-      // Merchant-created products await admin approval before customers see them.
-      const product = await this.prisma.product.create({
-        data: {
-          name: dto.newProduct.name,
-          slug,
-          brand: dto.newProduct.brand ?? null,
-          description: dto.newProduct.description ?? null,
-          categoryId: dto.newProduct.categoryId,
-          imageUrl: dto.newProduct.imageUrl ?? null,
-          unit: dto.newProduct.unit,
-          size: dto.newProduct.size ?? null,
+      if (!category?.isActive || category.isRestricted) throw new BadRequestException('Choose an active, unrestricted category');
+      // Product and shop listing are one operation: a failed listing must not
+      // leave an orphan submission waiting in the shared-catalogue queue.
+      return serializable(this.prisma, async (tx) => {
+        let slug = slugify(dto.newProduct!.name);
+        if (await tx.product.findUnique({ where: { slug } })) slug = `${slug}-${randomBytes(4).toString('hex')}`;
+        const product = await tx.product.create({ data: {
+          name: dto.newProduct!.name, slug,
+          brand: dto.newProduct!.brand ?? null,
+          description: dto.newProduct!.description ?? null,
+          categoryId: dto.newProduct!.categoryId,
+          imageUrl: dto.newProduct!.imageUrl ?? null,
+          unit: dto.newProduct!.unit,
+          size: dto.newProduct!.size ?? null,
           approvalStatus: ProductApprovalStatus.PENDING,
           createdByMerchantId: ctx.merchantId,
-        },
+        } });
+        return tx.merchantProduct.create({
+          data: {
+            merchantId: ctx.merchantId, productId: product.id,
+            pricePaisa: dto.pricePaisa, discountPricePaisa: dto.discountPricePaisa ?? null,
+            stockQuantity: dto.stockQuantity, lowStockThreshold: dto.lowStockThreshold ?? 5,
+            merchantSku: dto.merchantSku ?? null,
+          },
+          include: { product: true },
+        });
       });
-      productId = product.id;
     } else {
       const product = await this.prisma.product.findUnique({ where: { id: productId } });
       if (!product) throw new NotFoundException('Catalog product not found');
       requireReviewProductBoundary(product.createdByMerchantId, ctx.merchantId);
-      if (product.approvalStatus === ProductApprovalStatus.DISABLED) {
-        throw new BadRequestException('This product has been disabled by the platform');
+      if (!canSellShopProduct(product, ctx.merchantId)) {
+        throw new BadRequestException('This product is not available to add to your shop');
       }
     }
 
@@ -159,10 +170,6 @@ export class MerchantProductsService {
       where: { merchantId_productId: { merchantId: ctx.merchantId, productId: productId! } },
     });
     if (existing) throw new BadRequestException('This product is already listed in your shop');
-
-    if (dto.discountPricePaisa != null && dto.discountPricePaisa >= dto.pricePaisa) {
-      throw new BadRequestException('Discount price must be below the regular price');
-    }
 
     return this.prisma.merchantProduct.create({
       data: {
@@ -275,7 +282,7 @@ export class MerchantProductsService {
           else if (names.length) error = 'Name matches catalogue products; select an exact product or barcode';
         }
       }
-      if (product && product.approvalStatus !== ProductApprovalStatus.APPROVED) error = 'Catalogue product is not approved';
+      if (product && !canSellShopProduct(product, merchantId)) error = 'Product is not available to this shop';
       const identity = product ? `product:${product.id}` : `new:${item.name?.trim().toLocaleLowerCase()}:${item.categoryId}`;
       if (seen.has(identity)) error = 'Duplicate product in this import';
       seen.add(identity);
@@ -391,7 +398,7 @@ export class MerchantProductsService {
           } else {
             const product = await tx.product.findUnique({ where: { id: productId }, include: { category: true } });
             if (product) requireReviewProductBoundary(product.createdByMerchantId, ctx.merchantId);
-            if (!product || product.approvalStatus === ProductApprovalStatus.DISABLED || product.approvalStatus === ProductApprovalStatus.REJECTED || product.isRestricted || product.requiresPrescription || product.category.isRestricted) {
+            if (!product || !canSellShopProduct(product, ctx.merchantId) || product.isRestricted || product.requiresPrescription || product.category.isRestricted || !product.category.isActive) {
               throw new ConflictException('Catalogue product is unavailable. Preview again.');
             }
             const current = await tx.merchantProduct.findUnique({ where: { merchantId_productId: { merchantId: ctx.merchantId, productId } } });

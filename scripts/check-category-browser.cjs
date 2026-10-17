@@ -1,7 +1,7 @@
 // Intercepted local fixture only; never sends real merchant mutations.
 module.exports = async (page, baseUrl) => {
   const user = { id: 'category-owner', status: 'ACTIVE', merchant: { id: 'category-shop' } };
-  const profile = { id: 'category-shop', shopName: 'Category Review Shop', isOwner: true, permissions: ['INVENTORY', 'POS'], approvalStatus: 'APPROVED' };
+  const profile = { id: 'category-shop', shopName: 'Category Review Shop', isOwner: true, permissions: ['INVENTORY', 'POS'], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' };
   const categories = [{ id: 'produce', name: 'Fruits & Vegetables', children: [{ id: 'fruit', name: 'Fresh Fruits' }, { id: 'veg', name: 'Fresh Vegetables' }] }, { id: 'meat', name: 'Meat & Seafood', children: [{ id: 'chicken', name: 'Chicken' }, { id: 'seafood', name: 'Seafood' }] }];
   const catalog = [{ productId: 'apple', name: 'Apples', category: { id: 'fruit', name: 'Fresh Fruits' }, alreadyListed: false }, { productId: 'banana', name: 'Bananas', category: { id: 'fruit', name: 'Fresh Fruits' }, alreadyListed: true }, { productId: 'arvi', name: 'Arvi', category: { id: 'veg', name: 'Fresh Vegetables' }, alreadyListed: false }, { productId: 'chicken', name: 'Chicken breast', category: { id: 'chicken', name: 'Chicken' }, alreadyListed: false }];
   const uploads = [];
@@ -29,6 +29,7 @@ module.exports = async (page, baseUrl) => {
   await page.context().addInitScript(({ user }) => {
     localStorage.setItem('sbs.accessToken', 'fixture.' + btoa(JSON.stringify({ role: 'MERCHANT_OWNER', exp: 4102444800 })) + '.fixture');
     localStorage.setItem('sbs.user', JSON.stringify(user));
+    localStorage.setItem(`sb:merchant-tour:v2:${user.merchant.id}:${user.id}`, 'done');
     localStorage.setItem('sirfbazar.merchant.theme', 'light');
   }, { user });
   await page.setViewportSize({ width: 1440, height: 1000 });

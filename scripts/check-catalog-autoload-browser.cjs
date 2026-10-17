@@ -9,13 +9,14 @@ module.exports = async (page, baseUrl) => {
   await page.context().addInitScript(({ user }) => {
     localStorage.setItem('sbs.accessToken', 'fixture.' + btoa(JSON.stringify({ role: 'MERCHANT_OWNER', exp: 4102444800 })) + '.fixture');
     localStorage.setItem('sbs.user', JSON.stringify(user));
+    localStorage.setItem(`sb:merchant-tour:v2:${user.merchant.id}:${user.id}`, 'done');
   }, { user });
   await page.context().route('**/api/**', async route => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     let data = [];
     if (path.endsWith('/auth/me')) data = user;
-    else if (path.endsWith('/merchant/profile')) data = { id: 'scroll-shop', shopName: 'Scroll Fixture', isOwner: true, permissions: ['INVENTORY'], approvalStatus: 'APPROVED' };
+    else if (path.endsWith('/merchant/profile')) data = { id: 'scroll-shop', shopName: 'Scroll Fixture', isOwner: true, permissions: ['INVENTORY'], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' };
     else if (path.endsWith('/products/categories')) data = [];
     else if (path.endsWith('/merchant/catalog')) {
       const batch = Number(url.searchParams.get('page'));

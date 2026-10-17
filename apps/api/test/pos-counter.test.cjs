@@ -22,7 +22,12 @@ function fixture() {
         try { return await task({
           merchantProduct: { updateMany: async ({ where, data }) => {
             assert.equal(where.merchantId, 'shop'); assert.equal(where.isAvailable, true);
-            assert.equal(where.pricePaisa, offer.pricePaisa); assert.equal(where.product.approvalStatus, 'APPROVED');
+            assert.equal(where.pricePaisa, offer.pricePaisa);
+            assert.deepEqual(where.product.AND[0].OR, [
+              { approvalStatus: 'APPROVED' },
+              { approvalStatus: 'PENDING', createdByMerchantId: 'shop' },
+            ]);
+            if (offer.product.approvalStatus !== 'APPROVED' && !(offer.product.approvalStatus === 'PENDING' && offer.product.createdByMerchantId === 'shop')) return { count: 0 };
             if (state.stock < where.stockQuantity.gte) return { count: 0 };
             state.stock -= data.stockQuantity.decrement; return { count: 1 };
           } },
@@ -75,6 +80,19 @@ test('unavailable, restricted, fractional and stale-price sales are rejected wit
   const f = fixture();
   await assert.rejects(f.service.createSale('owner', { ...input, items: [{ ...input.items[0], quantity: 1.5 }] }), /Invalid quantity/);
   await assert.rejects(f.service.createSale('owner', { ...input, items: [...input.items, ...input.items] }), /Combine/);
+});
+test('shop-owned pending product can be sold at POS; another shop pending product cannot', async () => {
+  const own = fixture();
+  own.offer.product.approvalStatus = 'PENDING'; own.offer.product.createdByMerchantId = 'shop';
+  assert.equal((await own.service.lookupProduct('owner', '00123')).isAvailable, true);
+  await own.service.createSale('owner', input);
+  assert.equal(own.state().stock, 8);
+
+  const foreign = fixture();
+  foreign.offer.product.approvalStatus = 'PENDING'; foreign.offer.product.createdByMerchantId = 'other-shop';
+  assert.equal((await foreign.service.lookupProduct('owner', '00123')).isAvailable, false);
+  await assert.rejects(foreign.service.createSale('owner', input), /unavailable/);
+  assert.equal(foreign.state().stock, 10);
 });
 test('a failed financial audit rolls the sale and stock back', async () => {
   const f = fixture(); f.failAudit(); await assert.rejects(f.service.createSale('owner', input), /Audit write failure/);

@@ -98,7 +98,7 @@ export const merchantApi = {
     const origin = captureSession()
     return session(await json('/auth/merchant-login', { identifier, password }), origin)
   },
-  startRegistration(values: { firstName: string; lastName: string; channel: 'mobile' | 'email'; contact: string; cnic: string; password: string }) {
+  startRegistration(values: { firstName: string; lastName: string; channel: 'mobile' | 'email'; contact: string; email?: string; cnic: string; password: string }) {
     return json('/auth/merchant-register/start', values) as Promise<{ attemptId: string; message: string }>
   },
   async verifyRegistration(attemptId: string, code: string) {
@@ -111,7 +111,21 @@ export const merchantApi = {
   resetPassword(identifier: string, code: string, password: string) {
     return json('/auth/merchant-password/reset', { identifier, code, password })
   },
-  async createShop(values: { shopName: string; shopContactNumber: string; businessType: string; shopAddress: string; latitude: number; longitude: number; imageDataUrl?: string }, token: string, origin: BrowserSession) {
+  async uploadIdentity(file: File, token: string, origin: BrowserSession) {
+    requireRegistrationContext(token, origin)
+    const form = new FormData()
+    form.append('documentType', 'IDENTITY')
+    form.append('file', file)
+    let response: Response
+    try {
+      response = await fetch(resolveApiUrl(API_URL, '/merchant/documents/upload'), {
+        method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(30000),
+      })
+    } catch { throw new ApiError('Your shop was created, but the ID-card image did not upload. Check your connection and retry.') }
+    if (!sessionGenerationIsCurrent(origin)) throw new ApiError('Your session changed. Refresh this page.', 409)
+    if (!response.ok) throw new ApiError('Your shop was created, but the ID-card image did not upload. Check the image and retry.', response.status)
+  },
+  async createShop(values: { shopName: string; shopContactNumber: string; businessType: string; shopAddress: string; latitude: number; longitude: number; serviceRadiusKm: number; deliveryFeePaisa: number; minimumOrderValuePaisa: number; imageDataUrl?: string }, token: string, origin: BrowserSession) {
     requireRegistrationContext(token, origin)
     const bannerUrl = values.imageDataUrl ? await uploadImage(values.imageDataUrl, token) : undefined
     requireRegistrationContext(token, origin)
@@ -125,6 +139,9 @@ export const merchantApi = {
       area: location.area,
       latitude: values.latitude,
       longitude: values.longitude,
+      serviceRadiusKm: values.serviceRadiusKm,
+      deliveryFeePaisa: values.deliveryFeePaisa,
+      minimumOrderValuePaisa: values.minimumOrderValuePaisa,
       bannerUrl,
     }, token)
     requireRegistrationContext(token, origin)
