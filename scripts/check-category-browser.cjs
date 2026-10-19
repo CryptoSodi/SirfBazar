@@ -16,7 +16,7 @@ module.exports = async (page, baseUrl) => {
       if (failCatalog) { await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Catalogue unavailable. Try again.' }) }); return; }
       const selected = url.searchParams.get('categoryId');
       const parent = categories.find(c => c.id === selected);
-      const items = catalog.filter(p => (!selected || p.category.id === selected || parent?.children.some(c => c.id === p.category.id)) && p.name.toLowerCase().includes((url.searchParams.get('q') || '').toLowerCase()));
+      const items = catalog.filter(p => (!selected || p.category.id === selected || parent?.children.some(c => c.id === p.category.id)) && (!url.searchParams.has('unlistedOnly') || !p.alreadyListed) && p.name.toLowerCase().includes((url.searchParams.get('q') || '').toLowerCase()));
       data = { items, total: items.length, totalPages: 1 };
     } else if (path.endsWith('/merchant/products/bulk-upload')) {
       const payload = route.request().postDataJSON(); uploads.push(payload);
@@ -38,6 +38,10 @@ module.exports = async (page, baseUrl) => {
   await parent.focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Collapse Fruits & Vegetables', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Fresh Fruits', exact: true }).click();
+  await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();
+  if (await page.locator('.catalog-product-name').getByText('Bananas', { exact: true }).count()) throw Error('Default catalogue showed a product already in this shop');
+  const catalogView = page.getByRole('combobox', { name: 'Show and sort catalog products' });
+  await catalogView.selectOption('all:az');
   await page.getByRole('checkbox', { name: 'Already in my shop: Bananas', exact: true }).waitFor();
   await page.getByRole('checkbox', { name: 'Select loaded', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Deselect loaded', exact: true }).uncheck();
@@ -70,9 +74,9 @@ module.exports = async (page, baseUrl) => {
     await review.getByLabel(/Stock quantity for/).nth(index).fill('5');
   }
   await page.screenshot({ path: 'output/playwright/categories-desktop.png', fullPage: true });
-  await page.getByRole('combobox', { name: 'Sort loaded products' }).selectOption('za');
+  await catalogView.selectOption('all:za');
   if (await page.locator('.catalog-product-name').first().textContent() !== 'Bananas') throw Error('Visible-page sort failed');
-  await page.getByRole('combobox', { name: 'Sort loaded products' }).selectOption('az');
+  await catalogView.selectOption('all:az');
   await page.getByRole('button', { name: 'Import products', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   await page.keyboard.press('Escape');
