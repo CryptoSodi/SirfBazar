@@ -136,7 +136,7 @@ test('PostgreSQL review lifecycle: real auth, isolated inventory/order/delivery,
   assert.notEqual(team.userId, normalUser.id);
   assert.ok(team.userId.startsWith(r.REVIEW_MEMBER_PREFIX));
   await assert.rejects(auth.issueTokens(team.userId, 'RIDER'), /not login/);
-  const staff = await people.createStaff(merchant.userId, { fullName: 'Demo staff', phoneNumber: '+923008889990', roleName: 'Cashier', permissions: ['POS'] });
+  const staff = await people.createStaff(merchant.userId, { fullName: 'Demo staff', phoneNumber: '+923008889990', password: 'ReviewOnly123', roleName: 'Cashier', permissions: ['POS'] });
   assert.ok(staff.userId.startsWith(r.REVIEW_MEMBER_PREFIX));
   assert.equal((await db.user.findUniqueOrThrow({ where: { id: normalUser.id } })).role, 'CUSTOMER');
   await people.updateRider(merchant.userId, team.id, { fullName: 'Updated demo rider' });

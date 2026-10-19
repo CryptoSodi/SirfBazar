@@ -4,10 +4,11 @@ import { AccessService } from '../common/access.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, StaffPermission, UserRole } from '../common/constants';
-import { CreateRiderDto, CreateStaffDto, UpdateRiderDto, UpdateStaffDto } from './merchant.dto';
+import { ChangeStaffPasswordDto, CreateRiderDto, CreateStaffDto, UpdateRiderDto, UpdateStaffDto } from './merchant.dto';
 import { serializable } from '../common/transaction';
 import { reviewPhone, reviewAccount, REVIEW_MEMBER_PREFIX, REVIEW_SHOP_ID } from '../auth/review-access';
 import { createHash } from 'node:crypto';
+import * as bcrypt from 'bcryptjs';
 
 const demoMemberId = (kind: string, phone: string) => `${REVIEW_MEMBER_PREFIX}${kind}-${createHash('sha256').update(phone).digest('hex').slice(0, 24)}`;
 
@@ -219,6 +220,7 @@ export class MerchantPeopleService {
       throw new BadRequestException('This phone number already belongs to another account');
     }
 
+    const passwordHash = demoId ? undefined : await bcrypt.hash(dto.password, 12);
     const staff = await this.prisma.$transaction(async (tx) => {
       const staffUser = await tx.user.create({
         data: {
@@ -226,6 +228,7 @@ export class MerchantPeopleService {
           phoneNumber: demoId ? `REVIEW:${demoId}` : dto.phoneNumber,
           fullName: dto.fullName,
           role: UserRole.MERCHANT_STAFF,
+          ...(passwordHash ? { passwordHash } : {}),
         },
       });
       return tx.merchantStaff.create({
@@ -246,6 +249,23 @@ export class MerchantPeopleService {
       newValue: { roleName: dto.roleName, permissions: dto.permissions },
     });
     return { ...staff, permissions: dto.permissions };
+  }
+
+  async changeStaffPassword(userId: string, staffId: string, dto: ChangeStaffPasswordDto) {
+    const ctx = await this.access.merchantContext(userId);
+    if (!ctx.isOwner) throw new BadRequestException('Only the shop owner can manage staff');
+    const staff = await this.prisma.merchantStaff.findFirst({
+      where: { id: staffId, merchantId: ctx.merchantId },
+      select: { id: true, userId: true },
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: staff.userId }, data: { passwordHash } }),
+      this.prisma.refreshToken.updateMany({ where: { userId: staff.userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    await this.audit.log({ userId, action: 'STAFF_PASSWORD_CHANGED', entityType: 'MerchantStaff', entityId: staff.id });
+    return { changed: true };
   }
 
   async updateStaff(userId: string, staffId: string, dto: UpdateStaffDto) {

@@ -83,7 +83,7 @@ async function main() {
 
   const staffPhone = `+92307${suffix}`;
   const staff = await request('POST', '/merchant/staff', token, {
-    fullName: `QA Staff ${suffix}`, phoneNumber: staffPhone, roleName: 'Order assistant', permissions: ['ORDERS'],
+    fullName: `QA Staff ${suffix}`, phoneNumber: staffPhone, password: `TestStaff${suffix}1`, roleName: 'Order assistant', permissions: ['ORDERS'],
   });
   await request('PUT', `/merchant/staff/${staff.id}`, token, {
     roleName: 'Inventory assistant', permissions: ['ORDERS', 'INVENTORY'], status: 'ACTIVE',

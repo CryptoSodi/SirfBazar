@@ -486,7 +486,9 @@ export class AuthService {
     }
     await this.enforceOtpRequestLimit(clean, 'MERCHANT_PASSWORD_RESET');
     const user = await this.merchantUserByIdentifier(clean);
-    if (user) {
+    // Staff credentials are assigned and changed by the shop owner. Keep the
+    // response generic so a recovery request cannot reveal account ownership.
+    if (user?.merchant) {
       const code = this.isMockOtp ? '123456' : generateNumericCode(6);
       const attempt = await this.createOtp(clean, 'MERCHANT_PASSWORD_RESET', code);
       if (!this.isMockOtp && !clean.includes('@')) {
@@ -501,7 +503,7 @@ export class AuthService {
     if (reviewPhone(clean)) throw new BadRequestException('Reserved review identity.');
     const user = await this.merchantUserByIdentifier(clean);
     const otp = await this.prisma.otpCode.findFirst({ where: { phoneNumber: clean, purpose: 'MERCHANT_PASSWORD_RESET', consumedAt: null }, orderBy: { createdAt: 'desc' } });
-    if (!user || !otp || otp.expiresAt < new Date() || otp.attempts >= this.otpMaxAttempts) throw new UnauthorizedException('Recovery code is invalid or expired.');
+    if (!user?.merchant || !otp || otp.expiresAt < new Date() || otp.attempts >= this.otpMaxAttempts) throw new UnauthorizedException('Recovery code is invalid or expired.');
     await this.consumeOtp(otp, code);
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(password, 12) } }),

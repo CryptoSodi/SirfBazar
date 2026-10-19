@@ -252,7 +252,7 @@ export default function Profile() {
 
   return (
     <div>
-      <section className="page-heading"><div><div className="kicker">Store management</div><h1>Shop settings</h1><p>Your shop identity, storefront controls and workspace preferences.</p></div></section>
+      <section className="page-heading"><div><div className="kicker">Store management</div><h1>Shop settings</h1><p>Your shop identity, storefront controls and workspace preferences.</p></div><button className="btn" type="button" onClick={() => window.dispatchEvent(new Event('sb:tour-replay'))}><ReferenceIcon name="overview" size="sm" /> Replay workspace tour</button></section>
       <GoogleAccountLink />
       {!canEdit && <div className="state-banner warning"><ReferenceIcon name="lock" /><div><b>{disabledShop ? 'Shop disabled' : 'Read-only settings'}</b><p>{disabledShop ? 'Your shop has been disabled by admin. Contact support to restore access. Your profile remains available here.' : 'You do not have the Store permission to edit shop details or storefront controls.'}</p></div></div>}
       <div className="settings-grid">

@@ -112,6 +112,7 @@ function mount(file, cutAt, expose, dependencies, globals = {}) {
         verifyRegistration: () => verification.promise,
       } },
       '../lib/api': { captureSession, sessionGenerationIsCurrent },
+      '../lib/merchant-tour-state': { queueFirstMerchantTour() {} },
       './lib/session': { getSession: () => null, saveSession() {} },
     });
   const renderShop = () => shop.render();

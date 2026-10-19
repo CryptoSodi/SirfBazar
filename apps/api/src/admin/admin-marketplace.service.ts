@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -379,20 +379,25 @@ export class AdminMarketplaceService {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Product not found');
 
-    await this.prisma.product.update({
-      where: { id: productId },
+    if (product.approvalStatus === status) return { ok: true, approvalStatus: status };
+    const changed = await this.prisma.product.updateMany({
+      where: { id: productId, approvalStatus: product.approvalStatus },
       data: { approvalStatus: status },
     });
+    if (changed.count !== 1) throw new ConflictException('Product approval changed. Please refresh and try again.');
 
     // Tell the merchant who requested this product.
     if (product.createdByMerchantId && (status === 'APPROVED' || status === 'REJECTED')) {
       const merchant = await this.prisma.merchant.findUnique({
         where: { id: product.createdByMerchantId },
-        select: { userId: true },
+          select: { userId: true, staff: { where: { status: 'ACTIVE' }, select: { userId: true, permissions: true } } },
       });
       if (merchant) {
-        await this.notifications.notify({
-          userId: merchant.userId,
+          const recipients = [merchant.userId, ...merchant.staff.filter((member) => {
+            try { return (JSON.parse(member.permissions) as string[]).includes('INVENTORY'); }
+            catch { return false; }
+          }).map((member) => member.userId)];
+          await this.notifications.notifyMany([...new Set(recipients)], {
           audience: 'MERCHANT', scopeId: product.createdByMerchantId,
           title: status === 'APPROVED' ? 'Product approved' : 'Product rejected',
           body:

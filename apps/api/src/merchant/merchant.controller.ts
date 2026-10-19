@@ -11,6 +11,7 @@ import {
   AddDocumentDto,
   AddMerchantProductDto,
   BulkUploadDto,
+  ChangeStaffPasswordDto,
   CreateRiderDto,
   CreateStaffDto,
   OnboardMerchantDto,
@@ -245,6 +246,11 @@ export class MerchantController {
   @Put('staff/:id')
   updateStaff(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateStaffDto) {
     return this.people.updateStaff(user.userId, id, dto);
+  }
+
+  @Put('staff/:id/password')
+  changeStaffPassword(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ChangeStaffPasswordDto) {
+    return this.people.changeStaffPassword(user.userId, id, dto);
   }
 
   @Delete('staff/:id')
