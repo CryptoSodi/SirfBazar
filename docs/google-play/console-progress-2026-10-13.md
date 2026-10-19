@@ -90,6 +90,12 @@ does not configure OAuth or Maps. Existing local release/upload keys remain
 unchanged. Play also lists previous quantum-ready certificates; verify signing
 coverage for supported Android versions before distribution.
 
-Still required: complete store forms, genuine screenshots, accurate data safety,
-reviewer access, content rating, target audience, countries, Play signing-provider
-configuration, device testing and final submission. No app is publicly published.
+Historical remaining work at the 13 October inspection: store forms, screenshots,
+data safety, reviewer access, rating, audience, countries, signing-provider
+configuration, device testing and submission. The approved isolated reviewer
+accounts were subsequently activated and live-tested, and private Sign in details,
+store forms and screenshots were submitted on 14 October; see
+[submission evidence](production-submission-progress-2026-10-14.md) and
+[reviewer coverage](reviewer-access.md). Fresh onboarding/upload and Play-installed
+verification remain unverified. This dated record does not establish current
+public availability; see the [maintenance records](README.md) for later releases.
