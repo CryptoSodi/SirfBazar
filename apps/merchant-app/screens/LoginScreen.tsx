@@ -17,6 +17,13 @@ export default function LoginScreen() {
   const [mode, setMode] = useState<AuthMode>('signin');
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [usePassword, setUsePassword] = useState(false);
+  const [resumeSetup, setResumeSetup] = useState(false);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -37,7 +44,7 @@ export default function LoginScreen() {
   };
 
   const finish = async (auth: any) => {
-    const context = authContextFor(mode);
+    const context = resumeSetup ? 'customer' : authContextFor(mode);
     const destination = authDestination(auth.user, context);
     if (destination === 'Login') {
       setStep('phone');
@@ -67,6 +74,16 @@ export default function LoginScreen() {
     });
   };
 
+  const continueSignup = () => {
+    if (!firstName.trim() || !lastName.trim()) return setError('Enter your first and last name.');
+    if (!validMobile(phone)) return setError('Enter a Pakistani mobile number, such as 0301 2345678.');
+    if (email.trim() && !/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Enter a valid email address or leave it blank.');
+    if (password.length < 8 || !/\d/.test(password)) return setError('Use a password with at least 8 characters and one number.');
+    if (password !== confirmation) return setError('The passwords do not match.');
+    setError('');
+    navigation.navigate('Onboard', { registration: { firstName: firstName.trim(), lastName: lastName.trim(), contact: normalizeMobile(phone), email: email.trim() || undefined, password } });
+  };
+
   const verify = () => {
     if (!validOtp(code)) {
       setError('Enter the six-digit verification code.');
@@ -74,8 +91,14 @@ export default function LoginScreen() {
       return;
     }
     void run(async () => finish(await api.post('/auth/verify-otp', {
-      phoneNumber: normalizeMobile(phone), code: code.trim(), context: authContextFor(mode),
+      phoneNumber: normalizeMobile(phone), code: code.trim(), context: resumeSetup ? 'customer' : authContextFor(mode),
     })));
+  };
+
+  const signInWithPassword = () => {
+    if (!validMobile(phone)) return setError('Enter a Pakistani mobile number, such as 0301 2345678.');
+    if (!password) return setError('Enter the password your shop owner gave you.');
+    void run(async () => finish(await api.post('/auth/merchant-login', { identifier: normalizeMobile(phone), password })));
   };
 
   const google = () => void run(async () => {
@@ -89,7 +112,7 @@ export default function LoginScreen() {
   const switchMode = () => {
     if (busy) return;
     setMode(signup ? 'signin' : 'signup');
-    setStep('phone'); setCode(''); setError(''); setNotice('');
+    setStep('phone'); setCode(''); setPassword(''); setUsePassword(false); setResumeSetup(false); setError(''); setNotice('');
   };
 
   return <SafeAreaView style={[s.screen, { backgroundColor: colors.dark }]}>
@@ -100,15 +123,32 @@ export default function LoginScreen() {
         <View style={{ backgroundColor: colors.card, borderRadius: 20, padding: 20, gap: 12 }}>
           <AppIcon name={signup ? 'store' : 'lock'} color={colors.primary} size={28} />
           <Text accessibilityRole="header" style={s.h1}>{signup ? 'Create your merchant account' : 'Sign in to your shop'}</Text>
-          <Text style={[s.muted, { fontSize: 14, lineHeight: 21 }]}>{signup ? 'Verify your mobile number, then add your shop details. Your shop will be submitted for approval.' : 'Use the mobile number linked to your merchant account.'}</Text>
+          <Text style={[s.muted, { fontSize: 14, lineHeight: 21 }]}>{signup ? 'Verify your mobile number, then add your shop details. Your shop can open after the required ID image is saved.' : resumeSetup ? 'Use the mobile number you registered to finish setting up your shop.' : 'Use your mobile number. Team members can sign in with the password set by their shop owner.'}</Text>
           {step === 'phone' ? <>
+            {signup && <>
+              <Text style={s.h2}>First name</Text><TextInput accessibilityLabel="First name" style={[s.input, { minHeight: 48, fontSize: 16 }]} value={firstName} onChangeText={setFirstName} autoComplete="given-name" />
+              <Text style={s.h2}>Last name</Text><TextInput accessibilityLabel="Last name" style={[s.input, { minHeight: 48, fontSize: 16 }]} value={lastName} onChangeText={setLastName} autoComplete="family-name" />
+            </>}
             <Text nativeID="merchant-phone-label" style={s.h2}>Mobile number</Text>
-            <TextInput ref={phoneInput} accessibilityLabel="Mobile number" accessibilityLabelledBy="merchant-phone-label" style={[s.input, { fontSize: 16, minHeight: 48 }]} value={phone} onChangeText={setPhone} editable={!busy} keyboardType="phone-pad" autoComplete="tel" placeholder="0301 2345678" placeholderTextColor={colors.muted} onSubmitEditing={sendOtp} />
-            <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} style={[s.btn, { minHeight: 48, flexDirection: 'row', gap: 8 }]} onPress={sendOtp} disabled={busy}>
-              {busy && <ActivityIndicator color="#fff" />}<Text style={s.btnText}>Send verification code</Text>
-            </TouchableOpacity>
-            <Text style={[s.muted, { textAlign: 'center' }]}>or</Text>
-            {!signup && <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}
+            <TextInput ref={phoneInput} accessibilityLabel="Mobile number" accessibilityLabelledBy="merchant-phone-label" style={[s.input, { fontSize: 16, minHeight: 48 }]} value={phone} onChangeText={setPhone} editable={!busy} keyboardType="phone-pad" autoComplete="tel" placeholder="0301 2345678" placeholderTextColor={colors.muted} onSubmitEditing={signup ? continueSignup : sendOtp} />
+            {signup && <>
+              <Text style={s.h2}>Email (optional)</Text><TextInput accessibilityLabel="Email, optional" style={[s.input, { minHeight: 48, fontSize: 16 }]} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
+              <Text style={s.h2}>Password</Text><TextInput accessibilityLabel="Create password" style={[s.input, { minHeight: 48, fontSize: 16 }]} value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoComplete="new-password" />
+              <Text style={s.h2}>Confirm password</Text><TextInput accessibilityLabel="Confirm password" style={[s.input, { minHeight: 48, fontSize: 16 }]} value={confirmation} onChangeText={setConfirmation} secureTextEntry autoCapitalize="none" autoComplete="new-password" />
+              <Text style={s.muted}>At least 8 characters, including one number. You will use this to sign in later.</Text>
+              <TouchableOpacity accessibilityRole="button" style={[s.btn, { minHeight: 48 }]} onPress={continueSignup}><Text style={s.btnText}>Continue to shop details</Text></TouchableOpacity>
+            </>}
+            {!signup && (!resumeSetup && usePassword ? <>
+              <Text style={s.h2}>Password</Text>
+              <TextInput accessibilityLabel="Password" style={[s.input, { fontSize: 16, minHeight: 48 }]} value={password} onChangeText={setPassword} editable={!busy} secureTextEntry autoCapitalize="none" autoComplete="password" onSubmitEditing={signInWithPassword} />
+              <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} style={[s.btn, { minHeight: 48 }]} onPress={signInWithPassword} disabled={busy}>{busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Sign in with password</Text>}</TouchableOpacity>
+            </> : <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} style={[s.btn, { minHeight: 48, flexDirection: 'row', gap: 8 }]} onPress={sendOtp} disabled={busy}>
+              {busy && <ActivityIndicator color="#fff" />}<Text style={s.btnText}>{resumeSetup ? 'Continue setup: send code' : 'Send verification code'}</Text>
+            </TouchableOpacity>)}
+            {!signup && !resumeSetup && <TouchableOpacity style={[s.btnGhost, { minHeight: 48 }]} disabled={busy} onPress={() => { setUsePassword((value) => !value); setError(''); }}><Text style={s.btnGhostText}>{usePassword ? 'Use a verification code' : 'Team member? Use a password'}</Text></TouchableOpacity>}
+            {!signup && <TouchableOpacity accessibilityRole="button" style={[s.btnGhost, { minHeight: 48 }]} disabled={busy} onPress={() => { setResumeSetup((value) => !value); setUsePassword(false); setError(''); }}><Text style={s.btnGhostText}>{resumeSetup ? 'Back to sign in' : 'Finish an unfinished shop setup'}</Text></TouchableOpacity>}
+            {!signup && !resumeSetup && <Text style={[s.muted, { textAlign: 'center' }]}>or</Text>}
+            {!signup && !resumeSetup && <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }}
               style={[s.btnGhost, { minHeight: 48, flexDirection: 'row', justifyContent: 'center', gap: 10, borderColor: '#DADCE0', borderRadius: 8 }]}
               onPress={google} disabled={busy}>
               {busy ? <ActivityIndicator color={colors.primary} /> : <Svg width={19} height={19} viewBox="0 0 24 24" accessible={false}>
@@ -124,7 +164,7 @@ export default function LoginScreen() {
             <Text nativeID="merchant-code-label" style={s.h2}>Verification code</Text>
             <TextInput ref={codeInput} accessibilityLabel="Six-digit verification code" accessibilityLabelledBy="merchant-code-label" style={[s.input, { minHeight: 52, textAlign: 'center', fontSize: 22, letterSpacing: 6 }]} value={code} onChangeText={setCode} editable={!busy} keyboardType="number-pad" autoComplete="one-time-code" textContentType="oneTimeCode" autoCorrect={false} placeholder="000000" placeholderTextColor={colors.muted} autoFocus onSubmitEditing={verify} />
             <TouchableOpacity accessibilityRole="button" accessibilityState={{ disabled: busy, busy }} style={[s.btn, { minHeight: 48, flexDirection: 'row', gap: 8 }]} onPress={verify} disabled={busy}>
-              {busy && <ActivityIndicator color="#fff" />}<Text style={s.btnText}>{signup ? 'Verify & set up shop' : 'Verify & sign in'}</Text>
+              {busy && <ActivityIndicator color="#fff" />}<Text style={s.btnText}>{resumeSetup ? 'Verify & continue setup' : 'Verify & sign in'}</Text>
             </TouchableOpacity>
             <TouchableOpacity accessibilityRole="button" disabled={busy} style={[s.btnGhost, { minHeight: 48 }]} onPress={() => { setStep('phone'); setCode(''); setError(''); }}>
               <Text style={s.btnGhostText}>Change number or request a new code</Text>

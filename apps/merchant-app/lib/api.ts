@@ -58,7 +58,14 @@ export async function storeAuth(data: { accessToken: string; refreshToken: strin
   if (version === authVersion && context === 'merchant') void import('./push').then((m) => m.registerForPush()).catch(() => undefined);
 }
 
-export async function getEntryRoute(): Promise<'Login' | 'Tabs' | 'Onboard'> {
+const tourKey = (userId: string) => `sbm.tourPending:${userId}`;
+export async function queueMobileTour(userId: string) { if (userId) await AsyncStorage.setItem(tourKey(userId), '1'); }
+export async function completeMobileTour() {
+  const user = await getUser();
+  if (user?.id) await AsyncStorage.removeItem(tourKey(user.id));
+}
+
+export async function getEntryRoute(): Promise<'Login' | 'Tabs' | 'Onboard' | 'Tour'> {
   const version = authVersion;
   return serializeAuth(async () => {
     if (version !== authVersion) return 'Login';
@@ -66,7 +73,9 @@ export async function getEntryRoute(): Promise<'Login' | 'Tabs' | 'Onboard'> {
       AsyncStorage.getItem(KEYS.access), AsyncStorage.getItem(KEYS.context), AsyncStorage.getItem(KEYS.user),
     ]);
     if (version !== authVersion || !access) return 'Login';
-    return authDestination(rawUser ? JSON.parse(rawUser) : null, context === 'customer' ? 'customer' : 'merchant');
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    const route = authDestination(user, context === 'customer' ? 'customer' : 'merchant');
+    return route === 'Tabs' && user?.id && await AsyncStorage.getItem(tourKey(user.id)) === '1' ? 'Tour' : route;
   });
 }
 

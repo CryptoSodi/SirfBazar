@@ -1,12 +1,13 @@
 import { useToast, ToastHost } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { IconLabel } from '../components/IconLabel';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Image,
   Modal,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -14,6 +15,10 @@ import {
 } from 'react-native';
 import { api } from '../lib/api';
 import { colors, s } from '../lib/theme';
+import BulkCatalogModal, { type CatalogProduct } from '../components/BulkCatalogModal';
+
+type Category = { id: string; name: string; children?: Category[] };
+const containsCategory = (category: Category, id: string): boolean => category.id === id || !!category.children?.some((child) => containsCategory(child, id));
 
 /**
  * Browse the shared SirfBazar catalog and add products to this shop.
@@ -27,13 +32,22 @@ export default function CatalogScreen() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [unlistedOnly, setUnlistedOnly] = useState(true);
-  const [selected, setSelected] = useState<any>(null);
+  const [selected, setSelected] = useState<Record<string, CatalogProduct>>({});
+  const [review, setReview] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState('');
+  const requestVersion = useRef(0);
+  const loadingMore = useRef(false);
+
+  useEffect(() => { api.get('/products/categories').then(setCategories).catch(() => toast('Categories could not be loaded. Try opening this page again.', false)); }, [toast]);
 
   const load = useCallback(
-    async (reset: boolean) => {
-      if (loading) return;
+    async (reset: boolean, requestedPage = 1) => {
+      if (!reset && loadingMore.current) return;
+      const version = reset ? ++requestVersion.current : requestVersion.current;
+      if (!reset) loadingMore.current = true;
       setLoading(true);
-      const nextPage = reset ? 1 : page;
+      const nextPage = reset ? 1 : requestedPage;
       try {
         const qs = new URLSearchParams({
           page: String(nextPage),
@@ -41,18 +55,20 @@ export default function CatalogScreen() {
           unlistedOnly: String(unlistedOnly),
         });
         if (q.trim()) qs.set('q', q.trim());
+        if (categoryId) qs.set('categoryId', categoryId);
         const res = await api.get(`/merchant/catalog?${qs.toString()}`);
-        setItems(reset ? res.items : [...items, ...res.items]);
+        if (version !== requestVersion.current) return;
+        setItems((current) => reset ? res.items ?? [] : [...current, ...(res.items ?? [])]);
         setTotalPages(res.totalPages ?? 1);
         setPage(nextPage + 1);
       } catch (e: any) {
-        toast(e.message, false);
+        if (version === requestVersion.current) toast(e.message, false);
       } finally {
-        setLoading(false);
+        loadingMore.current = false;
+        if (version === requestVersion.current) setLoading(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [q, page, items, loading, unlistedOnly],
+    [q, unlistedOnly, categoryId, toast],
   );
 
   // Reload from scratch when the search term or filter changes (debounced).
@@ -60,7 +76,18 @@ export default function CatalogScreen() {
     const t = setTimeout(() => load(true), 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, unlistedOnly]);
+  }, [q, unlistedOnly, categoryId]);
+
+  const toggle = (product: CatalogProduct) => setSelected((current) => {
+    const next = { ...current };
+    if (next[product.productId]) delete next[product.productId];
+    else next[product.productId] = product;
+    return next;
+  });
+  const categoryButtons = (nodes: Category[], depth = 0): React.ReactNode => nodes.map((category) => <View key={category.id}>
+    <TouchableOpacity accessibilityRole="button" accessibilityState={{ selected: categoryId === category.id }} style={{ paddingVertical: 10, paddingHorizontal: 12 + depth * 14, backgroundColor: categoryId === category.id ? colors.emeraldBg : colors.card }} onPress={() => setCategoryId(category.id)}><Text style={[s.body, categoryId === category.id && { color: colors.primary, fontWeight: '700' }]}>{category.name}</Text></TouchableOpacity>
+    {containsCategory(category, categoryId) ? categoryButtons(category.children ?? [], depth + 1) : null}
+  </View>);
 
   return (
     <View style={s.screen}>
@@ -71,37 +98,27 @@ export default function CatalogScreen() {
           value={q}
           onChangeText={setQ}
         />
-        <TouchableOpacity
-          style={[s.row, { marginTop: 10, gap: 8 }]}
-          onPress={() => setUnlistedOnly((v) => !v)}
-        >
-          <View
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: 4,
-              borderWidth: 2,
-              borderColor: colors.primary,
-              backgroundColor: unlistedOnly ? colors.primary : 'transparent',
-            }}
-          />
-          <Text style={s.muted}>Hide products already in my shop</Text>
-        </TouchableOpacity>
+        <View style={[s.row, { gap: 8, marginTop: 10 }]}>
+          <TouchableOpacity accessibilityRole="radio" accessibilityState={{ selected: unlistedOnly }} style={[s.btnGhost, { flex: 1, backgroundColor: unlistedOnly ? colors.emeraldBg : colors.card }]} onPress={() => setUnlistedOnly(true)}><Text style={s.btnGhostText}>Products to add</Text></TouchableOpacity>
+          <TouchableOpacity accessibilityRole="radio" accessibilityState={{ selected: !unlistedOnly }} style={[s.btnGhost, { flex: 1, backgroundColor: !unlistedOnly ? colors.emeraldBg : colors.card }]} onPress={() => setUnlistedOnly(false)}><Text style={s.btnGhostText}>All products</Text></TouchableOpacity>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 8 }}>
+          <TouchableOpacity style={[s.btnGhost, { borderColor: categoryId ? colors.border : colors.primary }]} onPress={() => setCategoryId('')}><Text style={s.btnGhostText}>All categories</Text></TouchableOpacity>
+          {categories.map((category) => <TouchableOpacity key={category.id} style={[s.btnGhost, { borderColor: categoryId === category.id ? colors.primary : colors.border }]} onPress={() => setCategoryId(category.id)}><Text style={s.btnGhostText}>{category.name}</Text></TouchableOpacity>)}
+        </ScrollView>
+        {!!categoryId && <ScrollView style={{ maxHeight: 140, marginTop: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.border }} nestedScrollEnabled>{categoryButtons(categories)}</ScrollView>}
       </View>
 
       <FlatList
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 8 }}
         data={items}
         keyExtractor={(p) => p.productId}
-        onEndReached={() => page <= totalPages && load(false)}
+        onEndReached={() => { if (!loading && page <= totalPages) void load(false, page); }}
         onEndReachedThreshold={0.5}
-        ListEmptyComponent={
-          loading ? null : (
-            <Text style={[s.muted, { textAlign: 'center', marginTop: 24 }]}>
-              No catalog products found.
-            </Text>
-          )
-        }
+        ListEmptyComponent={loading ? null : <View style={{ alignItems: 'center', gap: 12, marginTop: 24 }}>
+          <Text style={[s.muted, { textAlign: 'center' }]}>{unlistedOnly ? 'No products to add in this selection.' : 'No catalogue products found.'}</Text>
+          {unlistedOnly && <TouchableOpacity accessibilityRole="button" style={s.btnGhost} onPress={() => setUnlistedOnly(false)}><Text style={s.btnGhostText}>See all products</Text></TouchableOpacity>}
+        </View>}
         ListFooterComponent={loading ? <ActivityIndicator style={{ marginVertical: 16 }} color={colors.primary} /> : null}
         renderItem={({ item: p }) => (
           <View style={[s.card, s.row, { gap: 12 }]}>
@@ -122,31 +139,24 @@ export default function CatalogScreen() {
               <IconLabel icon="check" style={{ color: colors.primary, fontWeight: '700', fontSize: 12 }}>Added</IconLabel>
             ) : (
               <TouchableOpacity
-                style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
-                onPress={() => setSelected(p)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: !!selected[p.productId] }}
+                style={{ backgroundColor: selected[p.productId] ? colors.emeraldBg : colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10 }}
+                onPress={() => toggle(p)}
               >
-                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>+ Add</Text>
+                <Text style={{ color: selected[p.productId] ? colors.primary : '#fff', fontWeight: '800', fontSize: 12 }}>{selected[p.productId] ? 'Selected' : 'Select'}</Text>
               </TouchableOpacity>
             )}
           </View>
         )}
       />
 
-      {selected && (
-        <AddModal
-          product={selected}
-          onClose={() => setSelected(null)}
-          onAdded={() => {
-            // Mark as listed in place so the button flips to ✓ Added.
-            setItems((prev) =>
-              unlistedOnly
-                ? prev.filter((x) => x.productId !== selected.productId)
-                : prev.map((x) => (x.productId === selected.productId ? { ...x, alreadyListed: true } : x)),
-            );
-            setSelected(null);
-          }}
-        />
-      )}
+      {Object.keys(selected).length > 0 && <TouchableOpacity style={[s.btn, { position: 'absolute', bottom: 16, left: 16, right: 16, minHeight: 50 }]} onPress={() => setReview(true)}><Text style={s.btnText}>Review {Object.keys(selected).length} products</Text></TouchableOpacity>}
+      {review && <BulkCatalogModal products={Object.values(selected)} onClose={() => setReview(false)} onComplete={(completed) => {
+        const done = new Set(completed);
+        setSelected((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !done.has(id))));
+        setItems((current) => current.map((item) => done.has(item.productId) ? { ...item, alreadyListed: true } : item).filter((item) => !unlistedOnly || !item.alreadyListed));
+      }} />}
     </View>
   );
 }
