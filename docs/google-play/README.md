@@ -1,11 +1,31 @@
 # Google Play publication readiness
 
+Shop website map configuration: [live profile map repair, 19 October 2026](shop-website-maps-2026-10-19.md).
+
+Merchant map repair: [Android map picker and restricted-key verification, 19 October 2026](merchant-android-maps-2026-10-19.md).
+
+Latest Rider maintenance record: [Android release optimization, 19 October 2026](android-optimization-2026-10-19.md).
+Rider build 12 replaces the unoptimized build 10; use that record for measured
+R8 scores, signed-artifact verification and the replacement submission status.
+Play Console showed Rider last published on 18 October; the paragraphs below
+describe the earlier initial-submission state, not current availability.
+
+Initial Console state: [production submission progress, 14 October 2026](production-submission-progress-2026-10-14.md).
+Customer build 11, Merchant build 10 and Rider build 10 have been submitted for
+production review. Play Console shows Changes in review; managed publishing is
+off for automatic publication in Pakistan after approval. Sign in details,
+target audience, Data safety and Advertising ID declarations are completed.
+Nothing is yet confirmed publicly published.
+
+The remaining sections are the historical 13 October preparation audit. For
+current status and resolved gates, use the linked 14 October progress record.
+
 Last inspected: 2026-10-13. Base: `6463f3cc05b6bca2f4da5228a58bec2461551d41`.
 Release preparation: PR #21, `codex/google-play-publication`.
 Local build tooling and permission cleanup: PR #22, `codex/local-android-release`.
 See [build 6 evidence](build6-verification.md) for the completed local AAB/APK checks.
 
-**Not published or submitted for review.** All three Play Console app drafts now
+**Historical state, superseded by the submission above.** All three Play Console app drafts now
 exist, their build-6 bundles are uploaded and validated, and listing preparation
 is partially saved. See the [latest Console progress record](console-progress-2026-10-13.md)
 for app IDs, completed declarations, signing fingerprints and remaining gates.
@@ -109,7 +129,7 @@ to a new service without specific authorization.
 | All-role deletion entry | All three profile/settings views now include `AccountPolicies`; merchant/rider login also expose links. Customer deletion screen opens an email request instead of falsely completing erasure. Public request page deployed | Verify updated native builds and remaining onboarding states |
 | Privacy/retention | Updated policy describes precise location, all roles and request-based deletion. Owner requested customary retention; selected targets are in `deletion-operations.md`, not yet enforced | Test actual fulfillment, verify retention settings and deployed policy; do not claim the targets already operate |
 | Data safety | Source inventory is in `data-safety-review.md`; no questionnaire submitted | Reconcile SDKs, backend recipients and deployed configuration; complete each app's answers accurately |
-| Reviewer access | No approved review accounts or tested review instructions established | Provide restricted, stable access to customer, approved merchant and approved rider flows; no shared production-admin credentials or auth bypass |
+| Reviewer access | Three owner-approved isolated role accounts are active and live-tested; private Sign in details were submitted on 14 October. See [reviewer evidence and remaining coverage](reviewer-access.md) | Retain revocable isolated access; fresh onboarding/upload and Play-installed checks remain unverified. Never share production-admin credentials |
 | Google login readiness | Live console inspected on 13 October: project `sirfbazar` / `453311658725`, External/Testing, one test user. Homepage/privacy/terms URLs now saved; no configured scopes shown in Data access | Recheck publication readiness, obtain approval where required, register Play signing SHA and test Play-installed sign-in |
 | Android permissions | Build-6 manifests verified: no unused overlay/legacy storage in any app and no merchant microphone permission. Gallery flow uses the system photo picker without broad gallery permission | Test camera/gallery cancellation and denial on real supported devices |
 | Native journeys/screenshots | Installation succeeded for two APKs; launch captures black | Diagnose rendering, test all apps and capture genuine screenshots without personal information |

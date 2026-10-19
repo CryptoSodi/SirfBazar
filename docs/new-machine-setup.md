@@ -415,7 +415,7 @@ For real Google login:
 
 ### Google Maps
 
-The customer Android Maps key is currently in `apps/customer-app/app.json` under `android.config.googleMaps.apiKey`. Replace it for a different Google Cloud project and restrict it to the Android package and signing certificate.
+Set `EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY` for customer Android builds. The obsolete hardcoded key has been removed. Use a Maps SDK for Android-only key restricted to `pk.sirfbazar.customer` and each permitted signing certificate (debug, local release and Play app signing are different). Production Android builds refuse a missing key. Configure the variable in the selected EAS environment for cloud builds; it is not committed in `eas.json`. For local builds, `Build-SirfBazarLocalAndroid.ps1 -AndroidMapsKeyFile <private-json-path>` reads a JSON object with a `key` field and supplies the value without logging it. Keep that file outside Git. The key is necessarily present in the resulting native app, so package/certificate/API restrictions are the security boundary. Never reuse the shared browser key.
 
 The customer website uses `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` instead.
 

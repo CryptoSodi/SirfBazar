@@ -4,7 +4,7 @@ import { IconLabel } from '../components/IconLabel';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
+import ShopMapPicker from '../components/ShopMapPicker';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,7 +43,7 @@ export default function OnboardScreen() {
   const [hours, setHours] = useState(DAYS.map((_, dayOfWeek) => ({ dayOfWeek, isClosed: false, opensAt: '09:00', closesAt: '21:00', closesNextDay: false })));
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  const [locating, setLocating] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -73,24 +73,6 @@ export default function OnboardScreen() {
     }
   };
 
-  const useCurrentLocation = async () => {
-    setLocating(true);
-    setError('');
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== 'granted') {
-        setError('Location permission needed to pin your shop.');
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-    } catch {
-      setError('Could not get your location — try again outdoors.');
-    } finally {
-      setLocating(false);
-    }
-  };
-
   const submit = async () => {
     if (!identityPhoto) return setError('Choose an image of the shop owner’s CNIC.');
     if (shopCreated) {
@@ -105,7 +87,7 @@ export default function OnboardScreen() {
     if (!/^\+?[0-9]{10,15}$/.test(shopPhone)) return setError('Enter a valid shop phone number.');
     if (!address.trim()) return setError('Address is required.');
     if (!city.trim()) return setError('City is required.');
-    if (!coords) return setError('Tap “Use my current location” to pin your shop.');
+    if (!coords) return setError('Select your shop entrance on the map.');
     const parsedCoverageKm = Number(coverageKm);
     const parsedDeliveryFee = Number(deliveryFee);
     const parsedMinOrder = minOrder.trim() ? Number(minOrder) : 0;
@@ -244,12 +226,8 @@ export default function OnboardScreen() {
         </View>
 
         {/* Location */}
-        <TouchableOpacity style={[s.btnGhost, { marginTop: 14, borderColor: colors.primary }]} onPress={useCurrentLocation} disabled={locating}>
-          {locating ? <ActivityIndicator color={colors.primary} /> : (
-            <Text style={[s.btnGhostText, { color: colors.primary }]}>
-              {coords ? `Pinned: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}` : 'Use my current location'}
-            </Text>
-          )}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel={coords ? 'Edit shop entrance pin' : 'Select shop entrance on map'} style={[s.btnGhost, { marginTop: 14, borderColor: colors.primary }]} onPress={() => setMapOpen(true)}>
+          <IconLabel icon="pin" style={[s.btnGhostText, { color: colors.primary }]}>{coords ? `Pinned: ${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}` : 'Select shop entrance on map'}</IconLabel>
         </TouchableOpacity>
 
         {/* Hours + delivery settings */}
@@ -305,6 +283,7 @@ export default function OnboardScreen() {
           <Text style={s.muted}>Log out</Text>
         </TouchableOpacity>
       </ScrollView>
+      {mapOpen && <ShopMapPicker initial={coords} onClose={() => setMapOpen(false)} onConfirm={(point) => { setCoords(point); setError(''); setMapOpen(false); }} />}
     </SafeAreaView>
   );
 }

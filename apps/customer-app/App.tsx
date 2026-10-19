@@ -56,6 +56,7 @@ async function openPendingNotification() {
   pendingNotification = null;
   const destination = pending.destination;
   navigationRef.navigate(destination.screen === 'SupportDetail' ? 'ProfileTab' : 'OrdersTab', {
+    initial: false,
     screen: destination.screen,
     params: destination.screen === 'SupportDetail' ? { ticketId: destination.ticketId } : { orderId: destination.orderId },
   });

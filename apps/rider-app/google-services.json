@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "209308494306",
+    "project_id": "sirfbazar-notifications",
+    "storage_bucket": "sirfbazar-notifications.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:209308494306:android:659be79f33bd5b9f2831bb",
+        "android_client_info": {
+          "package_name": "pk.sirfbazar.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQxamD4s8XQjTLelxifRtFkfXTgEekoAU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:209308494306:android:6d147fc205683d912831bb",
+        "android_client_info": {
+          "package_name": "pk.sirfbazar.merchant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQxamD4s8XQjTLelxifRtFkfXTgEekoAU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:209308494306:android:64406485a8d059632831bb",
+        "android_client_info": {
+          "package_name": "pk.sirfbazar.rider"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQxamD4s8XQjTLelxifRtFkfXTgEekoAU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

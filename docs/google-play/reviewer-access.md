@@ -140,17 +140,242 @@ ratings, demo coupon isolation, team creation without modifying real identities,
 product/import isolation and retry, and POS entitlement/stock/idempotency.
 CI includes both new test files. Native/Play-installed UI journeys are separate.
 
-Pending: protected PR/release, production activation, private credential storage,
-fixture-only live verification and saved Play App access instructions.
+## Activation Evidence - 13 October 2026
+
+- Implementation merged through [PR 23](https://github.com/CryptoSodi/SirfBazar/pull/23).
+- [Master CI/deployment 38439903643](https://github.com/CryptoSodi/SirfBazar/actions/runs/38439903643)
+  passed every required release gate and deployed
+  `e4f40dbb6f5099b3c1a7686d2d949089c1e2b541` on Battle.
+- Immediately before provisioning, a custom-format PostgreSQL backup was made
+  and its archive listing verified at
+  `/var/backups/sirfbazar-api/play-review-20261013/sirfbazar.dump`.
+  SHA-256: `9ace2e1611a44667d4ffa55585fedfd9c73a81f78ce97b1336ef74bfc2dd1519`.
+  This activation checked the archive, not a new scratch restore. Configuration
+  copies and `proof.json` are in that same root-private backup directory.
+- Added only `/etc/sirfbazar-review.env` and the documented SirfBazar service
+  drop-in. Hashes of the original API environment and service unit were unchanged.
+  No migrations, DNS changes or other-service restarts were performed.
+- Post-activation health checks passed for local/public API, quote routes, CORS
+  and WhatsApp readiness. Three review accounts are ACTIVE, manually revocable.
+- Live API verification passed: exact identities, role/discovery isolation,
+  profile/support, quoted COD checkout, merchant fulfillment, rider delivery,
+  ratings, non-expiring POS entitlement and idempotent demo sale.
+- Live disable test rejected all three old sessions with HTTP 401. Accounts were
+  then deliberately reactivated; old refresh sessions remain revoked. One assigned
+  rider delivery and one preparing merchant order remain as review fixtures.
+- Detailed fixture-only proof (no credentials) is at
+  `/var/lib/sirfbazar-api/play-review-20261013/live-verification.json`.
+- Credentials are outside Git: the private server directory above and the owner's
+  ACL-restricted `C:\Users\tassa\.codex\private\SirfBazar-review\review-credentials.json`.
+  Never copy these codes into public documentation or GitHub issues/releases.
+
+Pending: complete installed-APK journeys and push/upload checks, Play sign-in-detail
+submission and full-access declaration. The Play declaration has NOT been
+certified, and no app was published by this change. The existing onboarding/Google
+identity exceptions above must remain disclosed rather than hidden by a success claim.
+
+## Physical Device Checks - 13 October 2026
+
+Connected Samsung Galaxy A52 (`SM-A525F`); installed all three release-signed
+1.0.0/build 6 APKs, min SDK 24, target SDK 36. All three phone/code logins reached
+their authenticated screens using the isolated accounts. Customer saved addresses
+showed the provisioned Review demo address. Merchant dashboard showed the expected
+demo shop and three orders; inventory showed five fixture products, and saving the
+unchanged price/stock returned successfully to inventory. Rider showed its assigned
+demo order and advanced to the pickup acknowledgement screen. These observations
+do not prove completed native checkout, delivery, uploads or push delivery.
+
+Device testing exposed a release blocker: customer public catalogue requests
+discarded all access tokens, so the API correctly hid the demo shop even after
+reviewer login and selection of the saved demo address. `apps/customer-app/lib/api.ts`
+now refreshes and attaches the session only for the explicitly provisioned review
+customer's discovery requests. The cached identity is only a routing hint; server
+JWT, session and tenant checks remain authoritative. Concurrent refreshes share the
+existing single-flight operation. Revoked review access fails instead of falling
+back to the ordinary catalogue. Ordinary/guest browsing remains anonymous.
+
+Validation: all 54 customer tests and customer TypeScript check passed, including
+four new regressions for ordinary/corrupt profiles, concurrent review discovery,
+revocation and an identity without credentials. A rebuilt native candidate must
+still demonstrate browse/cart/checkout before the full-access declaration is signed.
+
+Additional observations awaiting reproduction: merchant verification responded to
+its text label after taps in the button's empty area had no visible effect; the
+long demo shop name overflowed the rider pickup card. ADB accessibility capture
+also timed out on rider details; screenshots were used instead. No new crash was
+reported by Android's rider process-exit history during those checks.
+
+Local, ignored screenshot evidence: `output/review-merchant-dashboard.png`,
+`output/review-merchant-inventory.png`, `output/review-rider-deliveries.png`,
+`output/review-rider-order.png`, and `output/review-rider-pickup-step.png`.
+Never publish verification-code screenshots or private credentials.
+
+## Customer Candidate Checks - 14 October 2026
+
+Release-signed customer build 7 (`2d70aef`) passed bundle/signature/16-KB native
+library validation and installed as an update, preserving the review session and
+saved address. The home screen displayed the isolated demo products and shop.
+Android notification permission was allowed for customer and merchant; rider
+permission and actual push delivery remain unverified.
+
+An Add-to-basket attempt then failed with "Your account changed. Check your basket
+again." No checkout was performed. The discovery refresh emitted the same `auth`
+event used for account switching, invalidating the in-flight basket operation.
+Token renewal now emits a separate `session` event; realtime reconnects with the
+rotated token without resetting basket identity. Genuine login/logout still use
+`auth`. All 55 customer tests and the customer TypeScript check pass, including
+renewal-event separation and realtime reconnection/unsubscription regressions.
+Build 7 must not be published; the replacement still needs installed-device tests.
+
+Rider pickup was confirmed on the demo delivery, which reached `ON_THE_WAY`.
+Arrival and delivery completion have not yet been verified on the phone. Evidence:
+`output/review-customer-build7-home.png` and
+`output/review-rider-pickup-confirmed.png`. These are local, ignored artifacts.
+No full-access declaration or Play rollout was submitted.
+
+Rider notification permission was subsequently granted under the owner's explicit
+approval. Android reported location already granted, but repeatedly resumed a
+permission activity over the delivery page. The active-order location effect
+requested permission on every focus/AppState activation, creating a focus loop.
+It now reads permission without opening a dialog; the explicit Location & alerts
+control still requests it. The settings copy now describes the existing focused,
+foreground active-order watcher instead of incorrectly claiming GPS is inactive.
+This candidate requires native retesting.
 
 | Coverage | Backend evidence | Remaining review evidence |
 | --- | --- | --- |
-| Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle | Live login and native login screens |
-| Customer catalogue/cart/checkout/delivery | Isolated stock, quote, fulfillment and delivery assertions | Native browse/checkout/order views |
+| Three phone/code logins and manual disable | Real bcrypt/JWT/PostgreSQL lifecycle and live HTTP revocation | All three native review logins observed on build 6; subsequent customer/rider updates preserved sessions |
+| Customer catalogue/cart/checkout/delivery | Isolated stock, quote, fulfillment and delivery assertions; live complete delivery | Customer build 8 browse, quantity changes, checkout and tracking observed; broader regression remains |
 | Profile, addresses, ratings, support | Profile and support ownership, delivered-order rating; existing address regressions | Native edit/support/rating flows |
 | Merchant inventory and imports | Create/preview/apply/retry and foreign-shop rejection | Native inventory controls; import is web-only where absent from APK |
 | Rider/staff management | Synthetic suspended members; real user unchanged; tenant rejection | Merchant native rider controls |
-| Rider delivery and issue reporting | Existing order state machine and owned support ticket service | Native tracking, issue reporting and delivery confirmation |
+| Rider delivery and issue reporting | Existing order state machine and owned support ticket service | Build 8 arrival and delivery confirmation observed; native issue reporting remains |
 | POS | Non-expiring demo entitlement, real sale transaction, replay and stock isolation | POS browser flow; not a separate Play app |
 | Documents and device notifications | Existing ownership/registration implementations, now allowed | Review-owned upload and actual device push verification |
 | Identity/onboarding | Pre-onboarded accounts, personal Google linking intentionally unavailable on shared identities | Disclose review login method; do not certify untested identity flows |
+
+## Replacement Candidate Device Results - 14 October 2026
+
+Customer build 8 (source `40c28bb`) and rider build 8 (source `cd5eca9`) passed
+bundle, release-signature and 16-KB native-library validation, then installed as
+updates on the Samsung Galaxy A52. Merchant remained on build 6. These results
+supersede the earlier pending replacement-candidate checks, not all review gates.
+
+- Customer displayed all five isolated products. Add, increase to two, basket
+  synchronization and decrease to one worked. Saved Review demo address and
+  quoted COD checkout produced isolated order `SB20261013-0D8C48`; basket cleared.
+- Merchant accepted that order and marked it ready for pickup. Customer tracking
+  reflected the changes. It remains ready and was not assigned to a real rider.
+- Rider build 8 no longer showed the permission-focus loop. The existing isolated
+  delivery `SB20261013-D816B6` advanced through arrival and code-confirmed COD
+  completion. Customer tracking showed delivered and removed the delivery code.
+- In-app order notifications were present. Android notification permission was
+  granted for all three apps, but customer phone-alert registration failed due
+  to absent Firebase initialization. Actual push delivery remains blocked; see
+  [push configuration audit](push-configuration-audit.md).
+
+Local ignored evidence: `output/review-customer-build8-order-sent.png`,
+`output/review-merchant-ready-order.png`, `output/review-rider-build8-arrived.png`,
+`output/review-rider-build8-delivered.png`. No private review/delivery codes belong
+in published screenshots or documentation.
+
+Full native profile/address editing, rating, support, uploads and remaining
+feature coverage still need verification. These candidates have not been uploaded
+to Play, and no full-access declaration or rollout has been submitted.
+
+## Push-Enabled Build 10 Results - 14 October 2026
+
+This supersedes the Firebase/push blocker and build-upload status above, not
+the remaining full-feature review gates. All three release-signed build-10 apps
+are installed on the Samsung Galaxy A52 and saved as unpublished Play internal
+testing drafts. Real Android background alerts and correct order/delivery tap
+navigation passed for customer, merchant and rider. Customer logout removed only
+its registration; signing in restored it. Customer notification navigation now
+preserves the Orders and Account roots. All 58 customer tests, 16 new merchant/
+rider navigation tests, existing mobile tests and required source CI gates pass.
+
+See [Firebase setup and device evidence](firebase-push-setup.md) for exact source
+commits, artifact hashes, demo orders, screenshots and untested lifecycle cases.
+No full-access certification, Play review submission or rollout was made.
+
+## Maps and Support Follow-up - 14 October 2026
+
+Customer build 10 saved unchanged profile/address fields and created an isolated
+support ticket visible in its native conversation. Its map failed authorization.
+Customer build 11 replaces the embedded Maps key with an environment-configured,
+Android-package/certificate-restricted key and renders real map tiles on the same
+phone. Existing session and demo catalogue were preserved by the update. Map
+confirmation returned to the editor; saving was rejected with the existing
+active-order address protection, not reported as a successful write.
+
+See [signing and Maps follow-up](play-signing-follow-up-2026-10-14.md) for signer
+registrations, artifact hashes, test evidence and remaining gates. These checks
+do not complete native rating, uploads, revision or full-access certification.
+
+## Rating and Rider Issue Follow-up - 14 October 2026
+
+Samsung SM-A525F / Android 14, sideloaded customer build 11 and rider build 10:
+
+- Customer opened delivered isolated order `SB20261013-D816B6`. Submitting
+  without stars was rejected with a request to choose a rating. A three-star
+  rating with text "Isolated demo review test. No real delivery." was then
+  accepted; the UI reported "Your review was saved." Evidence:
+  ignored `output/review-customer-rating-saved.png`. This concerns the hidden
+  review shop, not a public review of a real delivery.
+- Rider opened the issue form for isolated assigned order `SB20261013-E7FBAC`,
+  selected Other, and submitted "Isolated store-review test. No real delivery
+  or assistance required." The UI confirmed the issue was sent and delivery
+  status had not changed. Evidence: ignored `output/review-rider-issue-sent.png`.
+  No real delivery, phone call or payment was performed.
+
+These observations close the earlier native rating/issue-report gaps only.
+Onboarding/upload, native revision approval/rejection and other outstanding
+coverage remain unverified. No new automated tests were run for this follow-up.
+
+The owner declined internal testers; no tester was added or rollout published.
+Play-installed verification remains incomplete. The owner also declined
+production changes to repair the newly identified
+[OTP transport blocker](otp-transport-blocker-2026-10-14.md).
+No full-access certification or completed Data safety declaration was submitted.
+
+## Native revision and access checks - 14 October 2026
+
+The existing customer build 11 and merchant build 10 were checked on the connected
+Samsung SM-A525F using only the isolated review identities and shop. One new COD
+fixture, `SB20261013-E18803`, was created with three units (Rs 360); no real delivery
+or payment occurred. The merchant app proposed reducing to two units. The customer
+app displayed original/proposed quantities and totals and the 30-minute expiry.
+Reject preserved three units/Rs 360 and recorded a rejection. A second proposal was
+approved through the customer app, resulting in two units/Rs 290 and both decisions
+in revision history. Evidence: ignored `output/review-revision-comparison.png` and
+`output/review-revision-approved.png`. These results supersede the native revision
+gap above, not unrelated test gaps.
+
+All three reusable reviewer logins were rechecked against the live API. Twenty-one
+read-only application-route checks passed across their own profile, catalogue,
+cart/orders, support/notifications, merchant inventory/riders/earnings/settlements,
+and rider assignments/history. The first helper incorrectly used `/customers/`
+instead of `/customer/` for two routes; the corrected customer checks passed.
+No order or inventory writes were performed by that read-only helper.
+
+Fresh merchant/rider onboarding remains untested with these already-onboarded
+identities. Merchant `App.tsx` selects either Onboard or Tabs; the photo upload is
+part of initial Onboard, not a customer-app screen or the existing merchant's
+authenticated settings. This distinction does not constitute an upload test or
+permission to claim that fresh onboarding passed. The customer app's native
+revision coverage is now verified independently of those other-app gaps.
+
+## Play submission - 14 October 2026
+
+Sign in details and the full-access acknowledgement were saved for all three
+pre-created, approved role accounts, then sent with their production releases.
+Following specific owner approval, Rider's private review instructions also
+include the companion demo customer login so reviewers can retrieve the matching
+order's handover code without a personal account, SMS or assistance. The Rider
+review was restarted to submit this additional instruction. No credential was
+published in a store listing or repository; existing manual revocation remains
+available. All three Console app-list entries show In review, not production.
+
+This supersedes earlier statements that no access declaration was submitted. It
+does not convert unexecuted fresh onboarding/upload or Play-installed checks into
+passed tests. The accounts provide the already-onboarded role workflows.

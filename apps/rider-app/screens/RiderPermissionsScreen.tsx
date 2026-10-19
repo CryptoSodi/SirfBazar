@@ -30,7 +30,7 @@ export default function RiderPermissionsScreen() {
     try {
       const result = await Location.requestForegroundPermissionsAsync();
       setLocation(result.granted ? 'granted' : 'not-enabled');
-      setMessage(result.granted ? 'Device location permission is enabled. This build does not send live GPS updates.' : 'Location is not enabled. Addresses and external navigation remain available.');
+      setMessage(result.granted ? 'Location access enabled. Your position is shared while an active delivery screen is open.' : 'Location is not enabled. Addresses and external navigation remain available.');
     } catch { setMessage('Unable to request location access. Check device settings.'); }
   };
   const notificationAccess = async () => {
@@ -45,7 +45,7 @@ export default function RiderPermissionsScreen() {
   };
   return <Page title="Location & alerts" back={() => navigation.goBack()} activeTab="Profile" onTab={onTab}>
     <Label>DEVICE ACCESS</Label><H1 style={{ marginTop: 8 }}>Stay connected{'\n'}to your delivery.</H1><Body muted style={{ marginTop: 12 }}>Review what the app uses and when.</Body>
-    <Card style={{ marginTop: 22 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><IconBox name="pin" /><Badge tone={location === 'granted' ? 'green' : 'amber'}>{location === 'granted' ? 'Enabled' : 'Not enabled'}</Badge></View><H2 style={{ fontSize: 16, marginTop: 16 }}>Location during delivery</H2><Body muted small style={{ marginTop: 8 }}>Live GPS sharing is not active in this build. You can still read addresses and open external navigation.</Body><Button variant="quiet" onPress={() => void locationAccess()} style={{ marginTop: 16 }}>Review location access</Button></Card>
+    <Card style={{ marginTop: 22 }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}><IconBox name="pin" /><Badge tone={location === 'granted' ? 'green' : 'amber'}>{location === 'granted' ? 'Enabled' : 'Not enabled'}</Badge></View><H2 style={{ fontSize: 16, marginTop: 16 }}>Location during delivery</H2><Body muted small style={{ marginTop: 8 }}>With permission, your position is shared while an active delivery screen is open. Sharing stops when you leave that screen or put the app in the background. Addresses and external navigation remain available without location access.</Body><Button variant="quiet" onPress={() => void locationAccess()} style={{ marginTop: 16 }}>Review location access</Button></Card>
     <Card style={{ marginTop: 12 }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}><IconBox name="bell" /><View style={{ flex: 1 }}><H2 style={{ fontSize: 16 }}>Delivery alerts</H2><Body muted small>New assignments and important updates</Body></View></View><Button variant="secondary" onPress={() => void notificationAccess()} style={{ marginTop: 16 }}>Review notification access</Button></Card>
     <Note style={{ marginTop: 22 }}>Online status and GPS access are different. Without location, addresses remain readable; location updates may be unavailable.</Note>
     {!!message && <ToastMessage ok={(message.startsWith('Location access enabled') ? 'green' : 'neutral') === 'green'}>{message}</ToastMessage>}

@@ -14,9 +14,19 @@ development-only and must not be used to reconfigure production.
 |---|---|---|
 | Customer website (`apps/web`) | Vercel | `https://sirfbazar.com` (+ `www`) |
 | Admin dashboard (`apps/admin`) | Vercel | `https://admin.sirfbazar.com` |
+| Merchant website (`apps/shop`) | Vercel project `sirf-bazar-shop` | `https://shop.sirfbazar.com` |
 | Backend API (`apps/api`) | Oracle host `129.153.16.84`, through Caddy | `https://api.sirfbazar.com` |
 | Database | Existing PostgreSQL on the Oracle host | private to the host |
 | DNS / TLS | Cloudflare direct A record; Caddy terminates HTTPS | — |
+
+Merchant website Maps requires Production build variables
+`VITE_GOOGLE_MAPS_API_KEY` (website/API-restricted key) and
+`VITE_GOOGLE_MAPS_MAP_ID`. They were configured and the live profile map verified
+on 19 October 2026. Values are managed in Vercel, not committed to source.
+Changing these variables requires rebuilding the frontend. See
+[shop website Maps repair](google-play/shop-website-maps-2026-10-19.md) for the
+scoped deployment evidence and rollback boundaries. Android Maps keys are not
+interchangeable with website keys.
 
 Both frontends default to `https://api.sirfbazar.com/api` via their committed
 `.env.production` files — no dashboard env vars needed. **Until the tunnel is
