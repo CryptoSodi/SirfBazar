@@ -92,7 +92,7 @@ module.exports = async (page, baseUrl) => {
   if (uploads[2].items.length !== 1 || uploads[2].items[0].productId !== 'arvi') throw Error('Successful rows were submitted again');
   await page.getByRole('button', { name: 'Seafood', exact: true }).click();
   await page.getByText('No products are available in Seafood.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Show all products', exact: true }).click();
+  await page.getByRole('button', { name: 'Show all catalog products', exact: true }).click();
   await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();
   failCatalog = true;
   await page.getByRole('searchbox', { name: 'Search catalog', exact: true }).fill('broken');
@@ -100,7 +100,7 @@ module.exports = async (page, baseUrl) => {
   failCatalog = false;
   await page.getByRole('button', { name: 'Retry catalogue', exact: true }).click();
   await page.getByText('No catalog products match “broken”.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Show all products', exact: true }).click();
+  await page.getByRole('button', { name: 'Show all catalog products', exact: true }).click();
   await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Use dark appearance', exact: true }).click();
   await page.screenshot({ path: 'output/playwright/categories-dark.png', fullPage: true });
