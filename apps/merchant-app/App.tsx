@@ -15,13 +15,23 @@ import CatalogScreen from './screens/CatalogScreen';
 import RidersScreen from './screens/RidersScreen';
 import MoreScreen from './screens/MoreScreen';
 import OnboardScreen from './screens/OnboardScreen';
+import CreateProductScreen from './screens/CreateProductScreen';
+import TeamScreen from './screens/TeamScreen';
+import ShopSettingsScreen from './screens/ShopSettingsScreen';
+import TourScreen from './screens/TourScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
 
 export type RootStackParamList = {
   Login: undefined;
-  Onboard: undefined;
+  Onboard: { registration?: { firstName: string; lastName: string; contact: string; email?: string; password: string } } | undefined;
   Tabs: undefined;
   OrderDetail: { orderId: string };
   Catalog: undefined;
+  CreateProduct: undefined;
+  Team: undefined;
+  ShopSettings: undefined;
+  Tour: undefined;
+  Notifications: undefined;
 };
 
 const Tab = createBottomTabNavigator();
@@ -67,7 +77,7 @@ const theme = {
 
 export default function App() {
   const [ready, setReady] = useState(false);
-  const [entryRoute, setEntryRoute] = useState<'Login' | 'Tabs' | 'Onboard'>('Login');
+  const [entryRoute, setEntryRoute] = useState<'Login' | 'Tabs' | 'Onboard' | 'Tour'>('Login');
 
   useEffect(() => {
     getEntryRoute().then((route) => {
@@ -91,6 +101,11 @@ export default function App() {
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
         <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Order' }} />
         <Stack.Screen name="Catalog" component={CatalogScreen} options={{ title: 'Add from catalog' }} />
+        <Stack.Screen name="CreateProduct" component={CreateProductScreen} options={{ title: 'Add new product' }} />
+        <Stack.Screen name="Team" component={TeamScreen} options={{ title: 'Your team' }} />
+        <Stack.Screen name="ShopSettings" component={ShopSettingsScreen} options={{ title: 'Shop settings' }} />
+        <Stack.Screen name="Tour" component={TourScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
       </Stack.Navigator>
       <ToastHost />
     </NavigationContainer>

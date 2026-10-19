@@ -1,7 +1,7 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCallback, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
 import { api, clearAuth, pkr } from '../lib/api';
@@ -13,10 +13,13 @@ export default function MoreScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [earnings, setEarnings] = useState<any>(null);
   const [settlements, setSettlements] = useState<any[]>([]);
+  const [isOwner, setIsOwner] = useState(false);
+  const [canEditStore, setCanEditStore] = useState(false);
 
   const load = useCallback(() => {
     api.get('/merchant/earnings').then(setEarnings).catch(() => undefined);
     api.get('/merchant/settlements').then((r) => setSettlements(Array.isArray(r) ? r : r.items ?? [])).catch(() => undefined);
+    api.get('/merchant/profile').then((profile) => { setIsOwner(!!profile.isOwner); setCanEditStore(!!profile.isOwner || (profile.permissions ?? []).includes('STORE')); }).catch(() => undefined);
   }, []);
 
   useFocusEffect(load);
@@ -25,6 +28,13 @@ export default function MoreScreen() {
     <SafeAreaView style={s.screen} edges={['top']}>
       <ScrollView contentContainerStyle={s.pad}>
         <Text style={s.h1}>Earnings & more</Text>
+
+        <TouchableOpacity style={[s.btnGhost, { marginTop: 16, minHeight: 48 }]} onPress={() => navigation.navigate('Notifications')}><Text style={s.btnGhostText}>Notifications</Text></TouchableOpacity>
+        {canEditStore && <TouchableOpacity style={[s.btnGhost, { marginTop: 16, minHeight: 48 }]} onPress={() => navigation.navigate('ShopSettings')}><Text style={s.btnGhostText}>Shop settings</Text></TouchableOpacity>}
+        <TouchableOpacity style={[s.btnGhost, { marginTop: 8, minHeight: 48 }]} onPress={() => navigation.navigate('Tour')}><Text style={s.btnGhostText}>Replay app tour</Text></TouchableOpacity>
+        <TouchableOpacity style={[s.btnGhost, { marginTop: 8, minHeight: 48 }]} onPress={() => void Linking.openURL('https://shop.sirfbazar.com/ipos')}><Text style={s.btnGhostText}>Open iPOS in browser</Text></TouchableOpacity>
+        <TouchableOpacity style={[s.btnGhost, { marginTop: 8, minHeight: 48 }]} onPress={() => void Linking.openURL('https://shop.sirfbazar.com/products')}><Text style={s.btnGhostText}>Import CSV or Excel on web</Text></TouchableOpacity>
+        {isOwner && <TouchableOpacity style={[s.btnGhost, { marginTop: 16, minHeight: 48 }]} onPress={() => navigation.navigate('Team')}><Text style={s.btnGhostText}>Manage your team</Text></TouchableOpacity>}
 
         {earnings && (
           <View style={[s.card, { marginTop: 14 }]}>
