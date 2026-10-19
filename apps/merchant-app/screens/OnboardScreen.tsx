@@ -1,7 +1,7 @@
 import { ToastMessage } from '../components/Toast';
 import { AppIcon } from '../components/AppIcon';
 import { IconLabel } from '../components/IconLabel';
-import { useNavigation } from '@react-navigation/native';
+import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import ShopMapPicker from '../components/ShopMapPicker';
@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../App';
-import { api, clearAuth, finishOnboarding, getUser, uploadImage, uploadMerchantIdentity } from '../lib/api';
+import { api, clearAuth, finishOnboarding, getUser, queueMobileTour, storeAuth, uploadImage, uploadMerchantIdentity } from '../lib/api';
 import { colors, s } from '../lib/theme';
 
 const SHOP_TYPES = [
@@ -21,9 +21,15 @@ const label = (t: string) => t.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g,
 
 export default function OnboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<RouteProp<RootStackParamList, 'Onboard'>>();
+  const registration = route.params?.registration;
   const [photo, setPhoto] = useState<string | null>(null);
   const [identityPhoto, setIdentityPhoto] = useState<string | null>(null);
   const [shopCreated, setShopCreated] = useState(false);
+  const [cnic, setCnic] = useState('');
+  const [attemptId, setAttemptId] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [registrationVerified, setRegistrationVerified] = useState(false);
   const [shopName, setShopName] = useState('');
   const [shopType, setShopType] = useState('GROCERY');
   const [phone, setPhone] = useState('');
@@ -48,6 +54,7 @@ export default function OnboardScreen() {
     }).catch(() => undefined);
     return () => { active = false; };
   }, []);
+  useEffect(() => { if (registration?.contact) setPhone(registration.contact); }, [registration?.contact]);
 
   const pickPhoto = async (fromCamera: boolean) => {
     setError('');
@@ -70,24 +77,45 @@ export default function OnboardScreen() {
     if (!identityPhoto) return setError('Choose an image of the shop owner’s CNIC.');
     if (shopCreated) {
       setBusy(true); setError('');
-      try { await uploadMerchantIdentity(identityPhoto); navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }); }
+      try { await uploadMerchantIdentity(identityPhoto); const user = await getUser(); if (user?.id) await queueMobileTour(user.id); navigation.reset({ index: 0, routes: [{ name: 'Tour' }] }); }
       catch { setError('Your shop was saved, but the CNIC image did not upload. Check your connection and retry.'); }
       finally { setBusy(false); }
       return;
     }
     if (!shopName.trim()) return setError('Shop name is required.');
-    if (!phone.trim()) return setError('Phone number is required.');
+    const shopPhone = phone.replace(/[\s()-]/g, '');
+    if (!/^\+?[0-9]{10,15}$/.test(shopPhone)) return setError('Enter a valid shop phone number.');
     if (!address.trim()) return setError('Address is required.');
     if (!city.trim()) return setError('City is required.');
     if (!coords) return setError('Select your shop entrance on the map.');
     const parsedCoverageKm = Number(coverageKm);
     const parsedDeliveryFee = Number(deliveryFee);
+    const parsedMinOrder = minOrder.trim() ? Number(minOrder) : 0;
     if (!Number.isFinite(parsedCoverageKm) || parsedCoverageKm < 0.5 || parsedCoverageKm > 50) return setError('Delivery coverage must be between 0.5 and 50 km.');
     if (!Number.isFinite(parsedDeliveryFee) || parsedDeliveryFee < 0 || parsedDeliveryFee > 21474836.47) return setError('Enter a valid non-negative delivery fee in PKR.');
+    if (!Number.isSafeInteger(Math.round(parsedMinOrder * 100)) || parsedMinOrder < 0) return setError('Enter a valid minimum order amount in PKR.');
+    if (hours.some((entry) => !entry.isClosed && (!/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.opensAt) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry.closesAt)))) return setError('Enter opening and closing times as HH:MM, for example 09:00.');
 
     setBusy(true);
     setError('');
     try {
+      if (registration && !registrationVerified) {
+        if (!/^\d{5}-?\d{7}-?\d$/.test(cnic.trim())) { setError('Enter the 13 digits on your CNIC.'); return; }
+        if (!attemptId) {
+          const attempt = await api.post('/auth/merchant-register/start', {
+            firstName: registration.firstName, lastName: registration.lastName, contact: registration.contact,
+            email: registration.email, password: registration.password, cnic: cnic.trim(), channel: 'mobile',
+          });
+          setAttemptId(attempt.attemptId);
+          return;
+        }
+        if (!/^\d{6}$/.test(verificationCode.trim())) { setError('Enter the six-digit verification code.'); return; }
+        const session = await api.post('/auth/merchant-register/verify', { attemptId, code: verificationCode.trim() });
+        // The verified owner has a CUSTOMER token until /merchant/onboard creates
+        // the shop. Keep setup resumable if the app closes between these calls.
+        await storeAuth(session, 'customer');
+        setRegistrationVerified(true);
+      }
       let bannerUrl: string | undefined;
       if (photo) bannerUrl = await uploadImage(photo);
       const defaultHours = hours.find((entry) => !entry.isClosed);
@@ -95,7 +123,7 @@ export default function OnboardScreen() {
       const res = await api.post('/merchant/onboard', {
         shopName: shopName.trim(),
         shopType,
-        phoneNumber: phone.trim(),
+        phoneNumber: shopPhone,
         address: address.trim(),
         city: city.trim(),
         area: area.trim() || undefined,
@@ -107,15 +135,16 @@ export default function OnboardScreen() {
         operatingHours: hours,
         openingTime: defaultHours?.opensAt ?? '09:00',
         closingTime: defaultHours?.closesAt ?? '21:00',
-        minimumOrderValuePaisa: minOrder.trim() ? Math.round(Number(minOrder) * 100) : undefined,
+        minimumOrderValuePaisa: Math.round(parsedMinOrder * 100),
         bannerUrl,
         logoUrl: bannerUrl,
       });
 
-      await finishOnboarding(res); // store the fresh merchant tokens + profile
+      const user = await finishOnboarding(res); // store the fresh merchant tokens + profile
       setShopCreated(true);
       await uploadMerchantIdentity(identityPhoto);
-      navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+      if (user?.id) await queueMobileTour(user.id);
+      navigation.reset({ index: 0, routes: [{ name: 'Tour' }] });
     } catch (e: any) {
       setError(e?.message ?? 'Could not create your shop.');
     } finally {
@@ -154,6 +183,7 @@ export default function OnboardScreen() {
         </View>
 
         <Text style={[s.h2, { marginTop: 18, marginBottom: 8 }]}>Owner CNIC image (required)</Text>
+        {registration && <Field label="National Identity Card (CNIC)"><TextInput accessibilityLabel="National Identity Card number" style={s.input} value={cnic} onChangeText={setCnic} keyboardType="number-pad" placeholder="35201-1234567-1" maxLength={15} /></Field>}
         <TouchableOpacity style={s.btnGhost} onPress={async () => {
           const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 });
           if (!result.canceled && result.assets?.[0]) setIdentityPhoto(result.assets[0].uri);
@@ -243,8 +273,10 @@ export default function OnboardScreen() {
 
         {!!error && <ToastMessage>{error}</ToastMessage>}
 
+        {!!attemptId && !registrationVerified && <View style={[s.card, { marginTop: 16, gap: 8 }]}><Text style={s.h2}>Verify your mobile number</Text><Text style={s.muted}>Enter the code sent to {registration?.contact}. This creates your owner account before the shop is saved.</Text><TextInput accessibilityLabel="Six-digit verification code" style={[s.input, { minHeight: 52, textAlign: 'center', fontSize: 22, letterSpacing: 6 }]} value={verificationCode} onChangeText={(value) => setVerificationCode(value.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" autoComplete="one-time-code" /></View>}
+
         <TouchableOpacity style={[s.btn, { marginTop: 16 }]} onPress={submit} disabled={busy}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>{shopCreated ? 'Retry ID upload' : 'Create my shop'}</Text>}
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>{shopCreated ? 'Retry ID upload' : attemptId && !registrationVerified ? 'Verify & create shop' : registration && !registrationVerified ? 'Send verification code' : 'Create my shop'}</Text>}
         </TouchableOpacity>
         <Text style={[s.faint, { textAlign: 'center', marginTop: 8 }]}>Your shop opens after the required CNIC image is saved.</Text>
         <TouchableOpacity onPress={logout} style={{ marginTop: 14, alignItems: 'center' }}>

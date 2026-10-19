@@ -9,9 +9,15 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(__dirname, '../l
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText, { module: moduleObject, exports: moduleObject.exports });
 const flow = moduleObject.exports;
-test('sign-up uses base identity; sign-in requests merchant authority', () => {
+test('legacy OTP contexts remain scoped while merchant registration uses its dedicated flow', () => {
   assert.equal(flow.authContextFor('signup'), 'customer');
   assert.equal(flow.authContextFor('signin'), 'merchant');
+  const login = fs.readFileSync(path.join(__dirname, '../screens/LoginScreen.tsx'), 'utf8');
+  const onboard = fs.readFileSync(path.join(__dirname, '../screens/OnboardScreen.tsx'), 'utf8');
+  assert.match(login, /Continue to shop details/);
+  assert.match(onboard, /auth\/merchant-register\/start/);
+  assert.match(onboard, /auth\/merchant-register\/verify/);
+  assert.match(onboard, /uploadMerchantIdentity\(identityPhoto\)/);
 });
 test('new verified accounts can resume shop setup', () => {
   assert.equal(flow.authDestination({ status: 'ACTIVE', role: 'CUSTOMER' }, 'customer'), 'Onboard');
@@ -48,4 +54,20 @@ test('login keeps visible sign-up, OTP autofill and keyboard-safe scrolling', ()
   assert.match(source, /KeyboardAvoidingView/);
   assert.match(source, /ScrollView/);
   assert.doesNotMatch(source, /Demo shop:|123456|catch\s*\{/);
+});
+test('mobile merchant flows retain owner-controlled staff passwords and idempotent catalogue adds', () => {
+  const team = fs.readFileSync(path.join(__dirname, '../screens/TeamScreen.tsx'), 'utf8');
+  const catalog = fs.readFileSync(path.join(__dirname, '../components/BulkCatalogModal.tsx'), 'utf8');
+  const login = fs.readFileSync(path.join(__dirname, '../screens/LoginScreen.tsx'), 'utf8');
+  assert.match(team, /merchant\/staff\/\$\{passwordFor\.id\}\/password/);
+  assert.match(login, /auth\/merchant-login/);
+  assert.match(catalog, /requestId: uuidV4\(\)/);
+  assert.match(catalog, /Retry same selection/);
+});
+test('verified owner setup can resume before the shop is created', () => {
+  const onboard = fs.readFileSync(path.join(__dirname, '../screens/OnboardScreen.tsx'), 'utf8');
+  const login = fs.readFileSync(path.join(__dirname, '../screens/LoginScreen.tsx'), 'utf8');
+  assert.match(onboard, /storeAuth\(session, 'customer'\)/);
+  assert.match(login, /Finish an unfinished shop setup/);
+  assert.match(login, /context: resumeSetup \? 'customer' : authContextFor\(mode\)/);
 });
