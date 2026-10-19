@@ -62,7 +62,7 @@ export class NotificationsService {
         data: {
           type: input.type,
           referenceId: input.referenceId ?? null,
-          url: input.type.toUpperCase().includes('ORDER') ? '/orders' : '/workspace',
+          url: input.type.toUpperCase().includes('ORDER') ? '/orders' : input.type.toUpperCase().includes('PRODUCT') ? '/products' : '/workspace',
         },
       }, audience);
       return projected;

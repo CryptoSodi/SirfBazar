@@ -31,6 +31,14 @@
 .signup-label-row em, .signup-field label em { color: #ba1a1a; font-style: normal; }
 .signup-two-col { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
 .signup-field { min-width: 0; }
+.signup-secondary-contact { margin-top: 16px; }
+.signup-three-col { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.signup-settings { padding: 20px 24px; border: 1px solid #dbe3dc; border-radius: 12px; }
+.signup-identity { padding: 20px 24px; border: 1px solid #b4dcc9; border-radius: 12px; background: #f4fcf8; }
+.signup-identity-number { margin-bottom: 20px; }
+.signup-identity input[type='file'] { display: block; max-width: 100%; font: inherit; font-size: 14px; color: #071f18; }
+.signup-identity input[type='file']::file-selector-button { min-height: 44px; margin-inline-end: 12px; padding: 8px 12px; border: 1px solid #007a52; border-radius: 8px; background: #fff; color: #005f3f; font: inherit; font-weight: 700; cursor: pointer; }
+.signup-selected-file { margin-top: 8px; font-size: 13px; color: #3e4942; overflow-wrap: break-word; }
 .signup-field > label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: #071f18; }
 .signup-field input, .signup-input-icon input, .signup-contact-row input, .signup-select select, .signup-address textarea { display: block; width: 100%; min-width: 0; min-height: 52px; padding: 12px 16px; border: 1px solid #7b9388; border-radius: 10px; background: #fff; outline: none; color: #071f18; font-size: 16px; line-height: 24px; transition: border-color 140ms, box-shadow 140ms; }
 .signup-field input:focus, .signup-input-icon input:focus, .signup-contact-row input:focus, .signup-select select:focus, .signup-address textarea:focus { border-color: #007a52; box-shadow: 0 0 0 2px #007a52, 0 0 0 5px #eaf7f0; }
@@ -164,7 +172,7 @@
 }
 @media (max-width: 640px) {
   .signup-shell { padding: 26px 16px 34px; }
-  .signup-progress-grid, .signup-two-col, .signup-photo-grid, .signup-pillars { grid-template-columns: 1fr; }
+  .signup-progress-grid, .signup-two-col, .signup-three-col, .signup-photo-grid, .signup-pillars { grid-template-columns: 1fr; }
   .signup-progress-grid { gap: 12px; }
   .signup-progress-title { align-items: flex-start; }
   .signup-activation { display: none; }
@@ -174,6 +182,7 @@
   .signup-channel-switch { width: 100%; }
   .signup-channel-switch button { flex: 1; padding: 8px; font-size: 11px; }
   .signup-soft-panel { padding: 16px; }
+  .signup-settings, .signup-identity { padding: 16px; }
   .signup-actions, .signup-shop-actions > div { align-items: stretch; flex-direction: column-reverse; }
   .signup-actions > a, .signup-back { justify-content: center; }
   .signup-primary, .signup-draft { width: 100%; white-space: normal; text-align: center; }

@@ -253,13 +253,15 @@ export class AuthService {
         if (existing) {
           if (reviewAccount(existing.id)) throw new UnauthorizedException('Use the supplied review phone and code.');
           if (existing.status !== 'ACTIVE') throw new UnauthorizedException('Account is not active');
-          if (existing.googleId || !profile.emailAuthoritative) {
+          // A registration contact email is not proof that its owner controls this
+          // account. Only a previously verified email may link by address alone.
+          if (existing.googleId || !existing.isEmailVerified || !profile.emailAuthoritative) {
             throw new UnauthorizedException('Sign in using your existing method and link Google from your account.');
           }
           // A denied staff/admin login must not attach a new identity.
           await this.resolveContextRole(existing.id, context, db);
           const changed = await db.user.updateMany({
-            where: { id: existing.id, googleId: null, status: 'ACTIVE', email: existing.email },
+            where: { id: existing.id, googleId: null, status: 'ACTIVE', email: existing.email, isEmailVerified: true },
             data: { googleId: profile.googleId, isEmailVerified: true },
           });
           if (changed.count !== 1) throw new UnauthorizedException('Account changed. Please sign in again.');
@@ -419,6 +421,10 @@ export class AuthService {
 
   async startMerchantRegistration(dto: MerchantRegistrationStartDto) {
     const identifier = this.normalizeIdentifier(dto.contact);
+    const optionalEmail = dto.email?.trim().toLowerCase();
+    if (optionalEmail && identifier.includes('@') && optionalEmail !== identifier) {
+      throw new BadRequestException('Use the same email address for verification and contact.');
+    }
     if (reviewPhone(identifier)) throw new BadRequestException('Reserved review identity.');
     if (!this.isMockOtp && (dto.channel !== 'mobile' || identifier.includes('@'))) {
       throw new BadRequestException('Verification requires a mobile number. Email delivery is not configured.');
@@ -429,18 +435,22 @@ export class AuthService {
       where: { OR: [{ cnic }, identifier.includes('@') ? { email: identifier } : { phoneNumber: identifier }] },
       include: { merchant: { select: { id: true } } },
     });
-    if (existing?.merchant) throw new BadRequestException('A merchant account already exists for these details. Sign in instead.');
-    if (existing && existing.cnic && existing.cnic !== cnic) throw new BadRequestException('These registration details are already in use.');
+    // Signup must never rewrite an existing account's password, CNIC or email
+    // before the caller proves control of that account.
+    if (existing) throw new BadRequestException('An account already uses these details. Sign in to continue.');
+    if (optionalEmail) {
+      const emailOwner = await this.prisma.user.findUnique({ where: { email: optionalEmail }, select: { id: true } });
+      if (emailOwner) throw new BadRequestException('This email address is already in use.');
+    }
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const data = {
       fullName: `${dto.firstName.trim()} ${dto.lastName.trim()}`.trim(),
       cnic,
       passwordHash,
       ...(identifier.includes('@') ? { email: identifier } : { phoneNumber: identifier }),
+      ...(!identifier.includes('@') && optionalEmail ? { email: optionalEmail, isEmailVerified: false } : {}),
     };
-    const user = existing
-      ? await this.prisma.user.update({ where: { id: existing.id }, data })
-      : await this.prisma.user.create({ data: { ...data, role: UserRole.CUSTOMER } });
+    await this.prisma.user.create({ data: { ...data, role: UserRole.CUSTOMER } });
     const code = this.isMockOtp ? '123456' : generateNumericCode(6);
     const attempt = await this.createOtp(identifier, 'MERCHANT_REGISTRATION', code);
     const status = this.isMockOtp ? 'test' : await this.deliverOtp(attempt.id, identifier, code, 'MERCHANT_REGISTRATION');
@@ -476,7 +486,9 @@ export class AuthService {
     }
     await this.enforceOtpRequestLimit(clean, 'MERCHANT_PASSWORD_RESET');
     const user = await this.merchantUserByIdentifier(clean);
-    if (user) {
+    // Staff credentials are assigned and changed by the shop owner. Keep the
+    // response generic so a recovery request cannot reveal account ownership.
+    if (user?.merchant) {
       const code = this.isMockOtp ? '123456' : generateNumericCode(6);
       const attempt = await this.createOtp(clean, 'MERCHANT_PASSWORD_RESET', code);
       if (!this.isMockOtp && !clean.includes('@')) {
@@ -491,7 +503,7 @@ export class AuthService {
     if (reviewPhone(clean)) throw new BadRequestException('Reserved review identity.');
     const user = await this.merchantUserByIdentifier(clean);
     const otp = await this.prisma.otpCode.findFirst({ where: { phoneNumber: clean, purpose: 'MERCHANT_PASSWORD_RESET', consumedAt: null }, orderBy: { createdAt: 'desc' } });
-    if (!user || !otp || otp.expiresAt < new Date() || otp.attempts >= this.otpMaxAttempts) throw new UnauthorizedException('Recovery code is invalid or expired.');
+    if (!user?.merchant || !otp || otp.expiresAt < new Date() || otp.attempts >= this.otpMaxAttempts) throw new UnauthorizedException('Recovery code is invalid or expired.');
     await this.consumeOtp(otp, code);
     await this.prisma.$transaction([
       this.prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(password, 12) } }),

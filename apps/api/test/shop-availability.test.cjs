@@ -76,12 +76,12 @@ test('weekly closing hours hide offers even when the legacy open toggle remains 
   assert.deepEqual((await f.service.nearbyMerchants({})).items.find((shop) => shop.id === 'online').isAvailableNow, false);
 });
 
-function cartFixture(isOnline, isOpen) {
+function cartFixture(isOnline, isOpen, product = { approvalStatus: 'APPROVED' }) {
   let quantity = 2, writes = 0;
   const tx = {
     $queryRaw: async () => [{ id: 'locked-owner' }],
     cart: { findFirst: async ({ where }) => where.status === 'MERGED' ? null : ({ id: 'cart' }), update: async () => {} },
-    merchantProduct: { findUnique: async () => ({ id: 'mp', merchantId: 'shop', productId: 'milk', isAvailable: true, stockQuantity: 20, pricePaisa: 100, merchant: { shopName: 'Fixture Shop', approvalStatus: 'APPROVED', isOnline, isOpen }, product: { approvalStatus: 'APPROVED' } }) },
+    merchantProduct: { findUnique: async () => ({ id: 'mp', merchantId: 'shop', productId: 'milk', isAvailable: true, stockQuantity: 20, pricePaisa: 100, merchant: { shopName: 'Fixture Shop', approvalStatus: 'APPROVED', isOnline, isOpen }, product }) },
     cartItem: { findFirst: async ({ where }) => where.cartId === 'cart' && where.id === 'item' ? { id: 'item', quantity, merchantProductId: 'mp' } : null, findUnique: async () => ({ id: 'item', quantity }), update: async ({ data }) => { quantity = data.quantity; writes++; }, create: async () => { writes++; }, delete: async () => { quantity = 0; writes++; }, deleteMany: async ({ where }) => { assert.equal(where.cartId, 'cart'); quantity = 0; writes++; } },
   };
   const service = new CartService({ $transaction: op => op(tx) }, {}, {});
@@ -105,4 +105,12 @@ test('online/open cart additions and increases remain supported', async () => {
   const f = cartFixture(true, true);
   await f.service.addItem({ customerId: 'customer' }, 'mp', 1); assert.equal(f.quantity(), 3);
   await f.service.updateItem({ customerId: 'customer' }, 'item', 4); assert.equal(f.quantity(), 4);
+});
+test('cart accepts shop-owned pending products but rejects another shop’s pending product', async () => {
+  const own = cartFixture(true, true, { approvalStatus: 'PENDING', createdByMerchantId: 'shop' });
+  await own.service.addItem({ customerId: 'customer' }, 'mp', 1);
+  assert.equal(own.quantity(), 3);
+  const foreign = cartFixture(true, true, { approvalStatus: 'PENDING', createdByMerchantId: 'other-shop' });
+  await assert.rejects(foreign.service.addItem({ customerId: 'customer' }, 'mp', 1), /product is not available/);
+  assert.equal(foreign.writes(), 0);
 });

@@ -1,7 +1,7 @@
 // Intercepted local fixture only; never sends real merchant mutations.
 module.exports = async (page, baseUrl) => {
   const user = { id: 'category-owner', status: 'ACTIVE', merchant: { id: 'category-shop' } };
-  const profile = { id: 'category-shop', shopName: 'Category Review Shop', isOwner: true, permissions: ['INVENTORY', 'POS'], approvalStatus: 'APPROVED' };
+  const profile = { id: 'category-shop', shopName: 'Category Review Shop', isOwner: true, permissions: ['INVENTORY', 'POS'], isOnline: true, isOpen: true, approvalStatus: 'APPROVED' };
   const categories = [{ id: 'produce', name: 'Fruits & Vegetables', children: [{ id: 'fruit', name: 'Fresh Fruits' }, { id: 'veg', name: 'Fresh Vegetables' }] }, { id: 'meat', name: 'Meat & Seafood', children: [{ id: 'chicken', name: 'Chicken' }, { id: 'seafood', name: 'Seafood' }] }];
   const catalog = [{ productId: 'apple', name: 'Apples', category: { id: 'fruit', name: 'Fresh Fruits' }, alreadyListed: false }, { productId: 'banana', name: 'Bananas', category: { id: 'fruit', name: 'Fresh Fruits' }, alreadyListed: true }, { productId: 'arvi', name: 'Arvi', category: { id: 'veg', name: 'Fresh Vegetables' }, alreadyListed: false }, { productId: 'chicken', name: 'Chicken breast', category: { id: 'chicken', name: 'Chicken' }, alreadyListed: false }];
   const uploads = [];
@@ -16,7 +16,7 @@ module.exports = async (page, baseUrl) => {
       if (failCatalog) { await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ message: 'Catalogue unavailable. Try again.' }) }); return; }
       const selected = url.searchParams.get('categoryId');
       const parent = categories.find(c => c.id === selected);
-      const items = catalog.filter(p => (!selected || p.category.id === selected || parent?.children.some(c => c.id === p.category.id)) && p.name.toLowerCase().includes((url.searchParams.get('q') || '').toLowerCase()));
+      const items = catalog.filter(p => (!selected || p.category.id === selected || parent?.children.some(c => c.id === p.category.id)) && (!url.searchParams.has('unlistedOnly') || !p.alreadyListed) && p.name.toLowerCase().includes((url.searchParams.get('q') || '').toLowerCase()));
       data = { items, total: items.length, totalPages: 1 };
     } else if (path.endsWith('/merchant/products/bulk-upload')) {
       const payload = route.request().postDataJSON(); uploads.push(payload);
@@ -29,6 +29,7 @@ module.exports = async (page, baseUrl) => {
   await page.context().addInitScript(({ user }) => {
     localStorage.setItem('sbs.accessToken', 'fixture.' + btoa(JSON.stringify({ role: 'MERCHANT_OWNER', exp: 4102444800 })) + '.fixture');
     localStorage.setItem('sbs.user', JSON.stringify(user));
+    localStorage.setItem(`sb:merchant-tour:v2:${user.merchant.id}:${user.id}`, 'done');
     localStorage.setItem('sirfbazar.merchant.theme', 'light');
   }, { user });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -37,6 +38,10 @@ module.exports = async (page, baseUrl) => {
   await parent.focus(); await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Collapse Fruits & Vegetables', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Fresh Fruits', exact: true }).click();
+  await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();
+  if (await page.locator('.catalog-product-name').getByText('Bananas', { exact: true }).count()) throw Error('Default catalogue showed a product already in this shop');
+  const catalogView = page.getByRole('combobox', { name: 'Show and sort catalog products' });
+  await catalogView.selectOption('all:az');
   await page.getByRole('checkbox', { name: 'Already in my shop: Bananas', exact: true }).waitFor();
   await page.getByRole('checkbox', { name: 'Select loaded', exact: true }).check();
   await page.getByRole('checkbox', { name: 'Deselect loaded', exact: true }).uncheck();
@@ -69,9 +74,9 @@ module.exports = async (page, baseUrl) => {
     await review.getByLabel(/Stock quantity for/).nth(index).fill('5');
   }
   await page.screenshot({ path: 'output/playwright/categories-desktop.png', fullPage: true });
-  await page.getByRole('combobox', { name: 'Sort loaded products' }).selectOption('za');
+  await catalogView.selectOption('all:za');
   if (await page.locator('.catalog-product-name').first().textContent() !== 'Bananas') throw Error('Visible-page sort failed');
-  await page.getByRole('combobox', { name: 'Sort loaded products' }).selectOption('az');
+  await catalogView.selectOption('all:az');
   await page.getByRole('button', { name: 'Import products', exact: true }).click();
   await page.getByRole('dialog').waitFor();
   await page.keyboard.press('Escape');
@@ -87,7 +92,7 @@ module.exports = async (page, baseUrl) => {
   if (uploads[2].items.length !== 1 || uploads[2].items[0].productId !== 'arvi') throw Error('Successful rows were submitted again');
   await page.getByRole('button', { name: 'Seafood', exact: true }).click();
   await page.getByText('No products are available in Seafood.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Show all products', exact: true }).click();
+  await page.getByRole('button', { name: 'Show all catalog products', exact: true }).click();
   await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();
   failCatalog = true;
   await page.getByRole('searchbox', { name: 'Search catalog', exact: true }).fill('broken');
@@ -95,7 +100,7 @@ module.exports = async (page, baseUrl) => {
   failCatalog = false;
   await page.getByRole('button', { name: 'Retry catalogue', exact: true }).click();
   await page.getByText('No catalog products match “broken”.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Show all products', exact: true }).click();
+  await page.getByRole('button', { name: 'Show all catalog products', exact: true }).click();
   await page.locator('.catalog-product-name').getByText('Apples', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Use dark appearance', exact: true }).click();
   await page.screenshot({ path: 'output/playwright/categories-dark.png', fullPage: true });

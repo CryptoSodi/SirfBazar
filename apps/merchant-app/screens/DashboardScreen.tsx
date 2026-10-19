@@ -1,9 +1,10 @@
 import { useToast } from '../components/Toast';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useState } from 'react';
-import { Image, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
+import { Image, RefreshControl, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { api, pkr } from '../lib/api';
+import { api, pkr, uploadMerchantIdentity } from '../lib/api';
 import { colors } from '../lib/theme';
 
 const ui = StyleSheet.create({
@@ -56,18 +57,57 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [availabilityBusy, setAvailabilityBusy] = useState(false);
+  const [profileError, setProfileError] = useState(false);
+  const [identityBusy, setIdentityBusy] = useState(false);
+  const availabilityBusyRef = useRef(false);
 
   const load = useCallback(() => {
     api.get('/merchant/dashboard').then(setStats).catch(() => undefined);
-    api.get('/merchant/profile').then(setProfile).catch(() => undefined);
+    api.get('/merchant/profile').then((value) => { setProfile(value); setProfileError(false); }).catch(() => setProfileError(true));
   }, []);
   useFocusEffect(load);
 
-  const toggleOnline = async (value: boolean) => {
-    try { await api.post(`/merchant/${value ? 'online' : 'offline'}`); load(); }
-    catch (e: any) { toast(e.message, false); }
+  const toggleOnline = async (open: boolean) => {
+    if (availabilityBusyRef.current) return;
+    availabilityBusyRef.current = true;
+    setAvailabilityBusy(true);
+    try {
+      let saved: any;
+      try {
+        saved = await api.post('/merchant/availability', { open });
+      } catch (error) {
+        if ((error as Error & { status?: number }).status !== 404) throw error;
+        // Older APIs keep separate flags. Apply the unavailable state first.
+        if (open) {
+          await api.post('/merchant/open');
+          await api.post('/merchant/online');
+        } else {
+          await api.post('/merchant/offline');
+          await api.post('/merchant/close');
+        }
+        saved = await api.get('/merchant/profile');
+      }
+      if (typeof saved?.isOnline !== 'boolean' || typeof saved?.isOpen !== 'boolean') throw new Error('Could not confirm the saved shop status.');
+      setStats((current: any) => current ? { ...current, isOnline: saved.isOnline, isOpen: saved.isOpen } : current);
+      toast(saved.isOnline && saved.isOpen ? 'Shop is on. Orders follow your opening hours.' : 'Shop closed. Customers cannot order right now.');
+      load();
+    } catch (e: any) { toast(e.message, false); load(); }
+    finally { availabilityBusyRef.current = false; setAvailabilityBusy(false); }
   };
 
+  if (profile?.approvalStatus === 'DRAFT') return <SafeAreaView style={ui.screen}><View style={[ui.panel, { margin: 18, gap: 12 }]}><Text style={ui.title}>Finish your shop setup</Text><Text style={ui.description}>Your shop is saved. Upload a clear image of the owner’s CNIC to open it for customers.</Text><TouchableOpacity style={ui.trial} disabled={identityBusy} onPress={async () => {
+    try {
+      const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.75 });
+      if (selected.canceled || !selected.assets?.[0]) return;
+      setIdentityBusy(true);
+      await uploadMerchantIdentity(selected.assets[0].uri);
+      toast('ID image saved. Your shop is ready.');
+      load();
+    } catch { toast('ID-card upload failed. Check your connection and try again.', false); }
+    finally { setIdentityBusy(false); }
+  }}><Text style={ui.trialTitle}>{identityBusy ? 'Uploading…' : 'Choose CNIC image'}</Text></TouchableOpacity></View></SafeAreaView>;
+  if (profileError) return <SafeAreaView style={ui.screen}><View style={[ui.panel, { margin: 18, gap: 12 }]}><Text style={ui.description}>Could not check your shop status. Check your connection and try again.</Text><TouchableOpacity style={ui.trial} onPress={load}><Text style={ui.trialTitle}>Retry</Text></TouchableOpacity></View></SafeAreaView>;
   if (!stats) return <SafeAreaView style={ui.screen}><Text style={[ui.description, { padding: 18 }]}>Loading your shop overview…</Text></SafeAreaView>;
 
   const metrics: Array<[string, string | number, string]> = [
@@ -98,8 +138,8 @@ export default function DashboardScreen() {
 
   return <SafeAreaView style={ui.screen} edges={['top']}><ScrollView contentContainerStyle={ui.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); load(); setRefreshing(false); }} />}>
     <Image source={require('../assets/brand/sirfbazar-horizontal-no-slogan.png')} style={ui.logo} accessibilityLabel="SirfBazar" />
-    <View style={ui.shopRow}><Text style={ui.shopName} numberOfLines={1}>{profile?.shopName ?? 'Your shop'}</Text><View style={ui.presence}><Text style={ui.presenceText}>{stats.isOnline ? 'Online' : 'Offline'}</Text><Switch value={stats.isOnline} onValueChange={toggleOnline} trackColor={{ true: colors.primary }} accessibilityLabel="Shop available for orders" /></View></View>
-    <Text style={ui.eyebrow}>Your shop, connected</Text><Text style={ui.title}>A good day starts here.</Text><Text style={ui.description}>Orders, stock and your own delivery team in one place.</Text><Text style={ui.status}>{stats.approvalStatus} · {stats.isOpen ? 'Store open' : 'Store closed'}</Text>
+    <View style={ui.shopRow}><Text style={ui.shopName} numberOfLines={1}>{profile?.shopName ?? 'Your shop'}</Text><View style={ui.presence}><Text style={ui.presenceText}>{stats.isOnline && stats.isOpen ? 'Shop on' : 'Shop closed'}</Text><Switch value={!!stats.isOnline && !!stats.isOpen} onValueChange={toggleOnline} disabled={availabilityBusy || stats.approvalStatus !== 'APPROVED'} trackColor={{ true: colors.primary }} accessibilityLabel="Accept customer orders" /></View></View>
+    <Text style={ui.eyebrow}>Your shop, connected</Text><Text style={ui.title}>A good day starts here.</Text><Text style={ui.description}>Orders, stock and your own delivery team in one place.</Text><Text style={ui.status}>{stats.approvalStatus === 'APPROVED' ? 'Orders follow your opening hours' : 'Shop access is not active'}</Text>
     {trialDetails && <View style={ui.trial}><Text style={ui.trialTitle}>{posTrial?.status === 'ACTIVE' ? 'POS trial active' : posTrial?.status === 'EXPIRED' ? 'POS trial ended' : posTrial?.status === 'DECLINED' ? 'POS not enabled' : 'POS access'}</Text><Text style={ui.trialText}>{trialDetails}</Text></View>}
     <View style={ui.grid}>{metrics.map(([label, value, hint]) => <View key={label} style={ui.metric}><Text style={ui.metricLabel}>{label}</Text><Text style={ui.metricValue} numberOfLines={1}>{value}</Text><Text style={ui.metricHint}>{hint}</Text></View>)}</View>
     <View style={ui.focus}><Text style={ui.focusTitle}>Your focus today</Text><Text style={ui.focusText}>{stats.pendingOrders ?? 0} online orders awaiting acceptance</Text><Text style={ui.focusText}>{stats.lowStockProducts ?? 0} products running low</Text></View>

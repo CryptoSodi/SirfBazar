@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -74,7 +74,7 @@ export class AdminMarketplaceService {
       },
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
-    return { ...merchant, trial: merchantTrial(merchant.createdAt) };
+    return { ...merchant, documents: merchant.documents.filter((document) => document.documentUrl !== 'PENDING_PRIVATE_UPLOAD'), trial: merchantTrial(merchant.createdAt) };
   }
 
   async setMerchantApproval(
@@ -95,6 +95,18 @@ export class AdminMarketplaceService {
     }
     await serializable(this.prisma, async (tx) => {
       const before = await tx.merchant.findUniqueOrThrow({ where: { id: merchantId } });
+      if (status === MerchantApprovalStatus.APPROVED) {
+        const identityRequired = before.approvalStatus === MerchantApprovalStatus.DRAFT || !!(await tx.merchantDocument.findFirst({
+          where: { merchantId, documentType: 'IDENTITY', documentUrl: 'PENDING_PRIVATE_UPLOAD' }, select: { id: true },
+        }));
+        if (identityRequired) {
+          const identity = await tx.merchantDocument.findFirst({
+            where: { merchantId, documentType: 'IDENTITY', documentUrl: { startsWith: '/api/merchant/documents/' } },
+            select: { id: true },
+          });
+          if (!identity) throw new BadRequestException('The owner must upload an ID-card image before this shop can be activated.');
+        }
+      }
       await tx.merchant.update({ where: { id: merchantId }, data: {
         approvalStatus: status, isOnline: status === MerchantApprovalStatus.APPROVED,
       } });
@@ -367,26 +379,31 @@ export class AdminMarketplaceService {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Product not found');
 
-    await this.prisma.product.update({
-      where: { id: productId },
+    if (product.approvalStatus === status) return { ok: true, approvalStatus: status };
+    const changed = await this.prisma.product.updateMany({
+      where: { id: productId, approvalStatus: product.approvalStatus },
       data: { approvalStatus: status },
     });
+    if (changed.count !== 1) throw new ConflictException('Product approval changed. Please refresh and try again.');
 
     // Tell the merchant who requested this product.
     if (product.createdByMerchantId && (status === 'APPROVED' || status === 'REJECTED')) {
       const merchant = await this.prisma.merchant.findUnique({
         where: { id: product.createdByMerchantId },
-        select: { userId: true },
+          select: { userId: true, staff: { where: { status: 'ACTIVE' }, select: { userId: true, permissions: true } } },
       });
       if (merchant) {
-        await this.notifications.notify({
-          userId: merchant.userId,
+          const recipients = [merchant.userId, ...merchant.staff.filter((member) => {
+            try { return (JSON.parse(member.permissions) as string[]).includes('INVENTORY'); }
+            catch { return false; }
+          }).map((member) => member.userId)];
+          await this.notifications.notifyMany([...new Set(recipients)], {
           audience: 'MERCHANT', scopeId: product.createdByMerchantId,
           title: status === 'APPROVED' ? 'Product approved' : 'Product rejected',
           body:
             status === 'APPROVED'
-              ? `"${product.name}" was approved and is now visible to customers.`
-              : `"${product.name}" was rejected${reason ? `: ${reason}` : '.'}`,
+              ? `"${product.name}" is approved for the shared catalogue. Your shop listing remains available.`
+              : `"${product.name}" was rejected and is no longer available in your shop${reason ? `: ${reason}` : '.'}`,
           type:
             status === 'APPROVED'
               ? NotificationType.PRODUCT_APPROVED

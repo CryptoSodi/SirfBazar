@@ -16,6 +16,7 @@ import { NotificationType, OrderStatus, RiderStatus, StaffPermission } from '../
 import { PageQuery, paged, parsePage } from '../common/utils/pagination';
 import { serializable } from '../common/transaction';
 import { createHash, randomUUID } from 'node:crypto';
+import { canSellShopProduct } from '../common/shop-product-visibility';
 
 @Injectable()
 export class MerchantOrdersService {
@@ -58,6 +59,7 @@ export class MerchantOrdersService {
       where,
       include: {
         items: true,
+        revisions: { where: { status: 'PENDING' }, select: { id: true, status: true, expiresAt: true }, take: 1 },
         deliveryAddress: true,
         rider: { select: { id: true, fullName: true, phoneNumber: true } },
         customer: { include: { user: { select: { fullName: true, phoneNumber: true } } } },
@@ -66,8 +68,9 @@ export class MerchantOrdersService {
       skip: paginationRequested ? skip : 0,
       take: paginationRequested ? take : 100,
     }), this.prisma.order.count({ where })]);
+    const withPending = rows.map(({ revisions, ...row }) => ({ ...row, pendingRevision: revisions[0] ?? null }));
     // Preserve the array response for existing clients; explicit page queries get metadata.
-    return paginationRequested ? paged(rows, total, page, pageSize) : rows;
+    return paginationRequested ? paged(withPending, total, page, pageSize) : withPending;
   }
 
   async detail(userId: string, orderId: string) {
@@ -287,7 +290,7 @@ export class MerchantOrdersService {
         }
         if (!change.replacementMerchantProductId) throw new BadRequestException('Choose a replacement product for this line.');
         const replacement = await tx.merchantProduct.findFirst({ where: { id: change.replacementMerchantProductId, merchantId: ctx.merchantId, isAvailable: true }, include: { product: { include: { category: true } } } });
-        if (!replacement || replacement.id === original.merchantProductId || replacement.stockQuantity < quantity || replacement.product.approvalStatus !== 'APPROVED' || replacement.product.isRestricted || replacement.product.requiresPrescription || replacement.product.category.isRestricted || !replacement.product.category.isActive) {
+        if (!replacement || replacement.id === original.merchantProductId || replacement.stockQuantity < quantity || !canSellShopProduct(replacement.product, ctx.merchantId) || replacement.product.isRestricted || replacement.product.requiresPrescription || replacement.product.category.isRestricted || !replacement.product.category.isActive) {
           throw new BadRequestException('The proposed replacement is unavailable or does not have enough stock.');
         }
         const unitPricePaisa = replacement.discountPricePaisa ?? replacement.pricePaisa;

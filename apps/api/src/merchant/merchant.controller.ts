@@ -11,9 +11,11 @@ import {
   AddDocumentDto,
   AddMerchantProductDto,
   BulkUploadDto,
+  ChangeStaffPasswordDto,
   CreateRiderDto,
   CreateStaffDto,
   OnboardMerchantDto,
+  SetShopAvailabilityDto,
   UpdateMerchantProductDto,
   UpdateMerchantProfileDto,
   UpdateRiderDto,
@@ -96,6 +98,11 @@ export class MerchantController {
   @Post('offline')
   offline(@CurrentUser() user: AuthUser) {
     return this.merchant.setOnline(user.userId, false);
+  }
+
+  @Post('availability')
+  availability(@CurrentUser() user: AuthUser, @Body() dto: SetShopAvailabilityDto) {
+    return this.merchant.setAvailability(user.userId, dto.open);
   }
 
   @Post('open')
@@ -239,6 +246,11 @@ export class MerchantController {
   @Put('staff/:id')
   updateStaff(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateStaffDto) {
     return this.people.updateStaff(user.userId, id, dto);
+  }
+
+  @Put('staff/:id/password')
+  changeStaffPassword(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ChangeStaffPasswordDto) {
+    return this.people.changeStaffPassword(user.userId, id, dto);
   }
 
   @Delete('staff/:id')

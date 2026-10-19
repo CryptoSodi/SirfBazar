@@ -60,6 +60,7 @@ jobs:
       - run: npm run test:bind
       - run: npm run test:pos
       - run: node -r ts-node/register/transpile-only --test test/category-sections.test.cjs
+      - run: node -r ts-node/register/transpile-only --test test/merchant-product-approval-and-staff.test.cjs
       - run: npm run test:waha
       - run: npm run test:whatsapp
       - run: npm run test:google
@@ -180,7 +181,7 @@ jobs:
         run: node ../../scripts/test-toast-bridge.cjs
         working-directory: apps/pos
       - if: matrix.app == 'shop'
-        run: npm run test:ipos && npm run test:alerts && npm run test:bulk && npm run test:catalog
+        run: npm run test:ipos && npm run test:alerts && npm run test:bulk && npm run test:catalog && node --test test/recent-listings.test.mjs
         working-directory: apps/shop
       - if: contains(fromJSON('["customer-app","merchant-app","rider-app"]'), matrix.app)
         run: npm test

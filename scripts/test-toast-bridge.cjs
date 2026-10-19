@@ -102,7 +102,7 @@ function mount(file, cutAt, expose, dependencies, globals = {}) {
     businessType: 'kiryana', address: 'Street, Lahore',
   }), setValue() {}, clearErrors() {}, register: () => ({}), handleSubmit: fn => fn };
   const shop = mount('apps/shop/src/auth/SignupFlowPage.tsx', '  return <div className="auth-page signup-page">',
-    '  globalThis.__actions = {submitShop, verifyAndCreate, setLatitude, setLongitude, setAttemptId, setCode}; globalThis.__state = {requestError, codeError, attemptId};', {
+    '  globalThis.__actions = {submitShop, verifyAndCreate, setLatitude, setLongitude, setIdentityPhoto, setAttemptId, setCode}; globalThis.__state = {requestError, codeError, attemptId};', {
       '@hookform/resolvers/zod': { zodResolver: () => () => ({}) },
       'react-hook-form': { useForm: () => form, useWatch: () => 'mobile' },
       'react-router-dom': { useNavigate: () => () => {}, Link() {} },
@@ -112,10 +112,12 @@ function mount(file, cutAt, expose, dependencies, globals = {}) {
         verifyRegistration: () => verification.promise,
       } },
       '../lib/api': { captureSession, sessionGenerationIsCurrent },
+      '../lib/merchant-tour-state': { queueFirstMerchantTour() {} },
       './lib/session': { getSession: () => null, saveSession() {} },
     });
   const renderShop = () => shop.render();
   state = renderShop();
+  state.__actions.setIdentityPhoto({ type: 'image/png', size: 100 });
   state.__actions.setLatitude('31.5'); state.__actions.setLongitude('74.3');
   state = renderShop();
   const oldRegistration = state.__actions.submitShop();

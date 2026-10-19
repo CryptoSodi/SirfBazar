@@ -1,0 +1,41 @@
+.merchant-tour-dialog[open]{position:fixed;inset:0;width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;padding:0;overflow:hidden;border:0;background:transparent;color:var(--ink)}
+.merchant-tour-dialog::backdrop{background:transparent}
+.merchant-tour-shade{position:absolute;inset:0;background:var(--scrim);pointer-events:none}
+.merchant-tour-spotlight{position:absolute;z-index:0;border-radius:12px;box-shadow:0 0 0 200vmax var(--scrim),0 0 0 3px var(--action);pointer-events:none;transition-property:left,top,width,height;transition-duration:180ms;transition-timing-function:cubic-bezier(.2,0,0,1)}
+.merchant-tour-card{position:absolute;z-index:1;max-height:calc(100dvh - 24px);overflow:auto;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:0 24px 65px rgba(0,0,0,.25);transition-property:left,top;transition-duration:180ms;transition-timing-function:cubic-bezier(.2,0,0,1)}
+.merchant-tour-illustration{position:relative;height:112px;overflow:hidden;display:grid;place-items:center;background:var(--surface-3);color:var(--accent-text)}
+.merchant-tour-illustration-halo{position:relative;z-index:1;width:60px;height:60px;display:grid;place-items:center;border-radius:18px;background:var(--surface);box-shadow:var(--shadow)}
+.merchant-tour-illustration-line{position:absolute;width:220px;height:220px;border:1px solid var(--line);border-radius:50%}
+.merchant-tour-illustration-line::before{content:'';position:absolute;inset:23px;border:1px solid var(--line);border-radius:50%}
+.merchant-tour-illustration-tile{position:absolute;width:30px;height:22px;border-radius:6px;background:var(--surface);box-shadow:var(--shadow);transform:rotate(-12deg)}
+.merchant-tour-illustration-tile.tile-one{left:54px;top:24px}.merchant-tour-illustration-tile.tile-two{right:52px;bottom:20px;transform:rotate(13deg)}
+.merchant-tour-card-body{padding:18px 20px 17px}
+.merchant-tour-card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.merchant-tour-step{font-size:11px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);font-variant-numeric:tabular-nums}
+.merchant-tour-close{width:40px;height:40px;display:grid;place-items:center;flex:none;border-radius:9px;background:var(--surface-2);color:var(--muted)}
+.merchant-tour-card h2{margin:0;font-size:20px;line-height:1.18;letter-spacing:-.02em;text-wrap:balance}
+.merchant-tour-card h2:focus{outline:none}
+.merchant-tour-card p{font-size:14px;line-height:1.5;text-wrap:pretty;overflow-wrap:break-word}
+.merchant-tour-card #merchant-tour-description{margin-top:10px}
+.merchant-tour-detail{margin-top:8px;color:var(--muted)}
+.merchant-tour-progress{display:flex;gap:5px;margin-top:17px}
+.merchant-tour-progress span{height:4px;flex:1;border-radius:999px;background:var(--line)}
+.merchant-tour-progress span.filled{background:var(--action)}
+.merchant-tour-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:18px}
+.merchant-tour-navigation{display:flex;align-items:center;gap:8px;margin-inline-start:auto}
+.merchant-tour-card button{min-height:40px;font-size:12px;font-weight:700}
+.merchant-tour-quiet,.merchant-tour-back{padding:8px 9px;background:transparent;color:var(--accent-text);border-radius:8px}
+.merchant-tour-back:disabled{opacity:.45;cursor:not-allowed}
+.merchant-tour-next{display:inline-flex;align-items:center;gap:6px;justify-content:center;min-width:85px;padding:8px 13px;border-radius:9px;background:var(--action);color:var(--action-ink,#fff)}
+.merchant-tour-next:hover{filter:brightness(1.05)}
+.merchant-tour-skip{display:block;margin-top:13px;padding:4px 0;background:none;color:var(--muted);font-size:12px;font-weight:500!important;text-decoration:underline;text-underline-offset:3px}
+.merchant-tour-card button:focus-visible,.merchant-tour-resume button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.merchant-tour-resume{position:fixed;inset:auto max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) auto;z-index:80;display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:calc(100vw - 32px);padding:8px 10px 8px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);box-shadow:0 12px 35px rgba(0,0,0,.16);font-size:12px;font-weight:650}
+.merchant-tour-resume button{min-height:36px;background:var(--surface-3);color:var(--accent-text);padding:6px 10px;border-radius:8px;font-weight:700}
+.merchant-tour-resume .merchant-tour-resume-close{width:36px;padding:0;display:grid;place-items:center;background:transparent;color:var(--muted)}
+.account-menu button.tour-replay{border-top:0;border-radius:7px;margin-top:0;color:var(--ink)}
+.page-heading .dashboard-heading-actions{flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:800px){.merchant-tour-card{max-height:min(66dvh,520px)}.merchant-tour-illustration{height:82px}.merchant-tour-card-body{padding:15px 17px}.merchant-tour-card h2{font-size:18px}.merchant-tour-resume{inset-inline:12px;justify-content:space-between}}
+@media(max-width:380px){.merchant-tour-illustration{display:none}}
+@media(max-width:480px){.page-heading .dashboard-heading-actions{justify-content:flex-start}.dashboard-heading-actions>.btn{min-width:0;flex:1 1 auto}.merchant-tour-actions{align-items:stretch}.merchant-tour-quiet{order:2}.merchant-tour-navigation{width:100%;margin:0;justify-content:space-between}.merchant-tour-next{flex:1}}
+@media(prefers-reduced-motion:reduce){.merchant-tour-spotlight,.merchant-tour-card{transition:none}}

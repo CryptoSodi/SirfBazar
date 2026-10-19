@@ -69,10 +69,17 @@ export class MerchantService {
           averagePreparationMinutes: dto.averagePreparationMinutes ?? 20,
           logoUrl: dto.logoUrl ?? null,
           bannerUrl: dto.bannerUrl ?? null,
-          approvalStatus: MerchantApprovalStatus.APPROVED,
-          isOnline: true,
-          isOpen: true,
+          // The shop is not public until the required identity image is stored.
+          approvalStatus: MerchantApprovalStatus.DRAFT,
+          isOnline: false,
+          isOpen: false,
         },
+      });
+      // Permanent marker for shops created under the required-ID policy. It
+      // survives admin status changes so DRAFT -> SUSPENDED -> APPROVED cannot
+      // bypass identity upload, while legacy shops remain reactivatable.
+      await tx.merchantDocument.create({
+        data: { merchantId: created.id, documentType: 'IDENTITY', documentUrl: 'PENDING_PRIVATE_UPLOAD' },
       });
       if (dto.operatingHours) {
         await tx.merchantOperatingHours.createMany({
@@ -140,12 +147,18 @@ export class MerchantService {
   }
 
   async uploadDocument(userId: string, documentType: string, file: any) {
-    const ctx = await this.access.merchantContext(userId);
+    const ctx = await this.access.merchantContext(userId, { allowDisabled: documentType === 'IDENTITY' });
     this.access.requirePermission(ctx, StaffPermission.STORE);
     if (!['BUSINESS_REGISTRATION', 'IDENTITY', 'BANK_DETAILS', 'OTHER'].includes(documentType)) {
       throw new BadRequestException('Unsupported merchant document type');
     }
-    if (!file?.buffer || !file?.mimetype) throw new BadRequestException('No document uploaded');
+    if (!Buffer.isBuffer(file?.buffer) || !file.buffer.length || !file?.mimetype) throw new BadRequestException('No document uploaded');
+    if (documentType === 'IDENTITY' && !['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      throw new BadRequestException('Choose a JPG, PNG or WebP image of your ID card.');
+    }
+    if (documentType === 'IDENTITY' && !this.isMatchingImage(file.buffer, file.mimetype)) {
+      throw new BadRequestException('This ID-card file is not a valid image. Choose a JPG, PNG or WebP image.');
+    }
     const extensions: Record<string, string> = {
       'application/pdf': 'pdf',
       'image/jpeg': 'jpg',
@@ -163,15 +176,39 @@ export class MerchantService {
     try {
       await mkdir(directory, { recursive: true });
       await writeFile(filePath, file.buffer, { flag: 'wx' });
-      return await this.prisma.merchantDocument.update({
-        where: { id: document.id },
-        data: { documentUrl: `/api/merchant/documents/${document.id}/file` },
+      return await this.prisma.$transaction(async (tx) => {
+        const saved = await tx.merchantDocument.update({
+          where: { id: document.id },
+          data: { documentUrl: `/api/merchant/documents/${document.id}/file` },
+        });
+        // Only the owner who completed onboarding can activate a draft shop.
+        // The conditional write cannot undo a concurrent admin disable.
+        if (documentType === 'IDENTITY' && ctx.isOwner) {
+          await tx.merchant.updateMany({
+            where: { id: ctx.merchantId, userId, approvalStatus: MerchantApprovalStatus.DRAFT },
+            data: { approvalStatus: MerchantApprovalStatus.APPROVED, isOnline: true, isOpen: true },
+          });
+        }
+        return saved;
       });
     } catch (error) {
       await unlink(filePath).catch(() => undefined);
       await this.prisma.merchantDocument.delete({ where: { id: document.id } }).catch(() => undefined);
       throw error;
     }
+  }
+
+  private isMatchingImage(bytes: Buffer, mimeType: string): boolean {
+    if (mimeType === 'image/png') return bytes.length >= 45 &&
+      bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) &&
+      bytes.toString('ascii', 12, 16) === 'IHDR' && bytes.readUInt32BE(16) > 0 && bytes.readUInt32BE(20) > 0 &&
+      bytes.toString('ascii', bytes.length - 8, bytes.length - 4) === 'IEND';
+    if (mimeType === 'image/jpeg') return bytes.length >= 32 && bytes[0] === 0xff && bytes[1] === 0xd8 &&
+      bytes[2] === 0xff && bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9;
+    if (mimeType === 'image/webp') return bytes.length >= 30 && bytes.toString('ascii', 0, 4) === 'RIFF' &&
+      bytes.toString('ascii', 8, 12) === 'WEBP' && bytes.readUInt32LE(4) + 8 === bytes.length &&
+      ['VP8 ', 'VP8L', 'VP8X'].includes(bytes.toString('ascii', 12, 16));
+    return false;
   }
 
   async documentFile(userId: string, documentId: string) {
@@ -208,7 +245,7 @@ export class MerchantService {
     });
     if (!merchant) throw new NotFoundException('Merchant not found');
     const posTrial = await this.prisma.merchantPosTrial.findUnique({ where: { userId: merchant.userId } });
-    return { ...merchant, trial: merchantTrial(merchant.createdAt), posTrial: reviewPosEntitlement(merchant.id) ?? merchantPosTrialView(posTrial), isOwner: ctx.isOwner, permissions: ctx.permissions };
+    return { ...merchant, documents: merchant.documents.filter((document) => document.documentUrl !== 'PENDING_PRIVATE_UPLOAD'), trial: merchantTrial(merchant.createdAt), posTrial: reviewPosEntitlement(merchant.id) ?? merchantPosTrialView(posTrial), isOwner: ctx.isOwner, permissions: ctx.permissions };
   }
 
   async updateProfile(userId: string, dto: UpdateMerchantProfileDto) {
@@ -269,13 +306,25 @@ export class MerchantService {
     return { ok: true, isOnline: online };
   }
 
+  async setAvailability(userId: string, open: boolean) {
+    const ctx = await this.access.merchantContext(userId);
+    this.access.requirePermission(ctx, StaffPermission.STORE);
+    const saved = await this.prisma.merchant.updateMany({
+      where: { id: ctx.merchantId, ...(open ? { approvalStatus: MerchantApprovalStatus.APPROVED } : {}) },
+      data: { isOnline: open, isOpen: open },
+    });
+    if (saved.count !== 1) throw new BadRequestException('This shop is not active. Contact support to restore access.');
+    return { ok: true, isOnline: open, isOpen: open };
+  }
+
   async setOpen(userId: string, open: boolean) {
     const ctx = await this.access.merchantContext(userId);
     this.access.requirePermission(ctx, StaffPermission.STORE);
-    await this.prisma.merchant.update({
-      where: { id: ctx.merchantId },
+    const saved = await this.prisma.merchant.updateMany({
+      where: { id: ctx.merchantId, ...(open ? { approvalStatus: MerchantApprovalStatus.APPROVED } : {}) },
       data: { isOpen: open },
     });
+    if (saved.count !== 1) throw new BadRequestException('This shop is not active. Contact support to restore access.');
     return { ok: true, isOpen: open };
   }
 

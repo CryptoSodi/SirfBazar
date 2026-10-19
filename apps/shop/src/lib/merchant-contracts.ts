@@ -68,6 +68,7 @@ export type MerchantOrder = {
   rider?: { id: string; fullName: string; phoneNumber?: string | null } | null;
   deliveryAddress?: { label?: string | null; fullAddress?: string | null; city?: string | null; contactName?: string | null; contactPhone?: string | null; instructions?: string | null } | null;
   customerNote?: string | null;
+  pendingRevision?: { id: string; status: string; expiresAt: string } | null;
   timeline?: Array<{ id: string; status: string; createdAt: string; changedByRole?: string | null; notes?: string | null }>;
 };
 
@@ -100,7 +101,7 @@ export type MerchantListing = {
   lowStockThreshold: number;
   merchantSku?: string | null;
   isAvailable: boolean;
-  product: { id: string; name: string; brand?: string | null; size?: string | null; unit?: string | null;
+    product: { id: string; name: string; approvalStatus?: string; brand?: string | null; size?: string | null; unit?: string | null;
     imageUrl?: string | null; category?: { id: string; name: string } | null };
 };
 

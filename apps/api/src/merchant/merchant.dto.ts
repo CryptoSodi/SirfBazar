@@ -18,6 +18,7 @@ import {
   MaxLength,
   Matches,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -25,6 +26,11 @@ import { ShopType, StaffPermission } from '../common/constants';
 
 const PHONE_REGEX = /^\+?[0-9]{10,15}$/;
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export class SetShopAvailabilityDto {
+  @IsBoolean()
+  open: boolean;
+}
 
 export class OperatingHoursDto {
   @Type(() => Number) @IsInt() @Min(0) @Max(6)
@@ -282,12 +288,26 @@ export class CreateStaffDto {
   phoneNumber: string;
 
   @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  @Matches(/\d/, { message: 'Password must include at least one number' })
+  password: string;
+
+  @IsString()
   @IsNotEmpty()
   roleName: string;
 
   @IsArray()
   @IsIn(Object.values(StaffPermission), { each: true })
   permissions: string[];
+}
+
+export class ChangeStaffPasswordDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  @Matches(/\d/, { message: 'Password must include at least one number' })
+  password: string;
 }
 
 export class UpdateStaffDto {

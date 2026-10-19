@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { StaffPermission } from './constants';
+import { MerchantApprovalStatus, StaffPermission } from './constants';
 
 export interface MerchantContext {
   merchantId: string;
@@ -51,6 +51,9 @@ export class AccessService {
   }
 
   private requireEnabled(status: string, allowDisabled = false) {
+    if (!allowDisabled && status === MerchantApprovalStatus.DRAFT) {
+      throw new ForbiddenException('Upload your ID card image to finish shop setup.');
+    }
     if (!allowDisabled && ['SUSPENDED', 'REJECTED', 'INACTIVE'].includes(status)) {
       throw new ForbiddenException('This shop has been disabled. Contact support to restore access.');
     }

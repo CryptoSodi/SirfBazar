@@ -71,3 +71,51 @@ test('missing or duplicate row identities and invalid price or stock fail before
   duplicate.items[1].rowId = duplicate.items[0].rowId;
   await assert.rejects(service.bulkPreview('user-a', duplicate), /unique rowId/);
 });
+
+test('pending catalogue submissions are reusable only by their creating shop', async () => {
+  const product = { id: 'pending-product', approvalStatus: 'PENDING', createdByMerchantId: 'merchant-a' };
+  const prisma = {
+    product: { findUnique: async () => product },
+    merchantProduct: { findUnique: async () => null, create: async ({ data }) => data },
+  };
+  const access = { merchantContext: async (userId) => ({ merchantId: userId, isOwner: true }), requirePermission() {} };
+  const service = new MerchantProductsService(prisma, access);
+  const item = { rowId: '2', productId: product.id, pricePaisa: 100, stockQuantity: 1 };
+  const own = await service.previewRows('merchant-a', { requestId: 'own', mode: 'ADD_MISSING', items: [item] });
+  assert.equal(own[0].status, 'MATCH');
+  const foreign = await service.previewRows('merchant-b', { requestId: 'foreign', mode: 'ADD_MISSING', items: [item] });
+  assert.equal(foreign[0].status, 'CONFLICT');
+  await assert.rejects(service.add('merchant-b', { productId: product.id, pricePaisa: 100, stockQuantity: 1 }), /not available to add/);
+});
+
+test('new product and shop listing commit together or roll back together', async () => {
+  const products = [];
+  let failListing = true;
+  const db = {
+    category: { findUnique: async () => ({ id: 'category-a', isActive: true, isRestricted: false }) },
+    product: {
+      findUnique: async () => null,
+      create: async ({ data }) => { const product = { id: 'new-product', ...data }; products.push(product); return product; },
+    },
+    merchantProduct: { create: async ({ data }) => {
+      if (failListing) throw Error('listing insert failed');
+      return { id: 'listing', ...data };
+    } },
+  };
+  db.$transaction = async (work) => {
+    const previousCount = products.length;
+    try { return await work(db); }
+    catch (error) { products.splice(previousCount); throw error; }
+  };
+  const access = { merchantContext: async () => ({ merchantId: 'merchant-a' }), requirePermission() {} };
+  const service = new MerchantProductsService(db, access);
+  const input = { newProduct: { name: 'Fresh apples', categoryId: 'category-a', unit: 'kg' }, pricePaisa: 20000, stockQuantity: 5 };
+  await assert.rejects(service.add('owner', input), /listing insert failed/);
+  assert.equal(products.length, 0);
+  failListing = false;
+  const saved = await service.add('owner', input);
+  assert.equal(saved.productId, 'new-product');
+  assert.equal(products.length, 1);
+  assert.equal(products[0].approvalStatus, 'PENDING');
+  assert.equal(products[0].createdByMerchantId, 'merchant-a');
+});
