@@ -7,6 +7,7 @@ param(
     [string]$PasswordFile,
     [string]$AndroidMapsKeyFile,
     [string]$KeyDirectory = 'D:\keys\SirfBazar',
+    [switch]$WorkingTree,
     [switch]$Resume,
     [switch]$RefreshConfig
 )
@@ -17,6 +18,7 @@ $sdk = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
 $java = Join-Path $env:ProgramFiles 'Android\Android Studio\jbr'
 $output = Join-Path $root "output\aab$VersionCode"
 $roles = if ($App -eq 'all') { @('customer', 'merchant', 'rider') } else { @($App) }
+if ($App -eq 'all' -and $AndroidMapsKeyFile) { throw 'Build customer and merchant separately with their own Android-restricted Maps key files.' }
 $node = (Get-Command node.exe).Source
 $secret = $null
 $androidMapsKey = $null
@@ -56,6 +58,7 @@ function Run([string]$File, [string[]]$Arguments, [string]$Directory, [hashtable
 if (-not (Test-Path "$java\bin\java.exe") -or -not (Test-Path $sdk)) { throw 'Android Studio JDK and Android SDK are required.' }
 $source = (& git -C $root rev-parse --verify "$SourceCommit^{commit}").Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve source commit.' }
+if ($WorkingTree -and $source -ne (& git -C $root rev-parse HEAD).Trim()) { throw '-WorkingTree requires the current HEAD as its base.' }
 [void][IO.Directory]::CreateDirectory($output)
 try {
     if ($AndroidMapsKeyFile) {
@@ -73,12 +76,28 @@ try {
     foreach ($role in $roles) {
         if ((Get-PSDrive C).Free -lt 8GB) { throw 'Less than 8 GB free; refusing to start another native build.' }
         $original = Join-Path $root "apps\$role-app"
+        $workingTreeHash = $null
+        $workingFiles = @()
+        if ($WorkingTree) {
+            $workingFiles = @(& git -C $original ls-files --cached --others --exclude-standard -- . | Sort-Object -Unique)
+            if ($LASTEXITCODE -ne 0 -or -not $workingFiles.Count) { throw 'Cannot enumerate app source.' }
+            $inventory = foreach ($relative in $workingFiles) {
+                $file = Join-Path $original $relative
+                if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw 'Commit source deletions before using -WorkingTree.' }
+                "$relative $((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash)"
+            }
+            $hasher = [Security.Cryptography.SHA256]::Create()
+            try { $workingTreeHash = [Convert]::ToHexString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes(($inventory -join "`n")))) }
+            finally { $hasher.Dispose() }
+        }
         $stage = Join-Path $output $role
         $marker = Join-Path $stage 'local-build-source.json'
         $refresh = $false
         if (Test-Path $stage) {
             if (-not $Resume -or -not (Test-Path $marker)) { throw "Refusing to reuse $stage without -Resume and a source marker." }
             $prior = Get-Content $marker -Raw | ConvertFrom-Json
+            $priorWorkingHash = if ($prior.PSObject.Properties.Name -contains 'workingTreeHash') { $prior.workingTreeHash } else { $null }
+            if ($priorWorkingHash -ne $workingTreeHash) { throw 'Resume app source differs; use a fresh version directory.' }
             if ($prior.versionCode -ne $VersionCode) { throw 'Resume version differs.' }
             if ($prior.commit -ne $source) {
                 if (-not $RefreshConfig) { throw 'Resume source differs; a reviewed app.json-only refresh needs -RefreshConfig.' }
@@ -98,6 +117,13 @@ try {
             $archive = Join-Path $output "$role-source.tar"
             [void](Run 'git.exe' @('-C', $root, '-c', 'core.autocrlf=false', 'archive', '--format=tar', "--output=$archive", $source, "apps/$role-app") $root)
             [void](Run 'tar.exe' @('-xf', $archive, '-C', $stage, '--strip-components=2') $root)
+            if ($WorkingTree) {
+                foreach ($relative in $workingFiles) {
+                    $destination = Join-Path $stage $relative
+                    [void][IO.Directory]::CreateDirectory((Split-Path $destination -Parent))
+                    Copy-Item -LiteralPath (Join-Path $original $relative) -Destination $destination
+                }
+            }
             $installedLock = Get-Content "$original\package-lock.json" -Raw | ConvertFrom-Json -AsHashtable | ConvertTo-Json -Depth 100 -Compress
             $snapshotLock = Get-Content "$stage\package-lock.json" -Raw | ConvertFrom-Json -AsHashtable | ConvertTo-Json -Depth 100 -Compress
             if ($installedLock -cne $snapshotLock) {
@@ -110,7 +136,7 @@ try {
             # Native generation writes only into this isolated snapshot, never the app source.
             & robocopy.exe (Join-Path $original 'node_modules') (Join-Path $stage 'node_modules') /E /NFL /NDL /NJH /NJS /NP
             if ($LASTEXITCODE -ge 8) { throw "Dependency copy failed for $role" }
-            [IO.File]::WriteAllText($marker, (@{ commit = $source; versionCode = $VersionCode } | ConvertTo-Json))
+            [IO.File]::WriteAllText($marker, (@{ commit = $source; versionCode = $VersionCode; workingTreeHash = $workingTreeHash } | ConvertTo-Json))
         }
         $profile = Get-Content (Join-Path $stage 'eas.json') -Raw | ConvertFrom-Json -AsHashtable
         $environment = @{
@@ -120,13 +146,13 @@ try {
             CMAKE_BUILD_PARALLEL_LEVEL = '2'
         }
         foreach ($entry in $profile.build.preview.env.GetEnumerator()) { $environment[$entry.Key] = $entry.Value }
-        if ($role -eq 'customer' -and $androidMapsKey) { $environment.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY = $androidMapsKey }
+        if ($role -in @('customer', 'merchant') -and $androidMapsKey) { $environment.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY = $androidMapsKey }
         if ($environment.EXPO_PUBLIC_API_URL -ne 'https://api.sirfbazar.com/api') { throw 'Unexpected release API.' }
         $native = Join-Path $stage 'android'
         if ($refresh -or -not (Test-Path "$native\gradlew.bat")) {
             Write-Host "Generating $role Android project from $source..."
             [void](Run $node @("$stage\node_modules\expo\bin\cli", 'prebuild', '--platform', 'android', '--no-install') $stage $environment)
-            [IO.File]::WriteAllText($marker, (@{ commit = $source; versionCode = $VersionCode } | ConvertTo-Json))
+            [IO.File]::WriteAllText($marker, (@{ commit = $source; versionCode = $VersionCode; workingTreeHash = $workingTreeHash } | ConvertTo-Json))
         }
         $gradle = Join-Path $native 'app\build.gradle'
         $signing = Join-Path $native 'app\local-release-signing.gradle'
@@ -146,11 +172,15 @@ try {
         if (-not (Test-Path $bundle)) { throw "Missing bundle for $role" }
         $artifact = Join-Path $output "sirfbazar-$role-v1.0.0-build$VersionCode.aab"
         Copy-Item -LiteralPath $bundle -Destination $artifact
+        $mapping = Join-Path $native 'app\build\outputs\mapping\release\mapping.txt'
+        if (-not (Test-Path $mapping) -or (Get-Item $mapping).Length -eq 0) { throw 'Release R8 mapping is missing; refusing an unoptimized candidate.' }
+        $mappingArtifact = [IO.Path]::ChangeExtension($artifact, '.mapping.txt')
+        Copy-Item -LiteralPath $mapping -Destination $mappingArtifact
         $verification = Run "$java\bin\jarsigner.exe" @('-J-Duser.language=en', '-J-Duser.country=US', '-verify', $artifact) $root
         if ($verification -notmatch 'jar verified') { throw 'Bundle signature verification failed.' }
         $certificate = Run "$java\bin\keytool.exe" @('-J-Duser.language=en', '-printcert', '-jarfile', $artifact) $root
         if (-not $certificate.Contains($expectedSha1[$role])) { throw 'Bundle is not signed with the expected release certificate.' }
-        $record = @{ app = $role; package = "pk.sirfbazar.$role"; commit = $source; versionCode = $VersionCode; sha256 = (Get-FileHash $artifact -Algorithm SHA256).Hash; signerSha1 = $expectedSha1[$role]; artifact = $artifact; status = 'BUILT_NOT_PLAY_VERIFIED' }
+        $record = @{ app = $role; package = "pk.sirfbazar.$role"; commit = $source; workingTreeHash = $workingTreeHash; versionCode = $VersionCode; sha256 = (Get-FileHash $artifact -Algorithm SHA256).Hash; signerSha1 = $expectedSha1[$role]; artifact = $artifact; mapping = $mappingArtifact; mappingSha256 = (Get-FileHash $mappingArtifact -Algorithm SHA256).Hash; status = 'BUILT_NOT_PLAY_VERIFIED' }
         [IO.File]::WriteAllText((Join-Path $output "$role-artifact.json"), ($record | ConvertTo-Json))
         Write-Host "Built: $artifact"
     }

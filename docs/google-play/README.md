@@ -1,11 +1,31 @@
 # Google Play publication readiness
 
+Shop website map configuration: [live profile map repair, 19 October 2026](shop-website-maps-2026-10-19.md).
+
+Merchant map repair: [Android map picker and restricted-key verification, 19 October 2026](merchant-android-maps-2026-10-19.md).
+
+Latest Rider maintenance record: [Android release optimization, 19 October 2026](android-optimization-2026-10-19.md).
+Rider build 12 replaces the unoptimized build 10; use that record for measured
+R8 scores, signed-artifact verification and the replacement submission status.
+Play Console showed Rider last published on 18 October; the paragraphs below
+describe the earlier initial-submission state, not current availability.
+
+Initial Console state: [production submission progress, 14 October 2026](production-submission-progress-2026-10-14.md).
+Customer build 11, Merchant build 10 and Rider build 10 have been submitted for
+production review. Play Console shows Changes in review; managed publishing is
+off for automatic publication in Pakistan after approval. Sign in details,
+target audience, Data safety and Advertising ID declarations are completed.
+Nothing is yet confirmed publicly published.
+
+The remaining sections are the historical 13 October preparation audit. For
+current status and resolved gates, use the linked 14 October progress record.
+
 Last inspected: 2026-10-13. Base: `6463f3cc05b6bca2f4da5228a58bec2461551d41`.
 Release preparation: PR #21, `codex/google-play-publication`.
 Local build tooling and permission cleanup: PR #22, `codex/local-android-release`.
 See [build 6 evidence](build6-verification.md) for the completed local AAB/APK checks.
 
-**Not published or submitted for review.** All three Play Console app drafts now
+**Historical state, superseded by the submission above.** All three Play Console app drafts now
 exist, their build-6 bundles are uploaded and validated, and listing preparation
 is partially saved. See the [latest Console progress record](console-progress-2026-10-13.md)
 for app IDs, completed declarations, signing fingerprints and remaining gates.

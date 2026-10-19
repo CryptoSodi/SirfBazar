@@ -22,6 +22,32 @@ profile. Do not change local development API settings for this build.
 
 ## Build
 
+Customer and Merchant map-enabled Android builds need separate
+`-AndroidMapsKeyFile` inputs, each restricted to that app's package and signing
+certificates. Build those roles separately, not with `-App all`. The key file is
+private JSON with a `key` field, outside Git. The environment override is
+`EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY`; do not reuse the website key.
+Validate map-enabled bundles using `-RequireMaps` to check the native manifest.
+See [Merchant map repair](merchant-android-maps-2026-10-19.md).
+
+Android releases now enable R8 minification, resource shrinking and the optimized
+ProGuard defaults through an app-local Expo prebuild plugin. Keep the plugin in
+each standalone app's source archive; changing only ignored generated Gradle
+files would be lost on the next prebuild. Debug builds retain their normal setup.
+
+To build reviewed local app changes before committing them, add `-WorkingTree`.
+This overlays only Git-listed, non-ignored app files onto an isolated snapshot of
+the current HEAD and records a SHA-256 source inventory in the build marker and
+artifact record. Local environment files and signing material remain excluded by
+Git ignore rules. Missing tracked files are rejected. Resume requires the same
+source inventory; changes require a fresh version directory. The commit alone
+does not identify a working-tree candidate: retain its `workingTreeHash` too.
+
+Release builds require a nonempty R8 mapping and export it as
+`sirfbazar-<role>-v1.0.0-build<VERSION>.mapping.txt` beside the signed AAB. The
+artifact record includes its checksum. Keep the matching mapping for crash
+decoding and verify that it is embedded in the AAB before Play upload.
+
 ```powershell
 rtk proxy pwsh -NoProfile -File scripts/Build-SirfBazarLocalAndroid.ps1 `
   -App all -VersionCode 6 -SourceCommit <reviewed-commit>
@@ -72,6 +98,12 @@ release certificate, bundletool structure, package, versionCode, target SDK,
 non-debug manifest and every packaged arm64/x86_64 ELF LOAD segment's 16 KB
 alignment. Merchant must not request microphone permission. It writes public
 manifest and JSON verification records beside the AAB.
+
+For optimized candidates, add `-RequireOptimization` to reject a bundle without
+embedded R8 mapping metadata. The verification record includes uncompressed DEX
+size, mapping presence and `r8.json` contents when the installed Android Gradle
+Plugin supplies them. Enabling R8 alone is not proof of Google's exact scores;
+inspect the built metadata and the replacement version in Play Console.
 
 Add `-ApkPasswordFile <existing-private-file>` to also export a locally signed
 universal APK for device testing. Bundletool reads the private file directly;

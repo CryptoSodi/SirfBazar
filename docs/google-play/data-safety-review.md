@@ -1,4 +1,38 @@
-# Data safety evidence inventory (draft, not a declaration)
+# Data safety evidence and submission record
+
+## Submitted 14 October 2026
+
+Separate questionnaires were imported, reviewed, saved and submitted with all
+three production releases. Collection: Yes. Authentication: phone/other
+authentication and OAuth. Account deletion URL:
+`https://www.sirfbazar.com/account-deletion`. No independent audit, automatic
+90-day erasure or partial deletion without account deletion was claimed.
+
+Customer declares 16 types: name, email, photos, user IDs, phone, address,
+approximate and precise location, purchase history, other messages, interactions,
+search history, user-generated content, crash logs, diagnostics and device IDs.
+Merchant declares 12: name, email, photos, device IDs, user IDs, phone, address,
+precise location, other financial information, interactions, search history and
+user-generated content. Rider declares 11: name, email, photos, device IDs,
+user IDs, phone, other personal information (vehicle), precise location, other
+financial information, messages and interactions.
+
+Customer Maps SDK approximate location, interactions, crash/diagnostic data and
+device identifiers were included as shared, with functionality/analytics purposes.
+Other handling distinguished user-directed fulfillment/public shop information
+and service-provider processing using Google's sharing definitions. No native
+advertising or Firebase Analytics collection was inferred from website analytics.
+Per-type answers are retained in local ignored `output/play-data-safety-*.csv`.
+
+Encryption in transit was answered Yes for Google's device-to-server disclosure:
+final bundle configuration uses the production HTTPS API, target-36 release
+manifests have no cleartext override, and relevant SDK guidance was reviewed.
+This is configuration/documentation evidence, not packet-capture verification or
+a claim that the separate API-to-WhatsApp HTTP connection has been repaired.
+That unresolved security finding remains recorded in the transport report.
+No completed manual erasure test or Play-installed verification is claimed.
+
+## Historical inspection (superseded submission status)
 
 Inspected 2026-10-13 against source commit
 `6463f3cc05b6bca2f4da5228a58bec2461551d41`.
@@ -18,6 +52,16 @@ completed policy or a claim that every possible SDK data flow was verified.
 | Diagnostics, logs and SDK/network metadata | Not exhaustively verified | Inspect bundled SDK behavior and deployment logging before asserting no collection |
 
 ## Declaration rules for this release
+
+### Transport finding - 14 October 2026
+
+The live API uses HTTP for its remote WhatsApp OTP connection. A credential-free
+HTTPS check from the API host timed out. The owner declined production changes;
+configuration, services and WhatsApp state were left untouched. See the
+[transport blocker and declaration qualification](otp-transport-blocker-2026-10-14.md)
+for evidence, risk and the approval-gated remediation plan. Do not infer a Play
+encryption checkbox answer solely from this backend hop; the draft answer remains
+unanswered and app/SDK/provider transport coverage is not complete.
 
 ### SDK follow-up - 14 October 2026
 

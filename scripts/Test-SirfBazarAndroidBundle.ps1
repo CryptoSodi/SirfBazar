@@ -6,6 +6,8 @@ param(
     [Parameter(Mandatory)][int]$VersionCode,
     [string]$Bundletool = "$PSScriptRoot\..\output\bundletool-all-1.18.3.jar",
     [string]$ApkPasswordFile,
+    [switch]$RequireOptimization,
+    [switch]$RequireMaps,
     [string]$KeyDirectory = 'D:\keys\SirfBazar'
 )
 Set-StrictMode -Version Latest
@@ -40,11 +42,43 @@ foreach ($blocked in @('SYSTEM_ALERT_WINDOW', 'READ_EXTERNAL_STORAGE', 'WRITE_EX
     if ("android.permission.$blocked" -in $permissions) { throw "Unneeded permission remains: $blocked" }
 }
 if ($App -eq 'merchant' -and 'android.permission.RECORD_AUDIO' -in $permissions) { throw 'Unneeded merchant microphone permission remains.' }
+$mapsEntries = @($manifest.SelectNodes('/manifest/application/meta-data') | Where-Object { $_.GetAttribute('name', $ns) -eq 'com.google.android.geo.API_KEY' })
+$nativeMapsConfigured = $mapsEntries.Count -eq 1 -and $mapsEntries[0].GetAttribute('value', $ns) -match '^AIza[A-Za-z0-9_-]{35}$'
+if ($RequireMaps -and -not $nativeMapsConfigured) { throw 'Missing or malformed native Android Maps configuration.' }
 
 # Check actual ELF LOAD segment alignment, not just ZIP alignment or SDK version.
 $zip = [IO.Compression.ZipFile]::OpenRead($Bundle)
 $libraries = @()
 try {
+    $mappingEntry = $zip.GetEntry('BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map')
+    $r8Entry = $zip.GetEntry('BUNDLE-METADATA/com.android.tools/r8.json')
+    $optimization = @{ mappingIncluded = [bool]($mappingEntry -and $mappingEntry.Length -gt 0); r8MetadataIncluded = [bool]$r8Entry }
+    if ($RequireOptimization -and -not $optimization.mappingIncluded) { throw 'Optimized release is missing its embedded R8 mapping.' }
+    if ($r8Entry) {
+        $r8Reader = [IO.StreamReader]::new($r8Entry.Open())
+        try { $optimization.r8 = $r8Reader.ReadToEnd() | ConvertFrom-Json -AsHashtable }
+        finally { $r8Reader.Dispose() }
+        $scores = @{}
+        foreach ($kind in @('Obfuscation', 'Optimization', 'Shrinking')) {
+            $field = "no${kind}Percentage"
+            $stats = $optimization.r8.stats
+            if (-not $stats -or -not $stats.ContainsKey($field) -or $stats[$field] -isnot [ValueType] -or
+                -not [double]::IsFinite([double]$stats[$field]) -or [double]$stats[$field] -lt 0 -or [double]$stats[$field] -gt 100) {
+                if ($RequireOptimization) { throw "Missing or invalid R8 score: $kind" }
+                continue
+            }
+            $scores[$kind.ToLowerInvariant()] = [Math]::Round(100 - [double]$stats[$field], 2)
+            if ($RequireOptimization -and $scores[$kind.ToLowerInvariant()] -lt 25) { throw "R8 $kind is below 25%." }
+        }
+        $optimization.percentages = $scores
+        if ($RequireOptimization) {
+            foreach ($option in @('isObfuscationEnabled', 'isOptimizationsEnabled', 'isShrinkingEnabled')) {
+                if ($optimization.r8.options[$option] -ne $true) { throw "R8 release option disabled: $option" }
+            }
+        }
+    }
+    if ($RequireOptimization -and -not $r8Entry) { throw 'Optimized release is missing R8 score metadata; review this toolchain before upload.' }
+    $optimization.dexBytes = ($zip.Entries | Where-Object FullName -Match '^base/dex/.+\.dex$' | Measure-Object Length -Sum).Sum
     $javascript = $zip.GetEntry('base/assets/index.android.bundle')
     if (-not $javascript) { throw 'Missing production JavaScript bundle.' }
     $reader = [IO.StreamReader]::new($javascript.Open())
@@ -87,6 +121,8 @@ $report = @{
     sha256 = (Get-FileHash $Bundle -Algorithm SHA256).Hash
     signerSha1 = $expectedSha1[$App]; permissions = $permissions; libraries = $libraries
     embeddedConfigurationStrings = $embedded
+    optimization = $optimization
+    nativeMapsConfigured = $nativeMapsConfigured
     bundleValidation = 'passed'; elf16KB = 'passed'
     deviceJourneys = 'not verified'; playDeliveredSigning = 'not verified'
 }

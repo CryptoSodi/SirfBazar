@@ -8,6 +8,7 @@ import { api, clearAuth, pkr } from '../lib/api';
 import { colors, s } from '../lib/theme';
 import { GoogleAccountLink } from '../components/GoogleAccountLink';
 import { AccountPolicies } from '../components/AccountPolicies';
+import ShopLocationSettings from '../components/ShopLocationSettings';
 
 export default function MoreScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -62,6 +63,7 @@ export default function MoreScreen() {
           ))}
         </View>
 
+        <ShopLocationSettings />
         <GoogleAccountLink />
         <AccountPolicies color={colors.primary} textColor={colors.muted} />
         <TouchableOpacity

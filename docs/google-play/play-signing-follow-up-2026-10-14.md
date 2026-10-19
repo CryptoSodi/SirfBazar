@@ -112,7 +112,7 @@ Proof: ignored `output/play-customer-data-safety-partial-draft.png`.
 
 1. Verify Maps and Google login on a Play-delivered build; local-release Maps
    rendering passed and customer build 11 is saved in the internal draft.
-2. Complete remaining native reviewer rating, inventory/upload and revision coverage;
+2. Complete remaining native reviewer onboarding/upload and revision coverage;
    retain qualifications in `reviewer-access.md`.
 3. Complete evidence-backed Data safety for each app and verify manual deletion
    fulfillment separately from the existence of the request link.
@@ -129,3 +129,22 @@ initial console-only changes. After the Maps configuration repair, all 28 focuse
 tests passed (`test-customer-maps-config.cjs`, `test-google-native.cjs`,
 `test-firebase-native.cjs`). The new Maps tests are included in CI. The device
 checks above are not full acceptance coverage.
+
+## Subsequent Verification and Owner Decisions
+
+Customer build 11 passed native delivered-order rating, including missing-star
+validation. Rider build 10 passed native issue-report submission for an isolated
+assigned order. See `reviewer-access.md` for exact evidence and remaining gaps.
+
+The customer internal-release preview showed no blocking errors and two warnings:
+no testers specified, and no deobfuscation file. This is Console validation, not
+runtime acceptance or public-release approval. Save and publish was not selected.
+The owner declined internal testers; none were added, and Play-installed
+verification remains incomplete.
+
+A read-only transport check found the production WhatsApp OTP base URL uses
+HTTP; the HTTPS health check timed out. The owner instructed no production
+changes. See [the blocker record](otp-transport-blocker-2026-10-14.md), including
+the distinction between this security finding and Google's encryption disclosure.
+The Data safety encryption answer remains unanswered. No production changes,
+service restarts or release submissions were made for this finding.

@@ -311,3 +311,71 @@ active-order address protection, not reported as a successful write.
 See [signing and Maps follow-up](play-signing-follow-up-2026-10-14.md) for signer
 registrations, artifact hashes, test evidence and remaining gates. These checks
 do not complete native rating, uploads, revision or full-access certification.
+
+## Rating and Rider Issue Follow-up - 14 October 2026
+
+Samsung SM-A525F / Android 14, sideloaded customer build 11 and rider build 10:
+
+- Customer opened delivered isolated order `SB20261013-D816B6`. Submitting
+  without stars was rejected with a request to choose a rating. A three-star
+  rating with text "Isolated demo review test. No real delivery." was then
+  accepted; the UI reported "Your review was saved." Evidence:
+  ignored `output/review-customer-rating-saved.png`. This concerns the hidden
+  review shop, not a public review of a real delivery.
+- Rider opened the issue form for isolated assigned order `SB20261013-E7FBAC`,
+  selected Other, and submitted "Isolated store-review test. No real delivery
+  or assistance required." The UI confirmed the issue was sent and delivery
+  status had not changed. Evidence: ignored `output/review-rider-issue-sent.png`.
+  No real delivery, phone call or payment was performed.
+
+These observations close the earlier native rating/issue-report gaps only.
+Onboarding/upload, native revision approval/rejection and other outstanding
+coverage remain unverified. No new automated tests were run for this follow-up.
+
+The owner declined internal testers; no tester was added or rollout published.
+Play-installed verification remains incomplete. The owner also declined
+production changes to repair the newly identified
+[OTP transport blocker](otp-transport-blocker-2026-10-14.md).
+No full-access certification or completed Data safety declaration was submitted.
+
+## Native revision and access checks - 14 October 2026
+
+The existing customer build 11 and merchant build 10 were checked on the connected
+Samsung SM-A525F using only the isolated review identities and shop. One new COD
+fixture, `SB20261013-E18803`, was created with three units (Rs 360); no real delivery
+or payment occurred. The merchant app proposed reducing to two units. The customer
+app displayed original/proposed quantities and totals and the 30-minute expiry.
+Reject preserved three units/Rs 360 and recorded a rejection. A second proposal was
+approved through the customer app, resulting in two units/Rs 290 and both decisions
+in revision history. Evidence: ignored `output/review-revision-comparison.png` and
+`output/review-revision-approved.png`. These results supersede the native revision
+gap above, not unrelated test gaps.
+
+All three reusable reviewer logins were rechecked against the live API. Twenty-one
+read-only application-route checks passed across their own profile, catalogue,
+cart/orders, support/notifications, merchant inventory/riders/earnings/settlements,
+and rider assignments/history. The first helper incorrectly used `/customers/`
+instead of `/customer/` for two routes; the corrected customer checks passed.
+No order or inventory writes were performed by that read-only helper.
+
+Fresh merchant/rider onboarding remains untested with these already-onboarded
+identities. Merchant `App.tsx` selects either Onboard or Tabs; the photo upload is
+part of initial Onboard, not a customer-app screen or the existing merchant's
+authenticated settings. This distinction does not constitute an upload test or
+permission to claim that fresh onboarding passed. The customer app's native
+revision coverage is now verified independently of those other-app gaps.
+
+## Play submission - 14 October 2026
+
+Sign in details and the full-access acknowledgement were saved for all three
+pre-created, approved role accounts, then sent with their production releases.
+Following specific owner approval, Rider's private review instructions also
+include the companion demo customer login so reviewers can retrieve the matching
+order's handover code without a personal account, SMS or assistance. The Rider
+review was restarted to submit this additional instruction. No credential was
+published in a store listing or repository; existing manual revocation remains
+available. All three Console app-list entries show In review, not production.
+
+This supersedes earlier statements that no access declaration was submitted. It
+does not convert unexecuted fresh onboarding/upload or Play-installed checks into
+passed tests. The accounts provide the already-onboarded role workflows.

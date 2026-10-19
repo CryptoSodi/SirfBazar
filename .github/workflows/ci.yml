@@ -20,6 +20,8 @@ jobs:
       - run: python3 -B -m unittest discover -s deploy/api -p 'test_*.py' -v
       - run: node --test deploy/api/healthcheck.test.cjs
       - run: node --test scripts/release-checks.test.cjs
+      - run: node --test scripts/test-android-release-optimization.cjs
+      - run: node --test scripts/test-merchant-maps-config.cjs
       - run: bash -n deploy/api/install.sh
 
   api:
@@ -186,6 +188,8 @@ jobs:
       - if: contains(fromJSON('["customer-app","merchant-app","rider-app"]'), matrix.app)
         run: npm test
         working-directory: apps/${{ matrix.app }}
+      - if: matrix.app == 'merchant-app'
+        run: node --test scripts/test-merchant-map-interactions.cjs
 
   browser-journeys:
     runs-on: ubuntu-latest
