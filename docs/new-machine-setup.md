@@ -171,7 +171,7 @@ MERCHANT_ACCEPT_TIMEOUT_MINUTES=10
 CORS_ORIGINS="http://localhost:3000,http://localhost:5173,http://localhost:5174,http://localhost:5175"
 ```
 
-`PUBLIC_BASE_URL` is important on a local machine. Without it, newly uploaded image URLs default to the production API hostname.
+`PUBLIC_BASE_URL` is recommended on a local machine, especially if your API is not on port 3001. In development, the upload endpoint otherwise uses `http://localhost:3001`; production retains the production API hostname fallback.
 
 ### Create the schema and development data
 

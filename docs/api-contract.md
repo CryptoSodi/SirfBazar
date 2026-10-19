@@ -113,7 +113,7 @@ The merchant portal also accepts `.xlsx` files up to 2 MiB and reads the first w
 - `GET /merchant/earnings?from=&to=` → `{grossSalesPaisa, commissionPaisa, netPayablePaisa, refundDeductionsPaisa, deliveredOrders, byDay:[{date, salesPaisa, orders}]}`
 - `GET /merchant/settlements` → settlement list
 - Riders: `GET /merchant/riders` · `POST /merchant/riders` `{fullName, phoneNumber, vehicleType?, vehicleNumber?}` (creates rider user; rider logs in with that phone via OTP) · `GET /merchant/riders/:id` · `PUT /merchant/riders/:id` · `DELETE /merchant/riders/:id` (deactivate) · `POST /merchant/riders/:id/activate` · `POST /merchant/riders/:id/deactivate` · `GET /merchant/riders/:id/orders`
-- Staff: `GET /merchant/staff` · `POST /merchant/staff` `{fullName, phoneNumber, roleName, permissions: string[]}` · `PUT /merchant/staff/:id` · `DELETE /merchant/staff/:id`
+- Staff: `GET /merchant/staff` · `POST /merchant/staff` `{fullName, phoneNumber, password, roleName, permissions: string[]}` · `PUT /merchant/staff/:id` · `PUT /merchant/staff/:id/password` `{password}` · `DELETE /merchant/staff/:id`. Staff management is owner-only and tenant-scoped. Passwords require at least 8 characters and a number, are stored only as hashes, and never appear in responses or audit logs. Changing one revokes that staff member's sessions. Staff must ask the shop owner for a new password; merchant OTP password recovery is for owners only.
 
 ## Merchant orders (roles MERCHANT_OWNER, MERCHANT_STAFF)
 

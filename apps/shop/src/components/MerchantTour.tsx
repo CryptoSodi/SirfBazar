@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ReferenceIcon, type ReferenceIconName } from './ReferenceIcon';
+import { clearMerchantTourProgress, consumeFirstMerchantTour, readMerchantTourProgress, saveMerchantTourProgress } from '../lib/merchant-tour-state';
 import './merchant-tour.css';
 
 type TourStep = { title: string; description: string; detail: string; path: string; target: string; icon: ReferenceIconName };
 const STEPS: TourStep[] = [
   { title: 'Your shop at a glance', description: 'The overview brings new orders, today’s activity and stock that needs attention together.', detail: 'Use the menu to move between the parts of your shop.', path: '/', target: '[data-tour="nav-overview"]', icon: 'overview' },
-  { title: 'Make the shop yours', description: 'Shop settings hold your profile, opening hours, delivery area and minimum order.', detail: 'Check these details before you start taking orders.', path: '/profile', target: '[data-tour="nav-profile"]', icon: 'settings' },
+  { title: 'Manage incoming orders', description: 'Open Orders to review a new order and accept it. The customer then sees that you’re preparing it.', detail: 'Continue preparation and rider assignment from the same order panel.', path: '/orders', target: '[data-tour="nav-orders"]', icon: 'orders' },
   { title: 'Keep your listings current', description: 'Products shows what your shop sells, including each item’s price, stock and availability.', detail: 'Choose My shop listings to review or edit items already in your shop.', path: '/products', target: '[data-tour="nav-products"]', icon: 'package' },
   { title: 'Add products from the catalog', description: 'Browse the shared catalog, select several products, then set a selling price and stock for each.', detail: 'Review your selection before you add the products to your shop.', path: '/products', target: '[data-tour="catalog-browse"]', icon: 'plus' },
-  { title: 'See every order in one place', description: 'Open Orders to review what the customer needs and accept a new order.', detail: 'Once accepted, the customer sees that you’re preparing it. Continue the order in the same panel.', path: '/orders', target: '[data-tour="nav-orders"]', icon: 'orders' },
-  { title: 'Get a rider ready', description: 'Add a rider or approve a rider request in Riders.', detail: 'You can assign an available rider from an order while preparing it.', path: '/riders', target: '[data-tour="nav-riders"]', icon: 'rider' },
   { title: 'Sell at the counter with iPOS', description: 'iPOS is your counter register for walk-in sales. Scan a barcode or search for an item to build a bill.', detail: 'You can also find held bills, sales history, keyboard commands and POS settings there.', path: '/ipos', target: '[data-tour="nav-ipos"]', icon: 'monitor' },
+  { title: 'Get a rider ready', description: 'Add a rider or approve a rider request in Riders.', detail: 'You can assign an available rider from an order while preparing it.', path: '/riders', target: '[data-tour="nav-riders"]', icon: 'rider' },
+  { title: 'Give your team access', description: 'Team lets you add staff and choose what each person can do in your shop.', detail: 'Use a separate account for every teammate.', path: '/team', target: '[data-tour="nav-team"]', icon: 'team' },
+  { title: 'Review earnings', description: 'Earnings and settlements show the money recorded for completed orders.', detail: 'Use this page to review shop payments and settlement history.', path: '/earnings', target: '[data-tour="nav-earnings"]', icon: 'finance' },
+  { title: 'Make the shop yours', description: 'Shop settings hold your profile, opening hours, delivery area and minimum order.', detail: 'You can replay this tour from here whenever you need it.', path: '/profile', target: '[data-tour="nav-profile"]', icon: 'settings' },
+  { title: 'Find help when you need it', description: 'Help and support keeps answers and ways to contact the SirfBazar team in one place.', detail: 'You can return here whenever something needs attention.', path: '/support', target: '[data-tour="nav-support"]', icon: 'support' },
 ];
 type Rect = { left: number; top: number; width: number; height: number };
 type CardPosition = { left: number; top: number; width: number; maxHeight?: number };
-function readDone(key: string) { try { return localStorage.getItem(key) === 'done'; } catch { return false; } }
 function sameRect(a: Rect | null, b: Rect | null) { return a === b || !!a && !!b && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height; }
 
 export function MerchantTour({ shopId, userId, replay }: { shopId: string; userId: string; replay: number }) {
@@ -24,7 +27,7 @@ export function MerchantTour({ shopId, userId, replay }: { shopId: string; userI
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const key = `sb:merchant-tour:v2:${shopId}:${userId}`;
+  const previousReplay = useRef(replay);
   const [active, setActive] = useState(false);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -33,14 +36,22 @@ export function MerchantTour({ shopId, userId, replay }: { shopId: string; userI
   const [cardPosition, setCardPosition] = useState<CardPosition>({ left: 16, top: 80, width: 340 });
 
   useEffect(() => {
-    const shouldStart = !readDone(key);
+    const saved = readMerchantTourProgress(shopId, userId);
+    if (saved && saved.step < STEPS.length) {
+      setStep(saved.step); setActive(true); setOpen(!saved.paused); setPending(false);
+      return;
+    }
+    if (saved) clearMerchantTourProgress(shopId, userId);
+    const shouldStart = consumeFirstMerchantTour(shopId, userId);
     setStep(0); setActive(shouldStart); setOpen(false); setPending(shouldStart);
-    if (shouldStart) navigate('/');
-  }, [key]);
+    if (shouldStart) { saveMerchantTourProgress(shopId, userId, { step: 0, paused: false }); navigate('/'); }
+  }, [shopId, userId, navigate]);
   useEffect(() => {
-    if (!replay) return;
+    if (replay === previousReplay.current) return;
+    previousReplay.current = replay;
+    saveMerchantTourProgress(shopId, userId, { step: 0, paused: false });
     setStep(0); setActive(true); setOpen(false); setPending(true); navigate('/');
-  }, [replay]);
+  }, [replay, shopId, userId, navigate]);
   useEffect(() => {
     if (!pending || location.pathname !== '/') return;
     const content = document.getElementById('main-content');
@@ -122,22 +133,28 @@ export function MerchantTour({ shopId, userId, replay }: { shopId: string; userI
     return () => { cancelAnimationFrame(frame); mutations.disconnect(); resizeObserver?.disconnect(); cardObserver.disconnect(); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); };
   }, [open, step, location.pathname]);
 
-  const finish = () => { try { localStorage.setItem(key, 'done'); } catch { /* The guide still works without storage. */ } setActive(false); setOpen(false); };
-  const goToStep = (next: number) => { setStep(next); if (location.pathname !== STEPS[next].path) navigate(STEPS[next].path); };
+  const finish = () => { clearMerchantTourProgress(shopId, userId); setActive(false); setOpen(false); };
+  const pause = () => { saveMerchantTourProgress(shopId, userId, { step, paused: true }); setOpen(false); };
+  const resume = () => { saveMerchantTourProgress(shopId, userId, { step, paused: false }); setOpen(true); };
+  const goToStep = (next: number) => {
+    saveMerchantTourProgress(shopId, userId, { step: next, paused: false });
+    setStep(next);
+    if (location.pathname !== STEPS[next].path) navigate(STEPS[next].path);
+  };
   const current = STEPS[step];
   return <>
-    {active && !open && !pending && <div className="merchant-tour-resume"><span>Workspace tour · {step + 1} of {STEPS.length}</span><button type="button" onClick={() => setOpen(true)}>Continue tour</button><button type="button" className="merchant-tour-resume-close" onClick={finish} aria-label="End tour"><ReferenceIcon name="close" size="sm" /></button></div>}
-    <dialog ref={dialogRef} className="merchant-tour-dialog" aria-labelledby="merchant-tour-title" aria-describedby="merchant-tour-description" onClose={() => setOpen(false)}>
+    {active && !open && !pending && <div className="merchant-tour-resume"><span>Workspace tour · {step + 1} of {STEPS.length}</span><button type="button" onClick={resume}>Continue tour</button><button type="button" className="merchant-tour-resume-close" onClick={finish} aria-label="End tour"><ReferenceIcon name="close" size="sm" /></button></div>}
+    <dialog ref={dialogRef} className="merchant-tour-dialog" aria-labelledby="merchant-tour-title" aria-describedby="merchant-tour-description" onCancel={(event) => { event.preventDefault(); pause(); }}>
       {targetRect ? <div className="merchant-tour-spotlight" aria-hidden="true" style={targetRect} /> : <div className="merchant-tour-shade" aria-hidden="true" />}
       <div ref={cardRef} className="merchant-tour-card" style={cardPosition}>
         <div className="merchant-tour-illustration" aria-hidden="true"><span className="merchant-tour-illustration-halo"><ReferenceIcon name={current.icon} size="lg" /></span><span className="merchant-tour-illustration-line" /><span className="merchant-tour-illustration-tile tile-one" /><span className="merchant-tour-illustration-tile tile-two" /></div>
         <div className="merchant-tour-card-body">
-          <div className="merchant-tour-card-top"><span className="merchant-tour-step">Step {step + 1} of {STEPS.length}</span><button type="button" className="merchant-tour-close" onClick={() => setOpen(false)} aria-label="Pause tour" title="Pause tour"><ReferenceIcon name="close" size="sm" /></button></div>
+          <div className="merchant-tour-card-top"><span className="merchant-tour-step">Step {step + 1} of {STEPS.length}</span><button type="button" className="merchant-tour-close" onClick={pause} aria-label="Pause tour" title="Pause tour"><ReferenceIcon name="close" size="sm" /></button></div>
           <h2 id="merchant-tour-title" ref={titleRef} tabIndex={-1}>{current.title}</h2>
           <p id="merchant-tour-description">{current.description}</p>
           <p className="merchant-tour-detail">{current.detail}</p>
           <div className="merchant-tour-progress" aria-label={`Tour progress: step ${step + 1} of ${STEPS.length}`}>{STEPS.map((item, index) => <span key={item.title} className={index <= step ? 'filled' : ''} />)}</div>
-          <div className="merchant-tour-actions"><button type="button" className="merchant-tour-quiet" onClick={() => setOpen(false)}>Try this page</button><div className="merchant-tour-navigation"><button type="button" className="merchant-tour-back" disabled={step === 0} onClick={() => goToStep(step - 1)}>Back</button><button type="button" className="merchant-tour-next" onClick={() => step === STEPS.length - 1 ? finish() : goToStep(step + 1)}>{step === STEPS.length - 1 ? 'Finish tour' : 'Next'}<ReferenceIcon name="right" size="sm" /></button></div></div>
+          <div className="merchant-tour-actions"><button type="button" className="merchant-tour-quiet" onClick={pause}>Try this page</button><div className="merchant-tour-navigation"><button type="button" className="merchant-tour-back" disabled={step === 0} onClick={() => goToStep(step - 1)}>Back</button><button type="button" className="merchant-tour-next" onClick={() => step === STEPS.length - 1 ? finish() : goToStep(step + 1)}>{step === STEPS.length - 1 ? 'Finish tour' : 'Next'}<ReferenceIcon name="right" size="sm" /></button></div></div>
           <button type="button" className="merchant-tour-skip" onClick={finish}>Skip tour</button>
         </div>
       </div>

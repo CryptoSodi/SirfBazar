@@ -30,3 +30,10 @@ test('online/open shop retains a native link and existing appearance', () => {
   assert.equal(card.type, 'Link'); assert.equal(card.props.href, '/shop/shop');
   assert.equal(shopStatus(shop), 'Open'); assert.equal(card.props.className, 'existing-design');
 });
+test('shop outside its operating hours is closed even when its manual toggles are on', () => {
+  const shop = { id: 'shop', isOnline: true, isOpen: true, isAvailableNow: false };
+  const card = ShopAvailabilityLink({ shop, className: 'existing-design', children: 'Shop status' });
+  assert.equal(shopAcceptingOrders(shop), false);
+  assert.equal(shopStatus(shop), 'Closed');
+  assert.equal(card.type, 'div');
+});

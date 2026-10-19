@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 import { ApiError, merchantApi } from './lib/api'
 import { captureSession, isLoggedIn, sessionGenerationIsCurrent } from '../lib/api'
+import { queueFirstMerchantTour } from '../lib/merchant-tour-state'
 import { getSession, saveSession, type MerchantSession } from './lib/session'
 import { AuthFooter, AuthHeader } from './AuthChrome'
 import GooglePinMap from './GooglePinMap'
@@ -208,6 +209,7 @@ export default function SignupFlowPage() {
     if (!identityPhoto) throw new Error('Select an image of the shop owner’s ID card.')
     await merchantApi.uploadIdentity(identityPhoto, created.accessToken, captureSession())
     setPendingIdentityToken(null)
+    if (created.merchant?.id && created.user?.id) queueFirstMerchantTour(created.merchant.id, created.user.id)
     if (captureSession().access === created.accessToken) navigate('/workspace')
   }
   async function submitShop() {
@@ -219,6 +221,8 @@ export default function SignupFlowPage() {
       try {
         await merchantApi.uploadIdentity(identityPhoto, pendingIdentityToken, origin)
         setPendingIdentityToken(null)
+        const signedIn = captureSession().user
+        if (signedIn?.merchant?.id && signedIn?.id) queueFirstMerchantTour(signedIn.merchant.id, signedIn.id)
         if (captureSession().access === pendingIdentityToken) navigate('/workspace')
       } catch (error) { setRequestError(error instanceof ApiError ? error.message : 'ID-card upload failed. Check your connection and retry.') }
       finally { setBusy(false) }

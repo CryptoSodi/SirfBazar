@@ -63,6 +63,7 @@ async function main() {
   const staff = await request('POST', '/merchant/staff', ownerToken, {
     fullName: `QA Orders Staff ${suffix}`,
     phoneNumber: staffPhone,
+    password: `TestStaff${suffix}1`,
     roleName: 'Orders only',
     permissions: ['ORDERS'],
   });

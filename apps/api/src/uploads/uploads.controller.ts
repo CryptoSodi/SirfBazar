@@ -30,7 +30,8 @@ export class UploadsController {
     const filename = `${randomUUID()}.${ext}`;
     mkdirSync(UPLOAD_DIR, { recursive: true });
     writeFileSync(join(UPLOAD_DIR, filename), file.buffer);
-    const base = process.env.PUBLIC_BASE_URL || 'https://api.sirfbazar.com';
+    // A local upload must never point its image URL at production storage.
+    const base = process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://api.sirfbazar.com' : 'http://localhost:3001');
     return { url: `${base}/static/uploads/${filename}` };
   }
 }

@@ -18,6 +18,7 @@ import {
   MaxLength,
   Matches,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -287,12 +288,26 @@ export class CreateStaffDto {
   phoneNumber: string;
 
   @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  @Matches(/\d/, { message: 'Password must include at least one number' })
+  password: string;
+
+  @IsString()
   @IsNotEmpty()
   roleName: string;
 
   @IsArray()
   @IsIn(Object.values(StaffPermission), { each: true })
   permissions: string[];
+}
+
+export class ChangeStaffPasswordDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  @Matches(/\d/, { message: 'Password must include at least one number' })
+  password: string;
 }
 
 export class UpdateStaffDto {

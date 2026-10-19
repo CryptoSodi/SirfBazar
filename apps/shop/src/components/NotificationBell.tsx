@@ -98,7 +98,7 @@ export function NotificationBell() {
         (event.data.audience === 'ACCOUNT' && event.data.scopeId === current.user?.id))) return;
       const target = new URL(event.data.url || '/workspace', window.location.origin);
       if (target.origin !== window.location.origin) return;
-      navigate(target.pathname === '/orders' ? '/orders' : '/workspace');
+      navigate(target.pathname === '/orders' ? '/orders' : target.pathname === '/products' ? '/products' : '/workspace');
     };
     navigator.serviceWorker?.addEventListener('message', onPushOpen);
     return () => navigator.serviceWorker?.removeEventListener('message', onPushOpen);
@@ -120,6 +120,7 @@ export function NotificationBell() {
         (notification.audience === 'ACCOUNT' && notification.scopeId === captured.user?.id))) return;
       void refresh();
       window.dispatchEvent(new Event('sb:orders'));
+      if (notification?.type?.toUpperCase().includes('PRODUCT')) window.dispatchEvent(new Event('sb:products'));
       if (notification && pushStatus !== 'subscribed' && document.hidden && window.Notification?.permission === 'granted') {
         new window.Notification(notification.title, { body: notification.body, tag: notification.id });
       }
@@ -204,6 +205,7 @@ export function NotificationBell() {
     if (!sessionIsCurrent(captured)) return;
     setOpen(false);
     if (item.referenceId && item.type.toUpperCase().includes('ORDER')) navigate('/orders');
+    else if (item.type.toUpperCase().includes('PRODUCT')) { window.dispatchEvent(new Event('sb:products')); navigate('/products'); }
   };
 
   return <div className="notification-root" ref={root}>
